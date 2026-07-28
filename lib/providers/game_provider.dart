@@ -741,14 +741,24 @@ class GameProvider extends ChangeNotifier {
     final doubleSnap  = Map<String, int>.from(_board.double_);
     final tripleSnap  = Map<String, int>.from(_board.triple);
 
-    // Calculate wins from local bets vs global result
+    // Calculate wins from local bets vs global result with robust multi-key lookup (padded & unpadded)
     final singleKey = '${serverResult.black}';
-    final doubleKey = '${serverResult.green}${serverResult.black}';
-    final tripleKey = '${serverResult.red}${serverResult.green}${serverResult.black}';
+    final greenStr = '${serverResult.green}';
+    final blackStr = '${serverResult.black}';
+    final doubleKeyPadded = '$greenStr$blackStr'.padLeft(2, '0');
+    final doubleKeyUnpadded = (serverResult.green * 10 + serverResult.black).toString();
 
-    final singleWin = (singleSnap[singleKey] ?? 0) * 9;
-    final doubleWin = (doubleSnap[doubleKey] ?? 0) * 90;
-    final tripleWin = (tripleSnap[tripleKey] ?? 0) * 900;
+    final redStr = '${serverResult.red}';
+    final tripleKeyPadded = '$redStr$greenStr$blackStr'.padLeft(3, '0');
+    final tripleKeyUnpadded = (serverResult.red * 100 + serverResult.green * 10 + serverResult.black).toString();
+
+    final singleBetAmt = singleSnap[singleKey] ?? singleSnap[int.tryParse(singleKey)?.toString() ?? ''] ?? 0;
+    final doubleBetAmt = doubleSnap[doubleKeyPadded] ?? doubleSnap[doubleKeyUnpadded] ?? 0;
+    final tripleBetAmt = tripleSnap[tripleKeyPadded] ?? tripleSnap[tripleKeyUnpadded] ?? 0;
+
+    final singleWin = singleBetAmt * 9;
+    final doubleWin = doubleBetAmt * 90;
+    final tripleWin = tripleBetAmt * 900;
     final totalWin  = singleWin + doubleWin + tripleWin;
     final totalDeducted = _board.total; // already deducted server-side via submitBets
 
