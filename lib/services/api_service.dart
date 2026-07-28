@@ -330,8 +330,9 @@ class ApiService {
           }
 
           final stakeAmt = (row['total_stake'] as num?)?.toInt() ?? 0;
+          final unifiedRoundId = (row['round_id'] as String?) ?? (row['id'] as String?) ?? '';
           return SpinResult(
-            id:              row['id'] as String? ?? '',
+            id:              unifiedRoundId,
             red:             redNum ?? 0,
             green:           greenNum ?? 0,
             black:           blackNum ?? 0,
