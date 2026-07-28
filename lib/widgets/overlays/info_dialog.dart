@@ -683,11 +683,12 @@ class _HistoryRowState extends State<_HistoryRow> {
       ),
     );
   }
+}
 
-  String _shortenId(String id) {
-    if (id.length <= 8) return id;
-    return '...${id.substring(id.length - 8)}';
-  }
+String _shortenId(String id) {
+  final clean = id.replaceAll('-', '').replaceFirst('round_', '');
+  if (clean.length <= 8) return clean;
+  return clean.substring(0, 8);
 }
 
 // ── Cell widgets ──────────────────────────────────────────────────────────────
@@ -935,7 +936,7 @@ class _HistoryDetailDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            _DetailRow('Hand ID', record.id, color: Colors.white54),
+            _DetailRow('Hand ID', _shortenId(record.id), color: Colors.white54),
             _DetailRow('Mode', record.modeLabel,
                 color: AppColors.goldBright),
             _DetailRow('Result',

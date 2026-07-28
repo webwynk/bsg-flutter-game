@@ -34,7 +34,6 @@ class RoundSyncService extends ChangeNotifier {
 
   // ── Polling ───────────────────────────────────────────────────────
   int? _deliveredRoundNumber;      // single-delivery lock per round number
-  String? _lastSubmittedRoundId;   // tracks exact round ID where bets were stored
 
   /// Called from GameScreen.initState — attaches to the game provider
   Future<void> attach(GameProvider game, AuthProvider auth) async {
@@ -50,7 +49,6 @@ class RoundSyncService extends ChangeNotifier {
   /// Called from GameScreen.dispose — cleans up.
   void detach() {
     _deliveredRoundNumber = null;
-    _lastSubmittedRoundId = null;
   }
 
   /// Fetches the initial round state when joining the game screen.
@@ -135,7 +133,6 @@ class RoundSyncService extends ChangeNotifier {
     );
 
     if (result.success) {
-      _lastSubmittedRoundId = roundId;
       // Update local balance to server-confirmed value
       if (result.balanceAfter != null) {
         auth.updateBalance(result.balanceAfter!);
@@ -155,8 +152,7 @@ class RoundSyncService extends ChangeNotifier {
   void _deliverResult(GlobalRoundState round, GameProvider game, AuthProvider auth) {
     if (round.red == null || round.green == null || round.black == null) return;
 
-    final targetRoundId = _lastSubmittedRoundId ?? round.roundId;
-    _lastSubmittedRoundId = null; // reset for next round
+    final targetRoundId = round.roundId;
 
     final spinResult = SpinResult(
       id:              targetRoundId,
