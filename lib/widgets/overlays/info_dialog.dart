@@ -688,7 +688,7 @@ class _HistoryRowState extends State<_HistoryRow> {
 String _shortenId(String id) {
   final clean = id.replaceAll('-', '').replaceFirst('round_', '');
   if (clean.length <= 8) return clean;
-  return clean.substring(0, 8);
+  return '...${clean.substring(clean.length - 8)}';
 }
 
 // ── Cell widgets ──────────────────────────────────────────────────────────────
