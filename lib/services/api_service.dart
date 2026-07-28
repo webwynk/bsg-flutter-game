@@ -280,7 +280,7 @@ class ApiService {
       final res = await http.get(
         Uri.parse(
           '$kSupabaseUrl/rest/v1/triple_chance_bets'
-          '?select=id,total_stake,win_amount,single_win,double_win,triple_win,'
+          '?select=id,round_id,total_stake,win_amount,single_win,double_win,triple_win,'
           'single_bets,double_bets,triple_bets,is_resolved,created_at,'
           'triple_chance_rounds!left(round_number,red,green,black)'
           '$userFilter'
