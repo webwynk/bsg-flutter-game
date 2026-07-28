@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Deep casino dark — used for native launch background to prevent white flash -->
+    <color name="casino_launch_bg">#0D0000</color>
+	<color name="ic_launcher_background">#060000</color>
+</resources>
