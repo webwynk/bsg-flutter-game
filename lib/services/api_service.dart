@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants.dart';          // BUG-12: single source of truth
 import '../models/spin_result_model.dart';
 
@@ -40,6 +41,16 @@ class ApiService {
         final meta = user['user_metadata'] as Map<String, dynamic>? ?? {};
         final tokenStr = data['access_token'] as String? ?? '';
         final userIdStr = user['id'] as String? ?? '';
+        final refreshTokenStr = data['refresh_token'] as String? ?? '';
+
+        // Authenticate official Supabase Flutter SDK client instance
+        if (tokenStr.isNotEmpty) {
+          try {
+            await Supabase.instance.client.auth.setSession(tokenStr);
+          } catch (e) {
+            debugPrint('ApiService.login setSession error: $e');
+          }
+        }
 
         // Account Status Check
         if (meta['status'] == 'Blocked') {

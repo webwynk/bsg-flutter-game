@@ -163,7 +163,16 @@ class RoundApiService {
     required int totalStake,
     required String token,
   }) async {
-    // 1. Primary Attempt: Official Supabase Flutter SDK
+    // 1. Ensure active Supabase Auth Session
+    if (token.isNotEmpty) {
+      try {
+        if (Supabase.instance.client.auth.currentSession == null) {
+          await Supabase.instance.client.auth.setSession(token);
+        }
+      } catch (_) {}
+    }
+
+    // 2. Primary Attempt: Official Supabase Flutter SDK
     try {
       final res = await Supabase.instance.client.rpc(
         'submit_round_bet',

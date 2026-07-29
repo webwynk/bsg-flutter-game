@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
@@ -86,6 +87,26 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> tryAutoLogin() async {
+    try {
+      final saved = await AuthService().loadSession();
+      if (saved != null) {
+        final (user, sessionStartAt) = saved;
+        _user = user;
+        _sessionStartAt = sessionStartAt;
+        if (user.token != null && user.token!.isNotEmpty) {
+          try {
+            await Supabase.instance.client.auth.setSession(user.token!);
+          } catch (e) {
+            debugPrint('AuthProvider.tryAutoLogin setSession error: $e');
+          }
+        }
+        _startHeartbeatTimer();
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('AuthProvider.tryAutoLogin error: $e');
+    }
     _loading = false;
     notifyListeners();
     return false;
