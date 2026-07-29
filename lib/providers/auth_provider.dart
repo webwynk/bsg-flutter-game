@@ -158,6 +158,29 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> changePassword(String currentPassword, String newPassword) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final success = await ApiService().changePassword(
+        token: token,
+        username: username,
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+      _loading = false;
+      notifyListeners();
+      return success;
+    } catch (e) {
+      _error = e.toString().replaceAll('Exception: ', '');
+      _loading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<void> logout() async {
     _stopHeartbeatTimer();
     if (_user != null) {

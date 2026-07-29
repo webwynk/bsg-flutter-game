@@ -456,4 +456,73 @@ class ApiService {
     }
     return [];
   }
+
+  /// Changes the authenticated player's password via Supabase Auth.
+  Future<bool> changePassword({
+    required String token,
+    required String username,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final cleanCurrent = currentPassword.trim();
+    final cleanNew = newPassword.trim();
+
+    if (cleanCurrent.isEmpty) throw 'Please enter your current password';
+    if (cleanNew.isEmpty) throw 'Please enter a new password';
+    if (cleanNew.length < 6) throw 'New password must be at least 6 characters';
+    if (cleanCurrent == cleanNew) throw 'New password must be different from current password';
+
+    final email = username.contains('@') ? username : '${username.toLowerCase()}@bestsmartgame.com';
+
+    // 1. Verify current password by attempting authentication
+    try {
+      final verifyRes = await http.post(
+        Uri.parse('$kSupabaseUrl/auth/v1/token?grant_type=password'),
+        headers: {
+          'apikey': kSupabaseAnonKey,
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'email': email,
+          'password': cleanCurrent,
+        }),
+      ).timeout(const Duration(seconds: 6));
+
+      if (verifyRes.statusCode != 200) {
+        throw 'Current password is incorrect';
+      }
+    } catch (e) {
+      if (e is String) rethrow;
+      throw 'Failed to verify current password. Please try again.';
+    }
+
+    // 2. Update user password via Supabase Auth API
+    try {
+      final updateRes = await http.put(
+        Uri.parse('$kSupabaseUrl/auth/v1/user'),
+        headers: {
+          'apikey': kSupabaseAnonKey,
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'password': cleanNew,
+        }),
+      ).timeout(const Duration(seconds: 8));
+
+      if (updateRes.statusCode == 200) {
+        try {
+          await Supabase.instance.client.auth.updateUser(UserAttributes(password: cleanNew));
+        } catch (_) {}
+        return true;
+      }
+
+      final errJson = jsonDecode(updateRes.body);
+      final msg = errJson['msg'] ?? errJson['error_description'] ?? errJson['message'] ?? 'Failed to update password';
+      throw msg.toString();
+    } catch (e) {
+      if (e is String) rethrow;
+      throw 'Network error while updating password. Please try again.';
+    }
+  }
 }
