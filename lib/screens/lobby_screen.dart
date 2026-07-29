@@ -652,7 +652,75 @@ class _SecurityAccountDialogState extends State<_SecurityAccountDialog> {
                       child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-      },
+                          Icon(Icons.logout_rounded, color: Colors.white, size: 16),
+                          SizedBox(width: 6),
+                          Text(
+                            'LOGOUT ACCOUNT',
+                            style: TextStyle(
+                              fontFamily: 'DMSans',
+                              fontWeight: FontWeight.w900,
+                              fontSize: 11,
+                              color: Colors.white,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPasswordField({
+    required TextEditingController controller,
+    required String label,
+    required bool obscure,
+    required VoidCallback onToggleObscure,
+  }) {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.goldPrimary.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: obscure,
+        style: const TextStyle(
+          fontFamily: 'DMSans',
+          fontSize: 12,
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+        ),
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          hintText: label,
+          hintStyle: TextStyle(
+            fontFamily: 'DMSans',
+            fontSize: 11,
+            color: Colors.white.withValues(alpha: 0.4),
+          ),
+          suffixIcon: GestureDetector(
+            onTap: onToggleObscure,
+            child: Icon(
+              obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+              color: AppColors.goldPrimary.withValues(alpha: 0.7),
+              size: 18,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
