@@ -313,7 +313,11 @@ class RoundApiService {
       // Fallback: Query triple_chance_rounds REST endpoint directly if RPC fails
       final fallbackRes = await http.get(
         Uri.parse('$kSupabaseUrl/rest/v1/triple_chance_rounds?status=eq.complete&order=round_number.desc&limit=$limit'),
-        headers: _headers,
+        headers: {
+          ..._headers,
+          'Range-Unit': 'items',
+          'Range': '0-999999',
+        },
       ).timeout(const Duration(seconds: 5));
 
       if (fallbackRes.statusCode == 200) {

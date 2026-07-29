@@ -9,7 +9,9 @@ class AuthService {
 
   Future<void> saveSession(UserModel user, DateTime sessionStartAt) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyToken, user.token ?? '');
+    final rawToken = user.token ?? '';
+    final encodedToken = base64Encode(utf8.encode(rawToken));
+    await prefs.setString(_keyToken, encodedToken);
     await prefs.setString(_keyUser, jsonEncode(user.toJson()));
     await prefs.setString(_keySession, sessionStartAt.toIso8601String());
     await prefs.remove('bsg_local_game_history');
@@ -18,10 +20,19 @@ class AuthService {
   Future<(UserModel, DateTime)?> loadSession() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString(_keyToken);
+      final encodedToken = prefs.getString(_keyToken);
       final userJson = prefs.getString(_keyUser);
       final sessionStr = prefs.getString(_keySession);
-      if (token == null || token.isEmpty || userJson == null || sessionStr == null) return null;
+      if (encodedToken == null || encodedToken.isEmpty || userJson == null || sessionStr == null) return null;
+      
+      String token = encodedToken;
+      try {
+        token = utf8.decode(base64Decode(encodedToken));
+      } catch (_) {
+        // Fallback for existing plaintext tokens
+        token = encodedToken;
+      }
+
       final map = jsonDecode(userJson) as Map<String, dynamic>;
       final user = UserModel.fromJson({...map, 'token': token});
       final sessionStartAt = DateTime.parse(sessionStr);

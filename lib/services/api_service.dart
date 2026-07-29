@@ -48,26 +48,33 @@ class ApiService {
 
         // Single Session Active Check (Option A)
         if (userIdStr.isNotEmpty && tokenStr.isNotEmpty) {
-          final sessionRes = await http.post(
-            Uri.parse('$kSupabaseUrl/rest/v1/rpc/check_and_update_login_session'),
-            headers: {
-              'apikey': kSupabaseAnonKey,
-              'Authorization': 'Bearer $tokenStr',
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'p_user_id': userIdStr,
-              'p_session_token': tokenStr,
-            }),
-          ).timeout(const Duration(seconds: 5));
+          try {
+            final sessionRes = await http.post(
+              Uri.parse('$kSupabaseUrl/rest/v1/rpc/check_and_update_login_session'),
+              headers: {
+                'apikey': kSupabaseAnonKey,
+                'Authorization': 'Bearer $tokenStr',
+                'Content-Type': 'application/json',
+              },
+              body: jsonEncode({
+                'p_user_id': userIdStr,
+                'p_session_token': tokenStr,
+              }),
+            ).timeout(const Duration(seconds: 5));
 
-          if (sessionRes.statusCode == 200) {
-            final sessionData = jsonDecode(sessionRes.body);
-            final allowed = sessionData is Map ? sessionData['allowed'] : null;
-            if (allowed == false) {
-              final errMsg = (sessionData['error'] ?? 'Account is already logged in on another device').toString();
-              throw errMsg;
+            if (sessionRes.statusCode == 200) {
+              final sessionData = jsonDecode(sessionRes.body);
+              final allowed = sessionData is Map ? sessionData['allowed'] : null;
+              if (allowed == false) {
+                final errMsg = (sessionData['error'] ?? 'Account is already logged in on another device').toString();
+                throw errMsg;
+              }
+            } else {
+              throw 'Failed to establish single-device session. Please try again.';
             }
+          } catch (e) {
+            if (e is String) rethrow;
+            throw 'Network timeout while verifying session. Please try again.';
           }
         }
 
