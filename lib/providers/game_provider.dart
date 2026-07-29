@@ -866,13 +866,18 @@ class GameProvider extends ChangeNotifier {
         if (myResult != null) {
           if (myResult.isResolved) {
             auth.updateBalance(myResult.balance);
-            _balanceSyncFailed = false;
-            synced = true;
-          } else if (!myResult.placedBet && (_lastResult == null || !_lastResult!.won)) {
+          } else if (!myResult.placedBet) {
+            if (_lastResult != null && _lastResult!.won) {
+              auth.updateBalance(myResult.balance + _lastResult!.winAmount);
+            } else {
+              auth.updateBalance(myResult.balance);
+            }
+          } else {
             auth.updateBalance(myResult.balance);
-            _balanceSyncFailed = false;
-            synced = true;
           }
+          _balanceSyncFailed = false;
+          synced = true;
+          notifyListeners();
         }
       } catch (e) {
         debugPrint('onGlobalResult: getMyRoundResult attempt $attempt failed: $e');
@@ -885,6 +890,7 @@ class GameProvider extends ChangeNotifier {
 
     if (!synced) {
       _balanceSyncFailed = true;
+      notifyListeners();
       debugPrint('onGlobalResult: balance sync pending, preserving local win balance');
     }
   }
