@@ -806,6 +806,10 @@ class GameProvider extends ChangeNotifier {
     _lastWinBoxResult = resolvedResult;
     _pendingResult = null;
     if (resolvedResult.won) {
+      // FIX #3: Hold the heartbeat guard BEFORE applying win locally.
+      // This prevents the 15s heartbeat from overwriting the local win display
+      // back to the pre-win DB balance before _syncBalanceInBackground confirms.
+      auth.holdHeartbeatBalance();
       // Immediately apply win payout to local balance so display is consistent before server confirms.
       // _syncBalanceInBackground will then overwrite with the authoritative server value.
       auth.updateBalance(auth.balance + resolvedResult.winAmount);
@@ -865,14 +869,18 @@ class GameProvider extends ChangeNotifier {
         );
         if (myResult != null) {
           if (myResult.isResolved) {
+            // FIX #3: Release heartbeat guard, then update balance with authoritative DB value.
+            auth.releaseHeartbeatBalance();
             auth.updateBalance(myResult.balance);
           } else if (!myResult.placedBet) {
+            auth.releaseHeartbeatBalance();
             if (_lastResult != null && _lastResult!.won) {
               auth.updateBalance(myResult.balance + _lastResult!.winAmount);
             } else {
               auth.updateBalance(myResult.balance);
             }
           } else {
+            auth.releaseHeartbeatBalance();
             auth.updateBalance(myResult.balance);
           }
           _balanceSyncFailed = false;

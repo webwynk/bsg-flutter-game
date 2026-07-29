@@ -167,6 +167,25 @@ class ApiService {
     return null;
   }
 
+  /// Fetches fresh profile data (balance, username, is_active) from the live DB.
+  /// Used on auto-login restore to ensure the displayed balance is up-to-date.
+  Future<Map<String, dynamic>?> fetchProfile(String token, String userId) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$kSupabaseUrl/rest/v1/profiles?id=eq.$userId&select=balance,username,is_active'),
+        headers: {
+          'apikey': kSupabaseAnonKey,
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 5));
+      if (res.statusCode == 200) {
+        final list = jsonDecode(res.body) as List;
+        if (list.isNotEmpty) return list.first as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   /// Clears user's active session timestamp on logout.
   Future<void> clearSessionRemote(String token, String userId) async {
     try {

@@ -12,6 +12,17 @@ class AuthProvider extends ChangeNotifier {
   String? _error;
   Timer? _heartbeatTimer;
 
+  // FIX #3: When true, the heartbeat timer MUST NOT overwrite the local balance.
+  // Set to true when a local win payout is applied and cleared once
+  // _syncBalanceInBackground has confirmed the win with the live DB.
+  bool _holdHeartbeatBalance = false;
+  void holdHeartbeatBalance() {
+    _holdHeartbeatBalance = true;
+  }
+  void releaseHeartbeatBalance() {
+    _holdHeartbeatBalance = false;
+  }
+
   UserModel? get user    => _user;
   DateTime? get sessionStartAt => _sessionStartAt;
   bool get isLoggedIn    => _user != null;
@@ -67,9 +78,13 @@ class AuthProvider extends ChangeNotifier {
             await logout();
             setError(msg);
           } else if (res['allowed'] == true && res.containsKey('balance') && res['balance'] != null) {
-            final liveBal = (res['balance'] as num).toInt();
-            final uncommittedStake = _uncommittedBetGetter?.call() ?? 0;
-            updateBalance((liveBal - uncommittedStake).clamp(0, 99999999));
+            // FIX #3: Skip balance update if a win is pending display.
+            // _syncBalanceInBackground will call releaseHeartbeatBalance() + updateBalance().
+            if (!_holdHeartbeatBalance) {
+              final liveBal = (res['balance'] as num).toInt();
+              final uncommittedStake = _uncommittedBetGetter?.call() ?? 0;
+              updateBalance((liveBal - uncommittedStake).clamp(0, 99999999));
+            }
           }
         }
       }
@@ -102,6 +117,21 @@ class AuthProvider extends ChangeNotifier {
         }
         _startHeartbeatTimer();
         notifyListeners();
+
+        // FIX #4: Fetch fresh live balance from DB after restoring session.
+        // The saved token may be stale (e.g. player won and balance changed since last save).
+        if (user.token != null && user.token!.isNotEmpty) {
+          try {
+            final fresh = await ApiService().fetchProfile(user.token!, user.id);
+            if (fresh != null) {
+              final freshBal = (fresh['balance'] as num?)?.toInt();
+              if (freshBal != null) updateBalance(freshBal);
+            }
+          } catch (e) {
+            debugPrint('AuthProvider.tryAutoLogin freshBalance error: $e');
+          }
+        }
+
         return true;
       }
     } catch (e) {
