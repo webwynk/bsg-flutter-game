@@ -67,8 +67,8 @@ class AuthProvider extends ChangeNotifier {
             setError(msg);
           } else if (res['allowed'] == true && res.containsKey('balance') && res['balance'] != null) {
             final liveBal = (res['balance'] as num).toInt();
-            // Heartbeat updates live balance automatically
-            updateBalance(liveBal);
+            final uncommittedStake = _uncommittedBetGetter?.call() ?? 0;
+            updateBalance((liveBal - uncommittedStake).clamp(0, 99999999));
           }
         }
       }
@@ -78,6 +78,11 @@ class AuthProvider extends ChangeNotifier {
   void _stopHeartbeatTimer() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
+  }
+
+  int? Function()? _uncommittedBetGetter;
+  void setUncommittedBetGetter(int? Function()? getter) {
+    _uncommittedBetGetter = getter;
   }
 
   Future<bool> tryAutoLogin() async {

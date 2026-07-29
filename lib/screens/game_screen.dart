@@ -34,6 +34,7 @@ class _GameScreenState extends State<GameScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _gameProvider = context.read<GameProvider>();
       final auth = context.read<AuthProvider>();
+      auth.setUncommittedBetGetter(() => _gameProvider.uncommittedStake);
       _gameProvider.setAutoSpinCallback(_handleSpin);
       // Attach RoundSyncService — syncs timer to server and listens for results
       RoundSyncService().attach(_gameProvider, auth);
@@ -79,6 +80,9 @@ class _GameScreenState extends State<GameScreen> {
     SoundService().setInGameScreen(false);
     SoundService().stopAll();
     RoundSyncService().detach();
+    try {
+      context.read<AuthProvider>().setUncommittedBetGetter(null);
+    } catch (_) {}
     _gameProvider.abortSpin();
     _gameProvider.stopCountdown();
     _gameProvider.setAutoSpinCallback(null);

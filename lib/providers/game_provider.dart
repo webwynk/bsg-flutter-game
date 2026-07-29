@@ -903,6 +903,7 @@ class GameProvider extends ChangeNotifier {
 
 
   bool get submittedBets => _submittedBets;
+  int get uncommittedStake => _submittedBets ? 0 : _board.total;
   void markBetsSubmitted() {
     _submittedBets = true;
     notifyListeners();
