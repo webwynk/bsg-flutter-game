@@ -41,7 +41,6 @@ class ApiService {
         final meta = user['user_metadata'] as Map<String, dynamic>? ?? {};
         final tokenStr = data['access_token'] as String? ?? '';
         final userIdStr = user['id'] as String? ?? '';
-        final refreshTokenStr = data['refresh_token'] as String? ?? '';
 
         // Authenticate official Supabase Flutter SDK client instance
         if (tokenStr.isNotEmpty) {
