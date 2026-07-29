@@ -868,21 +868,8 @@ class GameProvider extends ChangeNotifier {
           token: auth.token,
         );
         if (myResult != null) {
-          if (myResult.isResolved) {
-            // FIX #3: Release heartbeat guard, then update balance with authoritative DB value.
-            auth.releaseHeartbeatBalance();
-            auth.updateBalance(myResult.balance);
-          } else if (!myResult.placedBet) {
-            auth.releaseHeartbeatBalance();
-            if (_lastResult != null && _lastResult!.won) {
-              auth.updateBalance(myResult.balance + _lastResult!.winAmount);
-            } else {
-              auth.updateBalance(myResult.balance);
-            }
-          } else {
-            auth.releaseHeartbeatBalance();
-            auth.updateBalance(myResult.balance);
-          }
+          auth.releaseHeartbeatBalance();
+          auth.updateBalance(myResult.balance);
           _balanceSyncFailed = false;
           synced = true;
           notifyListeners();

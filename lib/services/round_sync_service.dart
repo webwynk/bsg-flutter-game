@@ -80,30 +80,33 @@ class RoundSyncService extends ChangeNotifier {
   /// Fetches the pre-generated round result from the server and delivers it to the wheel.
   Future<void> fetchAndDeliverResult(GameProvider game, AuthProvider auth) async {
     final round = await _api.getCurrentRound();
-    if (round != null && round.red != null && round.green != null && round.black != null) {
-      if (_deliveredRoundNumber != round.roundNumber) {
-        _deliveredRoundNumber = round.roundNumber;
-        debugPrint('RoundSyncService: exactly-once delivery for round #${round.roundNumber}');
-        _deliverResult(round, game, auth);
+    if (round != null) {
+      _currentRound = round; // Keep _currentRound updated for the active cycle
+      if (round.red != null && round.green != null && round.black != null) {
+        if (_deliveredRoundNumber != round.roundNumber) {
+          _deliveredRoundNumber = round.roundNumber;
+          debugPrint('RoundSyncService: exactly-once delivery for round #${round.roundNumber}');
+          _deliverResult(round, game, auth);
+        }
       }
     } else {
       // Small network delay fallback
       await Future.delayed(const Duration(seconds: 1));
       final retry = await _api.getCurrentRound();
-      if (retry != null && retry.red != null) {
-        if (_deliveredRoundNumber != retry.roundNumber) {
-          _deliveredRoundNumber = retry.roundNumber;
-          _deliverResult(retry, game, auth);
+      if (retry != null) {
+        _currentRound = retry; // Keep _currentRound updated for the active cycle
+        if (retry.red != null) {
+          if (_deliveredRoundNumber != retry.roundNumber) {
+            _deliveredRoundNumber = retry.roundNumber;
+            _deliverResult(retry, game, auth);
+          }
         }
       }
     }
   }
 
-
-
-
-  /// Submits the player's bets to the server and marks us as waiting for result.
-  /// Returns true if bets submitted successfully.
+  /// Submits the player's bets to the server for the current active round.
+  /// Returns true if bets were submitted and accepted by DB.
   Future<bool> submitBets({
     required Map<String, int> singleBets,
     required Map<String, int> doubleBets,
@@ -112,15 +115,23 @@ class RoundSyncService extends ChangeNotifier {
     required String token,
     required AuthProvider auth,
   }) async {
-    final roundId = _currentRound?.roundId;
-    if (roundId == null) {
-      debugPrint('RoundSyncService.submitBets: no current round');
-      return false;
+    if (totalStake == 0) {
+      return true;
     }
 
-    if (totalStake == 0) {
-      // No bets
-      return true;
+    // Ensure _currentRound is up-to-date and in betting state
+    var targetRound = _currentRound;
+    if (targetRound == null || targetRound.status != 'betting') {
+      targetRound = await _api.getCurrentRound();
+      if (targetRound != null) {
+        _currentRound = targetRound;
+      }
+    }
+
+    final roundId = targetRound?.roundId;
+    if (roundId == null) {
+      debugPrint('RoundSyncService.submitBets: no active round available');
+      return false;
     }
 
     final result = await _api.submitBet(
@@ -138,12 +149,8 @@ class RoundSyncService extends ChangeNotifier {
         auth.updateBalance(result.balanceAfter!);
       }
       return true;
-    }
- else {
+    } else {
       debugPrint('RoundSyncService.submitBets failed: ${result.error}');
-      if (result.error == 'INSUFFICIENT_COINS') {
-        // This shouldn't happen (we check locally) but handle it
-      }
       return false;
     }
   }
