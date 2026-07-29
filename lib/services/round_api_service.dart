@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../constants.dart'; // BUG-12: single source of truth
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Represents the current global round state received from the server.
 class GlobalRoundState {
@@ -162,6 +163,30 @@ class RoundApiService {
     required int totalStake,
     required String token,
   }) async {
+    // 1. Primary Attempt: Official Supabase Flutter SDK
+    try {
+      final res = await Supabase.instance.client.rpc(
+        'submit_round_bet',
+        params: {
+          'p_round_id':    roundId,
+          'p_single_bets': singleBets,
+          'p_double_bets': doubleBets,
+          'p_triple_bets': tripleBets,
+          'p_total_stake': totalStake,
+        },
+      ).timeout(const Duration(seconds: 6));
+
+      if (res is Map<String, dynamic>) {
+        return SubmitBetResult(
+          success:      res['success'] as bool? ?? true,
+          balanceAfter: (res['balance_after'] as num?)?.toInt(),
+        );
+      }
+    } catch (e) {
+      debugPrint('RoundApiService.submitBet via Supabase SDK error: $e');
+    }
+
+    // 2. Fallback Attempt: Direct Raw HTTP with Retry
     try {
       final res = await _postWithRetry(
         Uri.parse('$kSupabaseUrl/rest/v1/rpc/submit_round_bet'),
@@ -205,6 +230,21 @@ class RoundApiService {
     required String roundId,
     required String token,
   }) async {
+    // 1. Primary Attempt: Official Supabase Flutter SDK
+    try {
+      final res = await Supabase.instance.client.rpc(
+        'get_my_round_result',
+        params: {'p_round_id': roundId},
+      ).timeout(const Duration(seconds: 5));
+
+      if (res is Map<String, dynamic>) {
+        return PlayerRoundResult.fromJson(res);
+      }
+    } catch (e) {
+      debugPrint('RoundApiService.getMyRoundResult via Supabase SDK error: $e');
+    }
+
+    // 2. Fallback Attempt: Direct Raw HTTP with Retry
     try {
       final res = await _postWithRetry(
         Uri.parse('$kSupabaseUrl/rest/v1/rpc/get_my_round_result'),
@@ -218,7 +258,7 @@ class RoundApiService {
         return PlayerRoundResult.fromJson(data);
       }
     } catch (e) {
-      debugPrint('RoundApiService.getMyRoundResult error: $e');
+      debugPrint('RoundApiService.getMyRoundResult fallback error: $e');
     }
     return null;
   }

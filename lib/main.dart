@@ -14,8 +14,18 @@ import 'screens/game_screen.dart';
 import 'screens/profile_screen.dart';
 import 'theme/app_colors.dart';
 
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'constants.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Supabase official SDK (auto token refresh + native RPC + connection pooling)
+  await Supabase.initialize(
+    url: kSupabaseUrl,
+    // ignore: deprecated_member_use
+    anonKey: kSupabaseAnonKey,
+  );
 
   // Clear personal game history on app startup (game close / restart)
   try {
