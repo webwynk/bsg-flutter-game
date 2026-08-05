@@ -642,7 +642,7 @@ class GameProvider extends ChangeNotifier {
   /// Must NOT have any timezone offset — the server (get_current_round RPC)
   /// uses bare EXTRACT(EPOCH FROM NOW()) with no offset.
   int _computeUtcRemainingCycle() {
-    final nowSecs = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+    final nowSecs = RoundSyncService().syncedNowSecs;
     return 103 - (nowSecs % 103); // 1 to 103
   }
 

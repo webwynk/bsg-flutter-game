@@ -32,8 +32,20 @@ class RoundSyncService extends ChangeNotifier {
   String? get connectionError            => _connectionError;
   String? get currentRoundId             => _currentRound?.roundId;
 
-  // ── Polling ───────────────────────────────────────────────────────
+  // ── Polling & Server Clock Offset ──────────────────────────────────
   int? _deliveredRoundNumber;      // single-delivery lock per round number
+  int _serverTimeOffset = 0;       // dynamic clock offset between server and device
+
+  int get serverTimeOffset => _serverTimeOffset;
+  int get syncedNowSecs => (DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000) + _serverTimeOffset;
+
+  void _calibrateServerTimeOffset(GlobalRoundState round) {
+    try {
+      final localNowSecs = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+      final serverNowSecs = (round.scheduledAt.millisecondsSinceEpoch ~/ 1000) - round.secondsRemaining;
+      _serverTimeOffset = serverNowSecs - localNowSecs;
+    } catch (_) {}
+  }
 
   /// Called from GameScreen.initState — attaches to the game provider
   Future<void> attach(GameProvider game, AuthProvider auth) async {
@@ -62,45 +74,41 @@ class RoundSyncService extends ChangeNotifier {
       return;
     }
     _currentRound = round;
+    _calibrateServerTimeOffset(round);
     _isConnected = true;
     _isConnecting = false;
     _connectionError = null;
     notifyListeners();
 
     // If player opens game mid-spin, deliver result immediately.
-    // Uses same raw UTC epoch as the server's get_current_round RPC — NO timezone offset.
-    final nowSecs = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+    final nowSecs = syncedNowSecs;
     final cycle = 103 - (nowSecs % 103);
     if (cycle <= 13) {
       fetchAndDeliverResult(game, auth);
     }
   }
 
-  /// Called strictly ONCE per minute at 00s by GameProvider's exact UTC clock.
-  /// Fetches the pre-generated round result from the server and delivers it to the wheel.
+  /// Called at 00s remaining by GameProvider clock to deliver the result.
+  /// Uses a robust 8-attempt polling loop to handle multi-device clock drift and network lag.
   Future<void> fetchAndDeliverResult(GameProvider game, AuthProvider auth) async {
-    final round = await _api.getCurrentRound();
-    if (round != null) {
-      _currentRound = round; // Keep _currentRound updated for the active cycle
-      if (round.red != null && round.green != null && round.black != null) {
-        if (_deliveredRoundNumber != round.roundNumber) {
-          _deliveredRoundNumber = round.roundNumber;
-          debugPrint('RoundSyncService: exactly-once delivery for round #${round.roundNumber}');
-          _deliverResult(round, game, auth);
-        }
-      }
-    } else {
-      // Small network delay fallback
-      await Future.delayed(const Duration(seconds: 1));
-      final retry = await _api.getCurrentRound();
-      if (retry != null) {
-        _currentRound = retry; // Keep _currentRound updated for the active cycle
-        if (retry.red != null) {
-          if (_deliveredRoundNumber != retry.roundNumber) {
-            _deliveredRoundNumber = retry.roundNumber;
-            _deliverResult(retry, game, auth);
+    for (int attempt = 1; attempt <= 8; attempt++) {
+      final round = await _api.getCurrentRound();
+      if (round != null) {
+        _currentRound = round;
+        _calibrateServerTimeOffset(round);
+        if (round.red != null && round.green != null && round.black != null) {
+          if (_deliveredRoundNumber != round.roundNumber) {
+            _deliveredRoundNumber = round.roundNumber;
+            debugPrint('RoundSyncService: exactly-once delivery for round #${round.roundNumber} on attempt $attempt');
+            _deliverResult(round, game, auth);
+            return;
+          } else {
+            return; // Already delivered for this round
           }
         }
+      }
+      if (attempt < 8) {
+        await Future.delayed(const Duration(milliseconds: 1000));
       }
     }
   }
