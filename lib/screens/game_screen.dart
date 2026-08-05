@@ -50,6 +50,15 @@ class _GameScreenState extends State<GameScreen> {
     if (game.isSpinning) return;
 
     game.closeDrawer();
+
+    // CRITICAL FIX: Freeze the heartbeat timer as the ABSOLUTE FIRST operation.
+    // This closes the race window where markBetsSubmitted() sets uncommittedStake=0
+    // BEFORE submitBets() has sent the deduction to the DB. Without this lock,
+    // the 15s heartbeat can fire during that 100-500ms gap, read the stale pre-bet
+    // balance (42) from the DB, and set auth.balance = 42 - 0 = 42 (wrong).
+    // That corrupts balanceAtSpinStart in onGlobalResult → win math is off by the stake.
+    auth.holdHeartbeatBalance();
+
     game.markBetsSubmitted();
 
     final sync = RoundSyncService();
