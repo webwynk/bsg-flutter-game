@@ -10,6 +10,7 @@ import '../models/play_limits_config.dart';
 import '../services/api_service.dart';
 import '../services/round_api_service.dart';
 import '../services/sound_service.dart';
+import '../services/round_sync_service.dart';
 import 'auth_provider.dart';
 
 
@@ -643,7 +644,7 @@ class GameProvider extends ChangeNotifier {
   /// uses bare EXTRACT(EPOCH FROM NOW()) with no offset.
   int _computeUtcRemainingCycle() {
     final nowSecs = RoundSyncService().syncedNowSecs;
-    return 103 - (nowSecs % 103); // 1 to 103
+    return (103 - (nowSecs % 103)).toInt(); // 1 to 103
   }
 
   int _cycleToCountdown(int cycle) {
