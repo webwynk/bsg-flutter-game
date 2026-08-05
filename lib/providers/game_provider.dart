@@ -874,6 +874,8 @@ class GameProvider extends ChangeNotifier {
 
   Future<void> _syncBalanceInBackground(String roundId, AuthProvider auth) async {
     bool synced = false;
+    bool placedBetNotFound = false;
+
     for (int attempt = 1; attempt <= 4 && !synced; attempt++) {
       try {
         final myResult = await RoundApiService().getMyRoundResult(
@@ -881,42 +883,55 @@ class GameProvider extends ChangeNotifier {
           token: auth.token,
         );
         if (myResult != null) {
-          if (!myResult.placedBet && myResult.balance > 0) {
-            // FIX #3C: DB returned no bet row for this round (placed_bet=false).
-            // This happens when the bet was placed but DB timing hasn't created the row yet,
-            // OR if this path is hit despite the totalDeducted>0 guard (safety net).
-            // The balance field is still authoritative — apply it and mark synced.
-            auth.updateBalance(myResult.balance);
-            _balanceSyncFailed = false;
-            synced = true;
-            notifyListeners();
+          if (!myResult.placedBet) {
+            // DB has no bet row for this round. Two possible causes:
+            //   A) submit_round_bet silently failed (betting window was already closed)
+            //   B) Timing race: bet row not yet visible (very rare)
+            // In case A, the DB balance is the CORRECT ground truth (no stake was deducted).
+            // DO NOT apply it here — that would undo the local win display.
+            // Instead, release the heartbeat lock and let the 15s heartbeat naturally
+            // re-sync the correct DB balance. No banner shown to the user.
+            placedBetNotFound = true;
+            debugPrint('_syncBalanceInBackground: placed_bet=false on attempt $attempt. Bet may have failed to reach DB.');
+            break; // Stop retrying — more retries won't create the bet row
           } else if (myResult.isResolved && myResult.balance > 0) {
-            // FIX #3D: Bet fully resolved server-side — DB balance is the authoritative final value.
-            // Apply unconditionally (no >= guard that could reject correct DB value).
+            // Bet fully settled by server. DB balance is the single source of truth.
+            // Apply unconditionally — this is always the correct final value.
             auth.updateBalance(myResult.balance);
             _balanceSyncFailed = false;
             synced = true;
             notifyListeners();
           } else if (myResult.placedBet && !myResult.isResolved) {
             // Bet exists on server but resolve_round_payouts hasn't run yet — retry
-            debugPrint('onGlobalResult: bet not yet resolved on server, attempt $attempt');
+            debugPrint('_syncBalanceInBackground: bet not yet resolved on server, attempt $attempt');
           }
         }
       } catch (e) {
-        debugPrint('onGlobalResult: getMyRoundResult attempt $attempt failed: $e');
+        debugPrint('_syncBalanceInBackground: getMyRoundResult attempt $attempt failed: $e');
       }
-      if (!synced && attempt < 4) {
+      if (!synced && !placedBetNotFound && attempt < 4) {
         await Future.delayed(const Duration(seconds: 2));
         if (_spinAborted) return;
       }
     }
 
+    if (placedBetNotFound) {
+      // Bet submission likely failed (server's betting window was closed).
+      // Release heartbeat immediately so the next 15s heartbeat tick
+      // reads the authoritative DB balance and corrects the display.
+      // No banner — the user's coins are safe in the DB.
+      auth.releaseHeartbeatBalance();
+      debugPrint('_syncBalanceInBackground: releasing heartbeat for natural re-sync (no bet row found)');
+      return;
+    }
+
     if (!synced) {
       _balanceSyncFailed = true;
       notifyListeners();
-      debugPrint('onGlobalResult: balance sync failed after 4 attempts, preserving local balance');
+      debugPrint('_syncBalanceInBackground: balance sync failed after 4 attempts, preserving local balance');
     }
   }
+
 
   void clearSpinHistory() {
     _spinHistory.clear();
