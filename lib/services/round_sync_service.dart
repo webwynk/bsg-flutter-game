@@ -127,9 +127,9 @@ class RoundSyncService extends ChangeNotifier {
       return true;
     }
 
-    // Ensure _currentRound is up-to-date and in betting state
+    // Ensure targetRound is available
     var targetRound = _currentRound;
-    if (targetRound == null || targetRound.status != 'betting') {
+    if (targetRound == null) {
       targetRound = await _api.getCurrentRound();
       if (targetRound != null) {
         _currentRound = targetRound;
