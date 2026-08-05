@@ -894,7 +894,7 @@ class GameProvider extends ChangeNotifier {
             placedBetNotFound = true;
             debugPrint('_syncBalanceInBackground: placed_bet=false on attempt $attempt. Bet may have failed to reach DB.');
             break; // Stop retrying — more retries won't create the bet row
-          } else if (myResult.isResolved && myResult.balance > 0) {
+          } else if (myResult.isResolved && myResult.balance >= 0) {
             // Bet fully settled by server. DB balance is the single source of truth.
             // Apply unconditionally — this is always the correct final value.
             auth.updateBalance(myResult.balance);
