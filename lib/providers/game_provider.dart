@@ -856,6 +856,7 @@ class GameProvider extends ChangeNotifier {
     _history.clear();
     _checkAndRestoreActiveChip();
     _isSpinning = false;
+    auth.releaseHeartbeatBalance();
     resetCountdown(auth);
   }
 
@@ -867,9 +868,11 @@ class GameProvider extends ChangeNotifier {
           roundId: roundId,
           token: auth.token,
         );
-        if (myResult != null) {
-          auth.releaseHeartbeatBalance();
-          auth.updateBalance(myResult.balance);
+        if (myResult != null && myResult.balance > 0) {
+          // Never allow background sync to roll back player balance to a lower value
+          if (myResult.balance >= auth.balance) {
+            auth.updateBalance(myResult.balance);
+          }
           _balanceSyncFailed = false;
           synced = true;
           notifyListeners();
