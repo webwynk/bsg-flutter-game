@@ -738,6 +738,7 @@ class GameProvider extends ChangeNotifier {
     _spinAborted = false;
     _lastResult = null;
     _pendingResult = null;
+    _balanceSyncFailed = false; // FIX #3A: Clear any stale banner from previous round BEFORE spin starts
     _stopCountdownTimer();
     notifyListeners();
 
@@ -824,9 +825,13 @@ class GameProvider extends ChangeNotifier {
     }
     notifyListeners();
 
-    // Trigger balance sync in non-blocking background task so HTTP retries don't delay timer
-    final cleanRoundId = serverResult.id.replaceFirst('round_', '');
-    unawaited(_syncBalanceInBackground(cleanRoundId, auth));
+    // FIX #3B: Only sync balance from DB when player actually placed bets this round.
+    // If totalDeducted = 0 (watching, no bet), there is no bet row in triple_chance_bets,
+    // so get_my_round_result returns placed_bet=false → retries 4× → ALWAYS shows banner.
+    if (totalDeducted > 0) {
+      final cleanRoundId = serverResult.id.replaceFirst('round_', '');
+      unawaited(_syncBalanceInBackground(cleanRoundId, auth));
+    }
 
     // Wait 5s result display window (exact 13s total sequence: 8s spin + 5s display)
     if (resolvedResult.won) {
@@ -875,18 +880,27 @@ class GameProvider extends ChangeNotifier {
           roundId: roundId,
           token: auth.token,
         );
-        // FIX #3: The DB is the single source of truth.
-        // When is_resolved = true, the DB has already calculated and credited the correct
-        // final balance. Apply it unconditionally — removing the >= guard that was
-        // incorrectly rejecting the authoritative DB balance (e.g. 40 >= 60 = false).
-        if (myResult != null && myResult.isResolved && myResult.balance > 0) {
-          auth.updateBalance(myResult.balance);
-          _balanceSyncFailed = false;
-          synced = true;
-          notifyListeners();
-        } else if (myResult != null && !myResult.isResolved && myResult.balance > 0) {
-          // Bet not yet resolved on server — retry up to 4 times with 2s interval
-          debugPrint('onGlobalResult: bet not yet resolved on server, attempt $attempt');
+        if (myResult != null) {
+          if (!myResult.placedBet && myResult.balance > 0) {
+            // FIX #3C: DB returned no bet row for this round (placed_bet=false).
+            // This happens when the bet was placed but DB timing hasn't created the row yet,
+            // OR if this path is hit despite the totalDeducted>0 guard (safety net).
+            // The balance field is still authoritative — apply it and mark synced.
+            auth.updateBalance(myResult.balance);
+            _balanceSyncFailed = false;
+            synced = true;
+            notifyListeners();
+          } else if (myResult.isResolved && myResult.balance > 0) {
+            // FIX #3D: Bet fully resolved server-side — DB balance is the authoritative final value.
+            // Apply unconditionally (no >= guard that could reject correct DB value).
+            auth.updateBalance(myResult.balance);
+            _balanceSyncFailed = false;
+            synced = true;
+            notifyListeners();
+          } else if (myResult.placedBet && !myResult.isResolved) {
+            // Bet exists on server but resolve_round_payouts hasn't run yet — retry
+            debugPrint('onGlobalResult: bet not yet resolved on server, attempt $attempt');
+          }
         }
       } catch (e) {
         debugPrint('onGlobalResult: getMyRoundResult attempt $attempt failed: $e');
