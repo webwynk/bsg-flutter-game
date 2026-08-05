@@ -727,16 +727,23 @@ class GameProvider extends ChangeNotifier {
   /// The [result] contains red/green/black from the server.
   /// We calculate win amounts locally from the player's own staked bets.
   Future<void> onGlobalResult(SpinResult serverResult, AuthProvider auth) async {
-    if (_isSpinning && _pendingResult != null) return; // guard against double-call during active spin
+    // FIX #1: Lock heartbeat balance update as the ABSOLUTE FIRST operation.
+    // This prevents the 15s background timer from overwriting auth.balance
+    // between spin start and win display — the root cause of the 42-coin rollback.
+    auth.holdHeartbeatBalance();
 
+    if (_isSpinning && _pendingResult != null) return; // guard against double-call during active spin
 
     _isSpinning = true;
     _spinAborted = false;
     _lastResult = null;
     _pendingResult = null;
     _stopCountdownTimer();
-    auth.holdHeartbeatBalance();
     notifyListeners();
+
+    // FIX #2: Snapshot the authoritative post-bet balance ONCE at spin start.
+    // Never use live auth.balance for win math — it may be polluted by a stale heartbeat.
+    final balanceAtSpinStart = auth.balance;
 
     // Snapshot existing bets BEFORE clearing them
     final singleSnap = Map<String, int>.from(_board.single);
@@ -808,13 +815,11 @@ class GameProvider extends ChangeNotifier {
     _lastWinBoxResult = resolvedResult;
     _pendingResult = null;
     if (resolvedResult.won) {
-      // FIX #3: Hold the heartbeat guard BEFORE applying win locally.
-      // This prevents the 15s heartbeat from overwriting the local win display
-      // back to the pre-win DB balance before _syncBalanceInBackground confirms.
-      auth.holdHeartbeatBalance();
-      // Immediately apply win payout to local balance so display is consistent before server confirms.
-      // _syncBalanceInBackground will then overwrite with the authoritative server value.
-      auth.updateBalance(auth.balance + resolvedResult.winAmount);
+      // FIX #2: Apply win to the SNAPSHOT balance captured at spin start.
+      // Using balanceAtSpinStart (post-bet deduction) guarantees correctness:
+      //   42 (start) - 20 (bet) = 22 (balanceAtSpinStart) + 18 (win) = 40 ✅
+      // NOT auth.balance which may have been polluted by a stale heartbeat to 42.
+      auth.updateBalance(balanceAtSpinStart + resolvedResult.winAmount);
       SoundService().playWin();
     }
     notifyListeners();
@@ -870,14 +875,18 @@ class GameProvider extends ChangeNotifier {
           roundId: roundId,
           token: auth.token,
         );
-        if (myResult != null && myResult.balance > 0) {
-          // Never allow background sync to roll back player balance to a lower value
-          if (myResult.balance >= auth.balance) {
-            auth.updateBalance(myResult.balance);
-          }
+        // FIX #3: The DB is the single source of truth.
+        // When is_resolved = true, the DB has already calculated and credited the correct
+        // final balance. Apply it unconditionally — removing the >= guard that was
+        // incorrectly rejecting the authoritative DB balance (e.g. 40 >= 60 = false).
+        if (myResult != null && myResult.isResolved && myResult.balance > 0) {
+          auth.updateBalance(myResult.balance);
           _balanceSyncFailed = false;
           synced = true;
           notifyListeners();
+        } else if (myResult != null && !myResult.isResolved && myResult.balance > 0) {
+          // Bet not yet resolved on server — retry up to 4 times with 2s interval
+          debugPrint('onGlobalResult: bet not yet resolved on server, attempt $attempt');
         }
       } catch (e) {
         debugPrint('onGlobalResult: getMyRoundResult attempt $attempt failed: $e');
@@ -891,7 +900,7 @@ class GameProvider extends ChangeNotifier {
     if (!synced) {
       _balanceSyncFailed = true;
       notifyListeners();
-      debugPrint('onGlobalResult: balance sync pending, preserving local win balance');
+      debugPrint('onGlobalResult: balance sync failed after 4 attempts, preserving local balance');
     }
   }
 
