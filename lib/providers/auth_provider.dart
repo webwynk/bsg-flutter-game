@@ -16,11 +16,29 @@ class AuthProvider extends ChangeNotifier {
   // Set to true when a local win payout is applied and cleared once
   // _syncBalanceInBackground has confirmed the win with the live DB.
   bool _holdHeartbeatBalance = false;
+  bool _pollingSuspended = false;
+  int _ledgerVersion = 1;
+
+  int get ledgerVersion => _ledgerVersion;
+
   void holdHeartbeatBalance() {
     _holdHeartbeatBalance = true;
   }
   void releaseHeartbeatBalance() {
     _holdHeartbeatBalance = false;
+  }
+  void suspendHeartbeatPolling() {
+    _pollingSuspended = true;
+  }
+  void resumeHeartbeatPolling() {
+    _pollingSuspended = false;
+  }
+
+  void updateBalanceWithVersion(int newBalance, int version) {
+    if (version >= _ledgerVersion) {
+      _ledgerVersion = version;
+      updateBalance(newBalance);
+    }
   }
 
   UserModel? get user    => _user;
@@ -80,7 +98,7 @@ class AuthProvider extends ChangeNotifier {
           } else if (res['allowed'] == true && res.containsKey('balance') && res['balance'] != null) {
             // FIX #3: Skip balance update if a win is pending display.
             // _syncBalanceInBackground will call releaseHeartbeatBalance() + updateBalance().
-            if (!_holdHeartbeatBalance) {
+            if (!_holdHeartbeatBalance && !_pollingSuspended) {
               final liveBal = (res['balance'] as num).toInt();
               final uncommittedStake = _uncommittedBetGetter?.call() ?? 0;
               updateBalance((liveBal - uncommittedStake).clamp(0, 99999999));
