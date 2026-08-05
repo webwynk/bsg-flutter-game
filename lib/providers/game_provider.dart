@@ -734,6 +734,7 @@ class GameProvider extends ChangeNotifier {
     _lastResult = null;
     _pendingResult = null;
     _stopCountdownTimer();
+    auth.holdHeartbeatBalance();
     notifyListeners();
 
     // Snapshot existing bets BEFORE clearing them
