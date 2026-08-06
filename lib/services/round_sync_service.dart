@@ -27,6 +27,7 @@ class RoundSyncService extends ChangeNotifier {
   bool _isConnected = false;
   bool _isConnecting = false;
   String? _connectionError;
+  int _failedPollCount = 0;
 
   // M-3 FIX: retain why the last submission failed so the UI can explain it.
   // Previously submitBets() returned false and the caller discarded it, so a
@@ -107,15 +108,21 @@ class RoundSyncService extends ChangeNotifier {
       final round = await _api.getCurrentRound();
 
       if (round == null) {
-        final err = _api.lastRoundError ?? BetError.offline;
-        if (_isConnected || _connectionError != err) {
-          _isConnected = false;
-          _connectionError = err;
-          notifyListeners();
+        _failedPollCount++;
+        // Require 2 consecutive failed polls before marking connection as dead,
+        // so transient PC emulator NAT stutters do not trigger the banner.
+        if (_failedPollCount >= 2) {
+          final err = _api.lastRoundError ?? BetError.offline;
+          if (_isConnected || _connectionError != err) {
+            _isConnected = false;
+            _connectionError = err;
+            notifyListeners();
+          }
         }
         return;
       }
 
+      _failedPollCount = 0;
       _currentRound = round;
       _calibrateServerTimeOffset(round);
       if (!_isConnected || _connectionError != null) {
