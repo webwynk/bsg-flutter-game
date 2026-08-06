@@ -40,15 +40,12 @@ class ApiService {
         final user = data['user'] as Map<String, dynamic>? ?? {};
         final meta = user['user_metadata'] as Map<String, dynamic>? ?? {};
         final tokenStr = data['access_token'] as String? ?? '';
-        final refreshTokenStr = data['refresh_token'] as String? ?? '';
         final userIdStr = user['id'] as String? ?? '';
 
-        // Authenticate official Supabase Flutter SDK client instance with valid session
+        // Authenticate official Supabase Flutter SDK client instance
         if (tokenStr.isNotEmpty) {
           try {
-            if (refreshTokenStr.isNotEmpty) {
-              await Supabase.instance.client.auth.setSession(refreshTokenStr);
-            }
+            await Supabase.instance.client.auth.setSession(tokenStr);
           } catch (e) {
             debugPrint('ApiService.login setSession error: $e');
           }
@@ -120,7 +117,6 @@ class ApiService {
 
         return {
           'token': data['access_token'],
-          'refreshToken': data['refresh_token'],
           'user': {
             'id': user['id'],
             'username': meta['username'] ?? cleanUsername,

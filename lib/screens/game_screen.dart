@@ -70,7 +70,7 @@ class _GameScreenState extends State<GameScreen> {
       final tripleBets = Map<String, int>.from(game.board.triple);
       final totalStake = game.totalBet;
 
-      final success = await sync.submitBets(
+      await sync.submitBets(
         singleBets: singleBets,
         doubleBets: doubleBets,
         tripleBets: tripleBets,
@@ -78,19 +78,6 @@ class _GameScreenState extends State<GameScreen> {
         token:      auth.token,
         auth:       auth,
       );
-
-      if (!success) {
-        auth.releaseHeartbeatBalance();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Bet submission failed. Please try again.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
     }
 
     // 2. FETCH RESULT EXACTLY ONCE! (For both bettors and spectators)
