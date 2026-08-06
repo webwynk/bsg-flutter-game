@@ -167,7 +167,7 @@ class RoundSyncService extends ChangeNotifier {
     // If player opens game mid-spin, deliver result immediately.
     final nowSecs = syncedNowSecs;
     final cycle = 103 - (nowSecs % 103);
-    if (cycle <= 9) {
+    if (cycle <= 13) {
       fetchAndDeliverResult(game, auth);
     }
   }

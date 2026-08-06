@@ -666,7 +666,7 @@ class GameProvider extends ChangeNotifier {
   }
 
   int _cycleToCountdown(int cycle) {
-    if (cycle >= 9) return cycle - 9;
+    if (cycle >= 13) return (cycle - 13).clamp(0, 90);
     return 0;
   }
 
@@ -692,15 +692,15 @@ class GameProvider extends ChangeNotifier {
         
         _countdown = _cycleToCountdown(currentCycle);
 
-        if (_countdown == 5 && previous >= 10) {
+        if (_countdown == 5 && previous >= 14) {
           SoundService().playNoBets();
           _lastWinBoxResult = null;
           if (_isDrawerOpen) closeDrawer();
           _onNoBets?.call(); // Triggers early bet submission at NO MORE PLAY (countdown 5)
         }
 
-        // Did we cross the betting boundary? (previous 10 -> current 9, which is 00s / draw second)
-        if (previous == 10 && currentCycle == 9 && _onTimerExpire != null) {
+        // Did we cross the betting boundary? (previous 14 -> current 13, which is 00s / draw second)
+        if (previous == 14 && currentCycle == 13 && _onTimerExpire != null) {
           _onTimerExpire?.call(); // Triggers GameScreen._handleSpin()
         }
 
