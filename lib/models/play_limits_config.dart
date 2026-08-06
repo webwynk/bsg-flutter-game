@@ -1,6 +1,10 @@
 import 'bet_model.dart'; // To get BoardType
 
-enum BetRejectReason { none, cellMaxExceeded, insufficientBalance }
+/// M-3 FIX: `cellMinNotMet` added. play_limits carries a per-board minimum that
+/// submit_round_bet enforces (errcode P0007), but nothing on the client ever
+/// read `PlayLimits.min`, so a stake under the minimum was only discovered by
+/// the server — and the rejection was then discarded.
+enum BetRejectReason { none, cellMaxExceeded, cellMinNotMet, insufficientBalance }
 
 class BetRejection {
   final BetRejectReason reason;

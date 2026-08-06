@@ -27,6 +27,12 @@ class RoundSyncService extends ChangeNotifier {
   bool _isConnecting = false;
   String? _connectionError;
 
+  // M-3 FIX: retain why the last submission failed so the UI can explain it.
+  // Previously submitBets() returned false and the caller discarded it, so a
+  // server-rejected bet was completely invisible to the player.
+  String? _lastSubmitError;
+  String? get lastSubmitError => _lastSubmitError;
+
   GlobalRoundState? get currentRound     => _currentRound;
   String? get betRoundId                 => _betRoundId;
   bool get isConnected                   => _isConnected;
@@ -126,6 +132,7 @@ class RoundSyncService extends ChangeNotifier {
     required String token,
     required AuthProvider auth,
   }) async {
+    _lastSubmitError = null;
     if (totalStake == 0) {
       return true;
     }
@@ -142,6 +149,7 @@ class RoundSyncService extends ChangeNotifier {
     final roundId = targetRound?.roundId;
     if (roundId == null) {
       debugPrint('RoundSyncService.submitBets: no active round available');
+      _lastSubmitError = 'OFFLINE';
       return false;
     }
 
@@ -158,12 +166,19 @@ class RoundSyncService extends ChangeNotifier {
     );
 
     if (result.success) {
-      // Update local balance to server-confirmed value
+      // Update local balance to server-confirmed value.
+      // M-5: anchor to the version the deduction produced so an in-flight
+      // heartbeat carrying the pre-bet balance cannot undo it.
       if (result.balanceAfter != null) {
-        auth.updateBalance(result.balanceAfter!);
+        if (result.ledgerVersion != null) {
+          auth.syncAuthoritativeBalance(result.balanceAfter!, result.ledgerVersion!);
+        } else {
+          auth.updateBalance(result.balanceAfter!);
+        }
       }
       return true;
     } else {
+      _lastSubmitError = result.error;
       debugPrint('RoundSyncService.submitBets failed: ${result.error}');
       return false;
     }

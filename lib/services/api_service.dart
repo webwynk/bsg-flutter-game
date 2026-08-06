@@ -123,7 +123,13 @@ class ApiService {
             'name': meta['full_name'] ?? cleanUsername,
             'agent_id': meta['agent_id'],
             'balance': liveBalance,
-            'agentName': 'Agent',
+            // M-6 FIX: UserModel.fromJson reads 'agent_name' (snake_case), so
+            // the previous camelCase 'agentName' key was never picked up and
+            // auth.agentName always resolved to 'N/A'. Note the value is only
+            // populated when the agent's name is present in user_metadata —
+            // RLS (profiles_agent_select) does not let a player read their
+            // agent's profile row, so it cannot be fetched directly here.
+            'agent_name': meta['agent_name'],
             'status': meta['status'] ?? 'Active',
           },
           'sessionStartAt': DateTime.now().toUtc().toIso8601String(),

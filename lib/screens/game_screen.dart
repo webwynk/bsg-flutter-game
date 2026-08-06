@@ -34,7 +34,11 @@ class _GameScreenState extends State<GameScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _gameProvider = context.read<GameProvider>();
       final auth = context.read<AuthProvider>();
-      auth.suspendHeartbeatPolling();
+      // M-5: heartbeat polling is no longer suspended here. It used to be, which
+      // silently disabled the very balance re-sync that _syncBalanceInBackground
+      // relied on. Ordering is handled by ledger_version instead; the getter
+      // below stays because chips on the board are deducted locally and have no
+      // counterpart in the database until betting closes.
       auth.setUncommittedBetGetter(() => _gameProvider.uncommittedStake);
       _gameProvider.setAutoSpinCallback(_handleSpin);
       // Attach RoundSyncService — syncs timer to server and listens for results
@@ -51,26 +55,35 @@ class _GameScreenState extends State<GameScreen> {
 
     game.closeDrawer();
 
-    // CRITICAL FIX: Freeze the heartbeat timer as the ABSOLUTE FIRST operation.
-    // This closes the race window where markBetsSubmitted() sets uncommittedStake=0
-    // BEFORE submitBets() has sent the deduction to the DB. Without this lock,
-    // the 15s heartbeat can fire during that 100-500ms gap, read the stale pre-bet
-    // balance (42) from the DB, and set auth.balance = 42 - 0 = 42 (wrong).
-    // That corrupts balanceAtSpinStart in onGlobalResult → win math is off by the stake.
-    auth.holdHeartbeatBalance();
-
+    // M-5: markBetsSubmitted() sets uncommittedStake to 0 before submitBets()
+    // has reached the database, so for 100-500ms a heartbeat could read the
+    // stale pre-bet balance. That race is now closed by ledger_version — the
+    // stale response carries an older version and is discarded — rather than by
+    // a global lock whose release could be skipped by an early return.
     game.markBetsSubmitted();
 
     final sync = RoundSyncService();
 
     // 1. Submit bets to server if player placed any
     if (!game.board.isEmpty) {
+      // M-3 FIX: catch a below-minimum stake before the round trip.
+      final minViolation = game.validateMinimums();
+      if (minViolation != null) {
+        game.refundRejectedBets(auth);
+        if (mounted) _showBetRejectedDialog(context, 'BELOW_MIN');
+        await sync.fetchAndDeliverResult(game, auth);
+        return;
+      }
+
       final singleBets = Map<String, int>.from(game.board.single);
       final doubleBets = Map<String, int>.from(game.board.double_);
       final tripleBets = Map<String, int>.from(game.board.triple);
       final totalStake = game.totalBet;
 
-      await sync.submitBets(
+      // M-3 FIX: the return value used to be discarded, so a server-rejected
+      // bet was completely silent — the wheel spun, the balance stayed reduced,
+      // and no bet row existed. Refund the local deduction and tell the player.
+      final accepted = await sync.submitBets(
         singleBets: singleBets,
         doubleBets: doubleBets,
         tripleBets: tripleBets,
@@ -78,6 +91,13 @@ class _GameScreenState extends State<GameScreen> {
         token:      auth.token,
         auth:       auth,
       );
+
+      if (!accepted) {
+        game.refundRejectedBets(auth);
+        if (mounted) {
+          _showBetRejectedDialog(context, sync.lastSubmitError);
+        }
+      }
     }
 
     // 2. FETCH RESULT EXACTLY ONCE! (For both bettors and spectators)
@@ -93,7 +113,6 @@ class _GameScreenState extends State<GameScreen> {
     try {
       final auth = context.read<AuthProvider>();
       auth.setUncommittedBetGetter(null);
-      auth.resumeHeartbeatPolling();
     } catch (_) {}
     _gameProvider.abortSpin();
     _gameProvider.stopCountdown();
@@ -282,6 +301,173 @@ class _GameScreenState extends State<GameScreen> {
                             ),
                           ),
                         ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (ctx, anim, _, child) {
+        final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
+        return ScaleTransition(
+          scale: Tween<double>(begin: 0.85, end: 1.0).animate(curved),
+          child: FadeTransition(opacity: anim, child: child),
+        );
+      },
+    );
+  }
+
+  /// M-3 FIX: explains why a bet the player already "paid" for was not accepted.
+  /// [reason] is a sentinel from RoundApiService._mapSubmitError.
+  void _showBetRejectedDialog(BuildContext context, String? reason) {
+    final (title, message) = switch (reason) {
+      'BELOW_MIN' => (
+        'BET BELOW MINIMUM',
+        'One or more of your numbers was under the minimum stake for that board. Your coins have been returned.'
+      ),
+      'EXCEEDS_MAX' => (
+        'BET OVER LIMIT',
+        'One or more of your numbers was over the maximum stake for that board. Your coins have been returned.'
+      ),
+      'INSUFFICIENT_COINS' => (
+        'INSUFFICIENT COINS',
+        'You did not have enough coins for this bet when the round closed. Your coins have been returned.'
+      ),
+      'ROUND_CLOSED' => (
+        'ROUND CLOSED',
+        'Betting for that round closed before your bet arrived. Your coins have been returned — please try the next round.'
+      ),
+      'UNAUTHENTICATED' => (
+        'SESSION EXPIRED',
+        'Your session is no longer valid. Your coins have been returned. Please exit and log in again.'
+      ),
+      _ => (
+        'BET NOT PLACED',
+        'Your bet could not be sent to the server. Your coins have been returned — please try the next round.'
+      ),
+    };
+
+    bool isClosed = false;
+    SoundService().playNotification();
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'BetRejected',
+      barrierColor: Colors.black.withValues(alpha: 0.75),
+      transitionDuration: const Duration(milliseconds: 280),
+      pageBuilder: (ctx, anim1, anim2) {
+        Future.delayed(const Duration(seconds: 5), () {
+          if (ctx.mounted && !isClosed && Navigator.of(ctx).canPop()) {
+            isClosed = true;
+            Navigator.of(ctx).pop();
+          }
+        });
+
+        return Center(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+              child: Container(
+                width: 320,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF220500), Color(0xFF0C0200)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: AppColors.goldPrimary.withValues(alpha: 0.45),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.goldPrimary.withValues(alpha: 0.12),
+                      blurRadius: 20,
+                      spreadRadius: 1,
+                    ),
+                    const BoxShadow(
+                      color: Colors.black87,
+                      blurRadius: 25,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.report_gmailerrorred_rounded,
+                        color: Color(0xFFFFD54F),
+                        size: 48,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        title,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontFamily: 'DMSans',
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                          color: Color(0xFFFFD54F),
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        message,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontFamily: 'DMSans',
+                          fontSize: 12,
+                          color: Colors.white70,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      GestureDetector(
+                        onTap: () {
+                          if (!isClosed) {
+                            isClosed = true;
+                            SoundService().playButtonClick();
+                            Navigator.of(ctx).pop();
+                          }
+                        },
+                        child: Container(
+                          height: 38,
+                          width: 140,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF55FF55), Color(0xFF00AA00), Color(0xFF005500)],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF99FF99), width: 1.2),
+                            boxShadow: const [
+                              BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(0, 2)),
+                            ],
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'OK',
+                              style: TextStyle(
+                                fontFamily: 'DMSans',
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: Colors.white,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),

@@ -12,33 +12,39 @@ class AuthProvider extends ChangeNotifier {
   String? _error;
   Timer? _heartbeatTimer;
 
-  // FIX #3: When true, the heartbeat timer MUST NOT overwrite the local balance.
-  // Set to true when a local win payout is applied and cleared once
-  // _syncBalanceInBackground has confirmed the win with the live DB.
-  bool _holdHeartbeatBalance = false;
-  bool _pollingSuspended = false;
-  int _ledgerVersion = 1;
+  // M-5: `profiles.ledger_version` is bumped by the database on every balance
+  // change and returned by submit_round_bet, update_user_heartbeat and
+  // get_my_round_result_v2. Ordering balance updates by it replaces the old
+  // holdHeartbeatBalance()/suspendHeartbeatPolling() locks, whose many early
+  // returns could leak and freeze the displayed balance for the whole process.
+  int _ledgerVersion = 0;
 
   int get ledgerVersion => _ledgerVersion;
 
-  void holdHeartbeatBalance() {
-    _holdHeartbeatBalance = true;
-  }
-  void releaseHeartbeatBalance() {
-    _holdHeartbeatBalance = false;
-  }
-  void suspendHeartbeatPolling() {
-    _pollingSuspended = true;
-  }
-  void resumeHeartbeatPolling() {
-    _pollingSuspended = false;
-  }
-
+  /// Applies a server-sourced balance only if it is at least as fresh as what
+  /// has already been applied. Older in-flight responses are discarded.
   void updateBalanceWithVersion(int newBalance, int version) {
     if (version >= _ledgerVersion) {
       _ledgerVersion = version;
       updateBalance(newBalance);
     }
+  }
+
+  /// Applies a locally predicted balance (the win shown the instant the wheel
+  /// stops) and claims the next ledger slot, so a heartbeat issued before the
+  /// prediction cannot roll it back. Only valid when the database is known to
+  /// be incrementing too — i.e. an actual win payout.
+  void applyOptimisticBalance(int newBalance) {
+    _ledgerVersion += 1;
+    updateBalance(newBalance);
+  }
+
+  /// Applies a settled, authoritative balance and re-anchors the local version
+  /// to the server's. Used after get_my_round_result_v2, which is the final
+  /// word on a round, so it must win even if an optimistic bump ran ahead.
+  void syncAuthoritativeBalance(int newBalance, int version) {
+    _ledgerVersion = version;
+    updateBalance(newBalance);
   }
 
   UserModel? get user    => _user;
@@ -61,7 +67,8 @@ class AuthProvider extends ChangeNotifier {
       final userData = Map<String, dynamic>.from(res['user'] as Map);
       userData['token'] = res['token'];
       _user = UserModel.fromJson(userData);
-      
+      _ledgerVersion = 0;   // M-5: unknown at login; accept the first heartbeat.
+
       final sessionStartStr = res['sessionStartAt'] ?? res['session_start_at'];
       _sessionStartAt = sessionStartStr != null 
           ? DateTime.tryParse(sessionStartStr.toString()) 
@@ -96,13 +103,17 @@ class AuthProvider extends ChangeNotifier {
             await logout();
             setError(msg);
           } else if (res['allowed'] == true && res.containsKey('balance') && res['balance'] != null) {
-            // FIX #3: Skip balance update if a win is pending display.
-            // _syncBalanceInBackground will call releaseHeartbeatBalance() + updateBalance().
-            if (!_holdHeartbeatBalance && !_pollingSuspended) {
-              final liveBal = (res['balance'] as num).toInt();
-              final uncommittedStake = _uncommittedBetGetter?.call() ?? 0;
-              updateBalance((liveBal - uncommittedStake).clamp(0, 99999999));
-            }
+            // M-5: apply only if this response is at least as fresh as what we
+            // already have. `uncommittedStake` is still subtracted because
+            // chips placed on the board are deducted locally and do not reach
+            // the database until submit_round_bet runs at the close of betting.
+            final liveBal = (res['balance'] as num).toInt();
+            final version = (res['ledger_version'] as num?)?.toInt() ?? 0;
+            final uncommittedStake = _uncommittedBetGetter?.call() ?? 0;
+            updateBalanceWithVersion(
+              (liveBal - uncommittedStake).clamp(0, 99999999),
+              version,
+            );
           }
         }
       }

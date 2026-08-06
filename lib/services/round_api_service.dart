@@ -50,8 +50,16 @@ class SubmitBetResult {
   final bool success;
   final int? balanceAfter;
   final String? error;
+  /// M-5: `profiles.ledger_version` after the stake was deducted. Lets the
+  /// client discard any heartbeat that was issued before this write.
+  final int? ledgerVersion;
 
-  const SubmitBetResult({required this.success, this.balanceAfter, this.error});
+  const SubmitBetResult({
+    required this.success,
+    this.balanceAfter,
+    this.error,
+    this.ledgerVersion,
+  });
 }
 
 /// Server-confirmed result for a player's round bet.
@@ -64,6 +72,8 @@ class PlayerRoundResult {
   final int totalStake;
   final bool isResolved;
   final int balance;
+  /// M-5: `profiles.ledger_version` read after settlement.
+  final int ledgerVersion;
 
   const PlayerRoundResult({
     required this.placedBet,
@@ -74,6 +84,7 @@ class PlayerRoundResult {
     required this.totalStake,
     required this.isResolved,
     required this.balance,
+    this.ledgerVersion = 0,
   });
 
   factory PlayerRoundResult.fromJson(Map<String, dynamic> json) {
@@ -86,6 +97,7 @@ class PlayerRoundResult {
       totalStake: (json['total_stake'] as num?)?.toInt() ?? 0,
       isResolved: json['is_resolved'] as bool? ?? false,
       balance:    (json['balance'] as num?)?.toInt() ?? 0,
+      ledgerVersion: (json['ledger_version'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -109,6 +121,34 @@ class RoundApiService {
     'Content-Type': 'application/json',
     'Connection': 'keep-alive',
   };
+
+  /// M-3 FIX: single mapping from a `submit_round_bet` failure to a sentinel the
+  /// UI can act on. Previously P0007 (below min) and P0008 (exceeds max) had no
+  /// mapping at all, and the insufficient-funds branch matched on the string
+  /// 'Insufficient balance' while the RPC actually raises 'INSUFFICIENT_COINS'
+  /// — so that branch never fired either.
+  ///
+  /// Codes come from submit_round_bet:
+  ///   P0001 INSUFFICIENT_COINS · P0002 round not found · P0003 window closed
+  ///   P0004 player not found   · P0006 unauthenticated · P0007 below min
+  ///   P0008 exceeds max        · P0009 round resolved  · P0010 bet settled
+  static String? _mapSubmitError(String raw) {
+    if (raw.contains('P0001') || raw.contains('INSUFFICIENT_COINS')) {
+      return 'INSUFFICIENT_COINS';
+    }
+    if (raw.contains('P0007') || raw.contains('Below min')) return 'BELOW_MIN';
+    if (raw.contains('P0008') || raw.contains('Exceeds max')) return 'EXCEEDS_MAX';
+    if (raw.contains('P0009') || raw.contains('Round already resolved') ||
+        raw.contains('P0010') || raw.contains('Bet already settled') ||
+        raw.contains('P0003') || raw.contains('Betting window closed')) {
+      return 'ROUND_CLOSED';
+    }
+    if (raw.contains('P0006') || raw.contains('Unauthenticated')) {
+      return 'UNAUTHENTICATED';
+    }
+    if (raw.contains('P0002') || raw.contains('P0004')) return 'ROUND_CLOSED';
+    return null;
+  }
 
   /// Executes an HTTP POST with automatic retries on transient network failures.
   Future<http.Response> _postWithRetry(
@@ -187,17 +227,16 @@ class RoundApiService {
 
       if (res is Map<String, dynamic>) {
         return SubmitBetResult(
-          success:      res['success'] as bool? ?? true,
-          balanceAfter: (res['balance_after'] as num?)?.toInt(),
+          success:       res['success'] as bool? ?? true,
+          balanceAfter:  (res['balance_after'] as num?)?.toInt(),
+          ledgerVersion: (res['ledger_version'] as num?)?.toInt(),
         );
       }
     } catch (e) {
-      // FIX BUG #1A: Handle P0009/P0010 from hardened submit_round_bet
-      final errStr = e.toString();
-      if (errStr.contains('P0009') || errStr.contains('Round already resolved') ||
-          errStr.contains('P0010') || errStr.contains('Bet already settled')) {
-        debugPrint('RoundApiService.submitBet: round already resolved or bet settled');
-        return const SubmitBetResult(success: false, error: 'ROUND_CLOSED');
+      final mapped = _mapSubmitError(e.toString());
+      if (mapped != null) {
+        debugPrint('RoundApiService.submitBet rejected by server: $mapped');
+        return SubmitBetResult(success: false, error: mapped);
       }
       debugPrint('RoundApiService.submitBet via Supabase SDK error: $e');
     }
@@ -220,8 +259,9 @@ class RoundApiService {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         return SubmitBetResult(
-          success:      data['success'] as bool? ?? true,
-          balanceAfter: (data['balance_after'] as num?)?.toInt(),
+          success:       data['success'] as bool? ?? true,
+          balanceAfter:  (data['balance_after'] as num?)?.toInt(),
+          ledgerVersion: (data['ledger_version'] as num?)?.toInt(),
         );
       }
 
@@ -229,14 +269,9 @@ class RoundApiService {
         final err = jsonDecode(res.body);
         final msg = err['message'] ?? err['hint'] ?? 'Server error';
         final code = err['code'] ?? '';
-        if (msg.toString().contains('Insufficient balance')) {
-          return const SubmitBetResult(success: false, error: 'INSUFFICIENT_COINS');
-        }
-        // FIX BUG #1A: Handle P0009/P0010 from hardened submit_round_bet
-        if (code == 'P0009' || code == 'P0010' ||
-            msg.toString().contains('Round already resolved') ||
-            msg.toString().contains('Bet already settled')) {
-          return const SubmitBetResult(success: false, error: 'ROUND_CLOSED');
+        final mapped = _mapSubmitError('$code $msg');
+        if (mapped != null) {
+          return SubmitBetResult(success: false, error: mapped);
         }
         return SubmitBetResult(success: false, error: msg.toString());
       } catch (_) {}
@@ -256,7 +291,10 @@ class RoundApiService {
     // 1. Primary Attempt: Official Supabase Flutter SDK
     try {
       final res = await Supabase.instance.client.rpc(
-        'get_my_round_result',
+        // M-5: _v2 wraps get_my_round_result and adds ledger_version, so the
+        // settled balance can be applied with a version the client can anchor
+        // to. The inner function (which performs settlement) is untouched.
+        'get_my_round_result_v2',
         params: {'p_round_id': roundId},
       ).timeout(const Duration(seconds: 5));
 
@@ -270,7 +308,7 @@ class RoundApiService {
     // 2. Fallback Attempt: Direct Raw HTTP with Retry
     try {
       final res = await _postWithRetry(
-        Uri.parse('$kSupabaseUrl/rest/v1/rpc/get_my_round_result'),
+        Uri.parse('$kSupabaseUrl/rest/v1/rpc/get_my_round_result_v2'),
         headers: _authHeaders(token),
         body: jsonEncode({'p_round_id': roundId}),
         timeout: const Duration(seconds: 5),

@@ -727,11 +727,9 @@ class GameProvider extends ChangeNotifier {
   /// The [result] contains red/green/black from the server.
   /// We calculate win amounts locally from the player's own staked bets.
   Future<void> onGlobalResult(SpinResult serverResult, AuthProvider auth) async {
-    // FIX #1: Lock heartbeat balance update as the ABSOLUTE FIRST operation.
-    // This prevents the 15s background timer from overwriting auth.balance
-    // between spin start and win display — the root cause of the 42-coin rollback.
-    auth.holdHeartbeatBalance();
-
+    // M-5: the old holdHeartbeatBalance() lock that used to open this method is
+    // gone. Balance ordering is now handled by ledger_version, so the six early
+    // returns below can no longer leak a lock and freeze the balance.
     if (_isSpinning && _pendingResult != null) return; // guard against double-call during active spin
 
     _isSpinning = true;
@@ -819,8 +817,11 @@ class GameProvider extends ChangeNotifier {
       // FIX #2: Apply win to the SNAPSHOT balance captured at spin start.
       // Using balanceAtSpinStart (post-bet deduction) guarantees correctness:
       //   42 (start) - 20 (bet) = 22 (balanceAtSpinStart) + 18 (win) = 40 ✅
-      // NOT auth.balance which may have been polluted by a stale heartbeat to 42.
-      auth.updateBalance(balanceAtSpinStart + resolvedResult.winAmount);
+      // M-5: applied as an optimistic update that claims the next ledger slot.
+      // A winning round always increments profiles.ledger_version server-side,
+      // so the claim matches; any heartbeat issued before the payout is now
+      // discarded by version rather than blocked by a global lock.
+      auth.applyOptimisticBalance(balanceAtSpinStart + resolvedResult.winAmount);
       SoundService().playWin();
     }
     notifyListeners();
@@ -872,7 +873,6 @@ class GameProvider extends ChangeNotifier {
     _history.clear();
     _checkAndRestoreActiveChip();
     _isSpinning = false;
-    auth.releaseHeartbeatBalance();
     resetCountdown(auth);
   }
 
@@ -889,19 +889,21 @@ class GameProvider extends ChangeNotifier {
         if (myResult != null) {
           if (!myResult.placedBet) {
             // DB has no bet row for this round. Two possible causes:
-            //   A) submit_round_bet silently failed (betting window was already closed)
+            //   A) submit_round_bet failed (M-3 now surfaces this to the player)
             //   B) Timing race: bet row not yet visible (very rare)
-            // In case A, the DB balance is the CORRECT ground truth (no stake was deducted).
-            // DO NOT apply it here — that would undo the local win display.
-            // Instead, release the heartbeat lock and let the 15s heartbeat naturally
-            // re-sync the correct DB balance. No banner shown to the user.
+            // In case A the DB balance is the ground truth — no stake was ever
+            // deducted server-side. M-5: apply it directly at the server's own
+            // version instead of relying on the heartbeat, which used to be
+            // suspended inside the game screen and so never re-synced at all.
             placedBetNotFound = true;
+            auth.syncAuthoritativeBalance(myResult.balance, myResult.ledgerVersion);
             debugPrint('_syncBalanceInBackground: placed_bet=false on attempt $attempt. Bet may have failed to reach DB.');
             break; // Stop retrying — more retries won't create the bet row
           } else if (myResult.isResolved && myResult.balance >= 0) {
-            // Bet fully settled by server. DB balance is the single source of truth.
-            // Apply unconditionally — this is always the correct final value.
-            auth.updateBalance(myResult.balance);
+            // Bet fully settled by server. DB balance is the single source of
+            // truth, so re-anchor the local version to the server's — this also
+            // corrects any drift left by the optimistic win update.
+            auth.syncAuthoritativeBalance(myResult.balance, myResult.ledgerVersion);
             _balanceSyncFailed = false;
             synced = true;
             notifyListeners();
@@ -920,12 +922,10 @@ class GameProvider extends ChangeNotifier {
     }
 
     if (placedBetNotFound) {
-      // Bet submission likely failed (server's betting window was closed).
-      // Release heartbeat immediately so the next 15s heartbeat tick
-      // reads the authoritative DB balance and corrects the display.
-      // No banner — the user's coins are safe in the DB.
-      auth.releaseHeartbeatBalance();
-      debugPrint('_syncBalanceInBackground: releasing heartbeat for natural re-sync (no bet row found)');
+      // The authoritative balance was already applied above. No banner — the
+      // player's coins are safe in the DB, and M-3 shows a dialog at submission
+      // time whenever the rejection is one the server reported.
+      debugPrint('_syncBalanceInBackground: no bet row found; applied DB balance directly');
       return;
     }
 
@@ -948,6 +948,49 @@ class GameProvider extends ChangeNotifier {
   int get uncommittedStake => _submittedBets ? 0 : _board.total;
   void markBetsSubmitted() {
     _submittedBets = true;
+    notifyListeners();
+  }
+
+  /// M-3 FIX: checks every staked cell against its board's minimum before the
+  /// bets are sent. Chips stack, so a cell can only be validated once betting
+  /// closes — catching it here gives a precise message and avoids a round trip
+  /// that submit_round_bet would reject with P0007.
+  ///
+  /// Returns null when the board is valid.
+  BetRejection? validateMinimums() {
+    for (final type in BoardType.values) {
+      final min = _playLimits.limitsFor(type).min;
+      final map = _board.boardFor(type);
+      for (final entry in map.entries) {
+        if (entry.value < min) {
+          return BetRejection(
+            BetRejectReason.cellMinNotMet,
+            board: type,
+            cellKey: entry.key,
+            cap: min,
+          );
+        }
+      }
+    }
+    return null;
+  }
+
+  /// M-3 FIX: undoes a round's local bet when the server refused it.
+  ///
+  /// Chips are deducted from the on-screen balance the moment they are placed,
+  /// but nothing reaches the database until submit_round_bet runs at the close
+  /// of betting. If that call is rejected the stake was never actually taken —
+  /// the RAISE rolls the deduction back — so the local balance must be restored
+  /// or the player sees coins missing that they still have.
+  void refundRejectedBets(AuthProvider auth) {
+    if (_board.isEmpty) return;
+    auth.updateBalance(auth.balance + _board.total);
+    _board.clearAll();
+    _history.clear();
+    _lastBetSnapshot = null;
+    _rebetUsed = false;
+    _submittedBets = false;
+    _checkAndRestoreActiveChip();
     notifyListeners();
   }
 
