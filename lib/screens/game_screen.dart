@@ -79,6 +79,7 @@ class _GameScreenState extends State<GameScreen> {
       doubleBets: doubleBets,
       tripleBets: tripleBets,
       auth:       auth,
+      game:       game,
     );
 
     if (!accepted) {
@@ -100,7 +101,7 @@ class _GameScreenState extends State<GameScreen> {
     final sync = RoundSyncService();
 
     // 1. Submit bets to server if player placed any that haven't been submitted yet
-    if (!game.board.isEmpty) {
+    if (!game.board.isEmpty && game.betStatus != BetSubmissionStatus.submitted) {
       game.markBetsSubmitted();
 
       final minViolation = game.validateMinimums();
@@ -120,6 +121,7 @@ class _GameScreenState extends State<GameScreen> {
         doubleBets: doubleBets,
         tripleBets: tripleBets,
         auth:       auth,
+        game:       game,
       );
 
       if (!accepted) {

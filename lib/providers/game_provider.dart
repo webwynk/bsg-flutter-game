@@ -34,6 +34,28 @@ class GameProvider extends ChangeNotifier {
     _balanceSyncFailed = false;
   }
 
+enum BetSubmissionStatus { idle, submitting, submitted, failed }
+
+  BetSubmissionStatus _betStatus = BetSubmissionStatus.idle;
+  String? _submittedRoundId;
+
+  BetSubmissionStatus get betStatus => _betStatus;
+  String? get submittedRoundId => _submittedRoundId;
+
+  void setBetStatus(BetSubmissionStatus status, {String? roundId}) {
+    _betStatus = status;
+    if (roundId != null) {
+      _submittedRoundId = roundId;
+    }
+    notifyListeners();
+  }
+
+  void resetBetSubmissionStatus() {
+    _betStatus = BetSubmissionStatus.idle;
+    _submittedRoundId = null;
+    notifyListeners();
+  }
+
   BetRejection _lastRejection = BetRejection.ok;
   BetRejection get lastRejection => _lastRejection;
 
@@ -233,6 +255,8 @@ class GameProvider extends ChangeNotifier {
     _lastRejection = BetRejection.ok;
     _rebetUsed = true; // any manual bet switches REBET → DOUBLE
     _lastWinBoxResult = null; // reset WIN display as soon as user bets
+    _betStatus = BetSubmissionStatus.idle;
+    _submittedRoundId = null;
     map[cellKey] = currentAmount + amount;
     _history.add(BetAction(board: boardType, cellKey: cellKey, amount: amount));
     auth.updateBalance(auth.coinBalance - amount);
@@ -477,6 +501,8 @@ class GameProvider extends ChangeNotifier {
     _board.clearAll();
     _history.clear();
     _rebetUsed = false; // allow REBET to reappear after clearing
+    _betStatus = BetSubmissionStatus.idle;
+    _submittedRoundId = null;
     _checkAndRestoreActiveChip();
     _updateTimerState(auth);
     notifyListeners();
@@ -891,6 +917,8 @@ class GameProvider extends ChangeNotifier {
     }
     _rebetUsed = false;
     _submittedBets = false;
+    _betStatus = BetSubmissionStatus.idle;
+    _submittedRoundId = null;
     _board.clearAll();
     _history.clear();
     _checkAndRestoreActiveChip();

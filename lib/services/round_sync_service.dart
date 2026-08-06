@@ -208,11 +208,30 @@ class RoundSyncService extends ChangeNotifier {
     required Map<String, int> doubleBets,
     required Map<String, int> tripleBets,
     required AuthProvider auth,
+    required GameProvider game,
   }) async {
     _lastSubmitError = null;
     if (singleBets.isEmpty && doubleBets.isEmpty && tripleBets.isEmpty) {
       return true;
     }
+
+    // 1. Enterprise Idempotency Check:
+    // If bets for the active target round were ALREADY accepted by the DB,
+    // return true immediately without making any RPC network call.
+    final currentTargetId = _currentRound?.roundId;
+    if (game.betStatus == BetSubmissionStatus.submitted &&
+        currentTargetId != null &&
+        game.submittedRoundId == currentTargetId) {
+      debugPrint('RoundSyncService.submitBets: idempotent no-op for already-submitted round $currentTargetId');
+      return true;
+    }
+
+    if (game.betStatus == BetSubmissionStatus.submitting) {
+      debugPrint('RoundSyncService.submitBets: submission already in flight');
+      return true;
+    }
+
+    game.setBetStatus(BetSubmissionStatus.submitting);
 
     // Use the active _currentRound if valid (updated every 2s by background poll).
     // Only fetch fresh if absent or no longer accepting bets.
@@ -222,6 +241,7 @@ class RoundSyncService extends ChangeNotifier {
       if (targetRound == null) {
         debugPrint('RoundSyncService.submitBets: could not read the current round');
         _lastSubmitError = _api.lastRoundError ?? BetError.offline;
+        game.setBetStatus(BetSubmissionStatus.failed);
         return false;
       }
       _currentRound = targetRound;
@@ -230,7 +250,12 @@ class RoundSyncService extends ChangeNotifier {
 
     final roundId = targetRound.roundId;
 
-    // FIX BUG #6: Save which round the bets were submitted to
+    // Double-check idempotency after fresh round fetch
+    if (game.betStatus == BetSubmissionStatus.submitted && game.submittedRoundId == roundId) {
+      return true;
+    }
+
+    // Save which round the bets were submitted to
     _betRoundId = roundId;
 
     final result = await _api.placeBet(
@@ -241,11 +266,13 @@ class RoundSyncService extends ChangeNotifier {
     );
 
     if (result.success) {
+      game.setBetStatus(BetSubmissionStatus.submitted, roundId: roundId);
       // Anchor to the version the deduction produced, so an in-flight heartbeat
       // carrying the pre-bet balance cannot undo it.
       auth.syncAuthoritativeBalance(result.coinBalance, result.ledgerVersion);
       return true;
     } else {
+      game.setBetStatus(BetSubmissionStatus.failed);
       _lastSubmitError = result.error;
       debugPrint('RoundSyncService.submitBets failed: ${result.error}');
       return false;
