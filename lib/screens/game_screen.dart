@@ -991,7 +991,15 @@ class _NoConnectionBanner extends StatelessWidget {
                 ),
               ),
               GestureDetector(
-                onTap: onRetry,
+                onTap: () {
+                  if (reason == BetError.unauthenticated || reason == BetError.accountBlocked) {
+                    final auth = context.read<AuthProvider>();
+                    auth.logout();
+                    Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+                  } else {
+                    onRetry();
+                  }
+                },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
@@ -1002,9 +1010,11 @@ class _NoConnectionBanner extends StatelessWidget {
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
-                    'RETRY',
-                    style: TextStyle(
+                  child: Text(
+                    (reason == BetError.unauthenticated || reason == BetError.accountBlocked)
+                        ? 'LOG IN'
+                        : 'RETRY',
+                    style: const TextStyle(
                       fontFamily: 'DMSans',
                       fontWeight: FontWeight.w900,
                       fontSize: 11,

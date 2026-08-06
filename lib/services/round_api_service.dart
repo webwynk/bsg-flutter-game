@@ -174,19 +174,30 @@ class RoundApiService {
   /// CODE rather than the message removes that class of mistake.
   static String mapError(Object e) {
     final code = e is PostgrestException ? (e.code ?? '') : '';
-    final msg = e.toString();
+    final msg = e.toString().toLowerCase();
 
-    bool has(String c, String text) => code == c || msg.contains(text);
+    bool has(String c, String text) => code == c || msg.contains(text.toLowerCase());
 
-    if (has(ErrCode.insufficient, BetError.insufficientCoins)) return BetError.insufficientCoins;
-    if (has(ErrCode.belowMin, 'BELOW_MIN')) return BetError.belowMin;
-    if (has(ErrCode.exceedsMax, 'EXCEEDS_MAX')) return BetError.exceedsMax;
-    if (has(ErrCode.roundClosed, 'ROUND_CLOSED')) return BetError.roundClosed;
-    if (has(ErrCode.roundNotFound, 'ROUND_NOT_FOUND')) return BetError.roundClosed;
-    if (has(ErrCode.badBetKey, 'BAD_')) return BetError.badKey;
-    if (has(ErrCode.emptyBet, 'EMPTY_BET')) return BetError.emptyBet;
-    if (has(ErrCode.accountBlocked, 'ACCOUNT_BLOCKED')) return BetError.accountBlocked;
-    if (has(ErrCode.unauthenticated, 'Unauthenticated')) return BetError.unauthenticated;
+    if (has(ErrCode.unauthenticated, 'unauthenticated') ||
+        msg.contains('jwt') ||
+        msg.contains('token') ||
+        msg.contains('401') ||
+        msg.contains('auth')) {
+      return BetError.unauthenticated;
+    }
+    if (has(ErrCode.accountBlocked, 'account_blocked') || msg.contains('blocked')) {
+      return BetError.accountBlocked;
+    }
+    if (has(ErrCode.insufficient, 'insufficient_coins') || msg.contains('insufficient')) {
+      return BetError.insufficientCoins;
+    }
+    if (has(ErrCode.belowMin, 'below_min')) return BetError.belowMin;
+    if (has(ErrCode.exceedsMax, 'exceeds_max')) return BetError.exceedsMax;
+    if (has(ErrCode.roundClosed, 'round_closed')) return BetError.roundClosed;
+    if (has(ErrCode.roundNotFound, 'round_not_found')) return BetError.roundClosed;
+    if (has(ErrCode.badBetKey, 'bad_')) return BetError.badKey;
+    if (has(ErrCode.emptyBet, 'empty_bet')) return BetError.emptyBet;
+
     return BetError.offline;
   }
 
