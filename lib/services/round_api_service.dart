@@ -192,6 +192,13 @@ class RoundApiService {
         );
       }
     } catch (e) {
+      // FIX BUG #1A: Handle P0009/P0010 from hardened submit_round_bet
+      final errStr = e.toString();
+      if (errStr.contains('P0009') || errStr.contains('Round already resolved') ||
+          errStr.contains('P0010') || errStr.contains('Bet already settled')) {
+        debugPrint('RoundApiService.submitBet: round already resolved or bet settled');
+        return const SubmitBetResult(success: false, error: 'ROUND_CLOSED');
+      }
       debugPrint('RoundApiService.submitBet via Supabase SDK error: $e');
     }
 
@@ -221,8 +228,15 @@ class RoundApiService {
       try {
         final err = jsonDecode(res.body);
         final msg = err['message'] ?? err['hint'] ?? 'Server error';
+        final code = err['code'] ?? '';
         if (msg.toString().contains('Insufficient balance')) {
           return const SubmitBetResult(success: false, error: 'INSUFFICIENT_COINS');
+        }
+        // FIX BUG #1A: Handle P0009/P0010 from hardened submit_round_bet
+        if (code == 'P0009' || code == 'P0010' ||
+            msg.toString().contains('Round already resolved') ||
+            msg.toString().contains('Bet already settled')) {
+          return const SubmitBetResult(success: false, error: 'ROUND_CLOSED');
         }
         return SubmitBetResult(success: false, error: msg.toString());
       } catch (_) {}

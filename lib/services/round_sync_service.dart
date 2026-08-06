@@ -22,11 +22,13 @@ class RoundSyncService extends ChangeNotifier {
 
   // ── State ─────────────────────────────────────────────────────────
   GlobalRoundState? _currentRound;
+  String? _betRoundId;    // FIX BUG #6: Track the round ID bets were submitted to
   bool _isConnected = false;
   bool _isConnecting = false;
   String? _connectionError;
 
   GlobalRoundState? get currentRound     => _currentRound;
+  String? get betRoundId                 => _betRoundId;
   bool get isConnected                   => _isConnected;
   bool get isConnecting                  => _isConnecting;
   String? get connectionError            => _connectionError;
@@ -61,6 +63,7 @@ class RoundSyncService extends ChangeNotifier {
   /// Called from GameScreen.dispose — cleans up.
   void detach() {
     _deliveredRoundNumber = null;
+    _betRoundId = null;
   }
 
   /// Fetches the initial round state when joining the game screen.
@@ -141,6 +144,9 @@ class RoundSyncService extends ChangeNotifier {
       debugPrint('RoundSyncService.submitBets: no active round available');
       return false;
     }
+
+    // FIX BUG #6: Save which round the bets were submitted to
+    _betRoundId = roundId;
 
     final result = await _api.submitBet(
       roundId:    roundId,

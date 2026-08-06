@@ -829,7 +829,11 @@ class GameProvider extends ChangeNotifier {
     // If totalDeducted = 0 (watching, no bet), there is no bet row in triple_chance_bets,
     // so get_my_round_result returns placed_bet=false → retries 4× → ALWAYS shows banner.
     if (totalDeducted > 0) {
-      final cleanRoundId = serverResult.id.replaceFirst('round_', '');
+      // FIX BUG #6: Use the round ID bets were submitted to, NOT the result round ID.
+      // After a round transition, serverResult.id may point to a DIFFERENT round than
+      // the one the bet was placed on, causing get_my_round_result to return placed_bet=false.
+      final betRoundId = RoundSyncService().betRoundId;
+      final cleanRoundId = (betRoundId ?? serverResult.id).replaceFirst('round_', '');
       unawaited(_syncBalanceInBackground(cleanRoundId, auth));
     }
 
