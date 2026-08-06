@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/api_contract.dart';
 import '../services/sound_service.dart';
 import '../services/round_sync_service.dart';
 import '../theme/app_colors.dart';
@@ -863,18 +864,21 @@ class _GameScreenState extends State<GameScreen> {
                 listenable: RoundSyncService(),
                 builder: (context, _) {
                   final sync = RoundSyncService();
-                  if (sync.isConnected || sync.isConnecting && sync.connectionError == null) {
+                  final reason = sync.connectionError;
+                  if (sync.isConnected || reason == null) {
                     return const SizedBox.shrink();
                   }
-                  // Show banner only when truly disconnected
-                  if (sync.connectionError != 'NO_CONNECTION') {
-                    return const SizedBox.shrink();
-                  }
+                  // Show the banner for ANY failure to read the round, and name
+                  // the real cause. It used to render only for the literal
+                  // string 'NO_CONNECTION', which the service hard-coded for
+                  // every failure — so a server error was reported to the
+                  // player as a network outage.
                   return Positioned(
                     top: 0,
                     left: 0,
                     right: 0,
                     child: _NoConnectionBanner(
+                      reason: reason,
                       onRetry: () {
                         final game = context.read<GameProvider>();
                         final auth = context.read<AuthProvider>();
@@ -892,10 +896,34 @@ class _GameScreenState extends State<GameScreen> {
   }
 }
 
-/// Banner shown at the top of the game screen when internet is lost.
+/// Banner shown at the top of the game screen when the round cannot be read.
+///
+/// [reason] is a [BetError] sentinel describing the ACTUAL failure. Reporting
+/// every failure as "no internet" sent players chasing their wi-fi while the
+/// real fault was server-side, and hid genuine faults from us during testing.
 class _NoConnectionBanner extends StatelessWidget {
   final VoidCallback onRetry;
-  const _NoConnectionBanner({required this.onRetry});
+  final String reason;
+  const _NoConnectionBanner({required this.onRetry, required this.reason});
+
+  /// Player-facing text for each cause. Anything unrecognised is reported
+  /// honestly as a server problem rather than blamed on the connection.
+  String get _message {
+    switch (reason) {
+      case BetError.offline:
+        return 'NO INTERNET CONNECTION — Game paused';
+      case BetError.unauthenticated:
+        return 'SESSION EXPIRED — please sign in again';
+      case BetError.accountBlocked:
+        return 'ACCOUNT BLOCKED — contact your agent';
+      default:
+        return 'SERVER UNAVAILABLE ($reason) — Game paused';
+    }
+  }
+
+  IconData get _icon => reason == BetError.offline
+      ? Icons.wifi_off_rounded
+      : Icons.error_outline_rounded;
 
   @override
   Widget build(BuildContext context) {
@@ -917,12 +945,12 @@ class _NoConnectionBanner extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(Icons.wifi_off_rounded, color: AppColors.goldBright, size: 20),
+              Icon(_icon, color: AppColors.goldBright, size: 20),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'NO INTERNET CONNECTION — Game paused',
-                  style: TextStyle(
+                  _message,
+                  style: const TextStyle(
                     fontFamily: 'DMSans',
                     fontWeight: FontWeight.w700,
                     fontSize: 12,

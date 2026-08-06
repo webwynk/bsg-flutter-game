@@ -190,15 +190,28 @@ class RoundApiService {
     return BetError.offline;
   }
 
+  /// Why the last [getCurrentRound] failed, as a [BetError] sentinel.
+  ///
+  /// getCurrentRound returns null for every failure, so without this the UI
+  /// could only ever say "no internet" — an expired session, an RLS denial and
+  /// a genuinely dead network were indistinguishable. That is what made the
+  /// emulator report "NO INTERNET CONNECTION" while the network was fine.
+  String? lastRoundError;
+
   /// The current round. Creates it server-side on demand, and triggers the draw
   /// and settlement once the cycle passes `draw_at_second`.
   Future<GlobalRoundState?> getCurrentRound() async {
     try {
       final res = await _db.rpc(Rpc.getCurrentRound);
-      if (res == null) return null;
+      if (res == null) {
+        lastRoundError = BetError.offline;
+        return null;
+      }
+      lastRoundError = null;
       return GlobalRoundState.fromJson(Map<String, dynamic>.from(res as Map));
     } catch (e) {
-      debugPrint('RoundApiService.getCurrentRound: $e');
+      lastRoundError = mapError(e);
+      debugPrint('RoundApiService.getCurrentRound failed: $lastRoundError ($e)');
       return null;
     }
   }

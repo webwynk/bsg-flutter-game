@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/spin_result_model.dart';
 import '../providers/game_provider.dart';
 import '../providers/auth_provider.dart';
+import 'api_contract.dart';
 import 'round_api_service.dart';
 
 /// Manages synchronization between the Flutter app and the global game round.
@@ -64,12 +65,75 @@ class RoundSyncService extends ChangeNotifier {
     game.startCountdown();
     game.loadGlobalHistory();
     await _fetchInitialRound(game, auth);
+    _startPolling(game, auth);
   }
 
   /// Called from GameScreen.dispose — cleans up.
   void detach() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
     _deliveredRoundNumber = null;
     _betRoundId = null;
+  }
+
+  // ── Continuous polling ─────────────────────────────────────────────
+  Timer? _pollTimer;
+  bool _pollInFlight = false;
+
+  /// Polls the round every 2s for as long as the game screen is open.
+  ///
+  /// The class docs claimed this existed from the start; it did not. Without
+  /// it the round was read exactly twice per cycle — once on attach, once in
+  /// the draw window — which caused two distinct failures:
+  ///
+  ///   * `_currentRound` went stale for the whole betting phase, so bets were
+  ///     submitted against the previous, already-finished round.
+  ///   * the result was delivered only if `_onTimerExpire` fired on the exact
+  ///     `cycle 14 -> 13` tick. Any missed tick and the wheel simply never
+  ///     span for that round, with no way to recover until the next one.
+  ///
+  /// Polling makes delivery level-triggered rather than edge-triggered: the
+  /// wheel spins whenever a result exists that this client has not shown yet,
+  /// regardless of how the client got there.
+  void _startPolling(GameProvider game, AuthProvider auth) {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _poll(game, auth));
+  }
+
+  Future<void> _poll(GameProvider game, AuthProvider auth) async {
+    if (_pollInFlight) return;   // never overlap requests on a slow network
+    _pollInFlight = true;
+    try {
+      final round = await _api.getCurrentRound();
+
+      if (round == null) {
+        final err = _api.lastRoundError ?? BetError.offline;
+        if (_isConnected || _connectionError != err) {
+          _isConnected = false;
+          _connectionError = err;
+          notifyListeners();
+        }
+        return;
+      }
+
+      _currentRound = round;
+      _calibrateServerTimeOffset(round);
+      if (!_isConnected || _connectionError != null) {
+        _isConnected = true;
+        _connectionError = null;
+        _isConnecting = false;
+        notifyListeners();
+      }
+
+      if (round.red != null && round.green != null && round.black != null &&
+          _deliveredRoundNumber != round.roundNumber) {
+        _deliveredRoundNumber = round.roundNumber;
+        debugPrint('RoundSyncService: delivering round #${round.roundNumber} from poll');
+        _deliverResult(round, game, auth);
+      }
+    } finally {
+      _pollInFlight = false;
+    }
   }
 
   /// Fetches the initial round state when joining the game screen.
@@ -78,7 +142,11 @@ class RoundSyncService extends ChangeNotifier {
     if (round == null) {
       _isConnected = false;
       _isConnecting = false;
-      _connectionError = 'NO_CONNECTION';
+      // Report the ACTUAL cause. This used to be hard-coded to NO_CONNECTION,
+      // so a server-side failure was indistinguishable from a dead network —
+      // which is how a broken draw_round presented to the player as
+      // "NO INTERNET CONNECTION" on a device with working internet.
+      _connectionError = _api.lastRoundError ?? BetError.offline;
       notifyListeners();
       return;
     }
@@ -139,21 +207,28 @@ class RoundSyncService extends ChangeNotifier {
       return true;
     }
 
-    // Ensure targetRound is available
-    var targetRound = _currentRound;
+    // Always re-read the round from the server immediately before submitting.
+    //
+    // This used to reuse the cached _currentRound, which is only ever refreshed
+    // inside fetchAndDeliverResult — i.e. once per round, during the draw
+    // window. By the time the next round's bet was submitted the cache still
+    // held the PREVIOUS round, so every bet after the first was booked one
+    // round behind. Live evidence: a bet created at 21:26:48 was recorded
+    // against round 17340305, which had ended at 21:25:18.
+    //
+    // Fail closed. If the round cannot be read we refuse the bet rather than
+    // fall back to a possibly-stale id — booking a stake into a dead round is
+    // strictly worse than not betting, because the round can never settle it.
+    final targetRound = await _api.getCurrentRound();
     if (targetRound == null) {
-      targetRound = await _api.getCurrentRound();
-      if (targetRound != null) {
-        _currentRound = targetRound;
-      }
-    }
-
-    final roundId = targetRound?.roundId;
-    if (roundId == null) {
-      debugPrint('RoundSyncService.submitBets: no active round available');
-      _lastSubmitError = 'OFFLINE';
+      debugPrint('RoundSyncService.submitBets: could not read the current round');
+      _lastSubmitError = _api.lastRoundError ?? BetError.offline;
       return false;
     }
+    _currentRound = targetRound;
+    _calibrateServerTimeOffset(targetRound);
+
+    final roundId = targetRound.roundId;
 
     // FIX BUG #6: Save which round the bets were submitted to
     _betRoundId = roundId;
