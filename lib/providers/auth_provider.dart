@@ -1,10 +1,24 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
+import '../services/api_contract.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 
+/// Owns the signed-in player and their coin balance.
+///
+/// BALANCE ORDERING (v2)
+///   Every server response that carries a balance also carries
+///   `ledger_version`, a counter the database bumps on each balance change.
+///   Updates are applied only if their version is at least as fresh as what has
+///   already been applied, so an in-flight heartbeat cannot roll back a newer
+///   value.
+///
+///   v1 had no ordering and compensated with two global locks
+///   (holdHeartbeatBalance / suspendHeartbeatPolling). Their release could be
+///   skipped by an early return, which froze the displayed balance for the rest
+///   of the process — audit findings F-2 and F-2b, and a direct cause of
+///   "balance didn't update".
 class AuthProvider extends ChangeNotifier {
   UserModel? _user;
   DateTime? _sessionStartAt;
@@ -12,14 +26,51 @@ class AuthProvider extends ChangeNotifier {
   String? _error;
   Timer? _heartbeatTimer;
 
-  // M-5: `profiles.ledger_version` is bumped by the database on every balance
-  // change and returned by submit_round_bet, update_user_heartbeat and
-  // get_my_round_result_v2. Ordering balance updates by it replaces the old
-  // holdHeartbeatBalance()/suspendHeartbeatPolling() locks, whose many early
-  // returns could leak and freeze the displayed balance for the whole process.
+  /// Set when the server ends this session (blocked, or displaced by another
+  /// device). The root listener watches this to send the player back to login —
+  /// v1 logged them out internally but left them on a live game screen
+  /// (finding F-4).
+  bool _forcedLogout = false;
+  String? _forcedLogoutReason;
+
   int _ledgerVersion = 0;
 
+  /// Stake sitting on the board that has not reached the database yet.
+  /// Chips are deducted locally the moment they are placed, but nothing is
+  /// written until place_bet runs at the close of betting, so the server's
+  /// balance is higher than the displayed one until then.
+  int? Function()? _uncommittedStakeGetter;
+
+  UserModel? get user => _user;
+  DateTime? get sessionStartAt => _sessionStartAt;
+  bool get isLoggedIn => _user != null;
+  bool get isLoading => _loading;
+  String? get error => _error;
+  int get coinBalance => _user?.coinBalance ?? 0;
+  String get username => _user?.username ?? '';
+  String get token => _user?.token ?? '';
   int get ledgerVersion => _ledgerVersion;
+  bool get forcedLogout => _forcedLogout;
+  String? get forcedLogoutReason => _forcedLogoutReason;
+
+  void setUncommittedStakeGetter(int? Function()? getter) {
+    _uncommittedStakeGetter = getter;
+  }
+
+  void clearForcedLogout() {
+    _forcedLogout = false;
+    _forcedLogoutReason = null;
+  }
+
+  // ── Balance updates ────────────────────────────────────────────────────────
+
+  /// Applies a balance without touching the version. Used for purely local
+  /// changes such as placing or removing a chip, which the server has not seen.
+  void updateBalance(int newBalance) {
+    if (_user == null) return;
+    _user = _user!.copyWith(coinBalance: newBalance);
+    notifyListeners();
+  }
 
   /// Applies a server-sourced balance only if it is at least as fresh as what
   /// has already been applied. Older in-flight responses are discarded.
@@ -30,152 +81,109 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Applies a locally predicted balance (the win shown the instant the wheel
-  /// stops) and claims the next ledger slot, so a heartbeat issued before the
-  /// prediction cannot roll it back. Only valid when the database is known to
-  /// be incrementing too — i.e. an actual win payout.
-  void applyOptimisticBalance(int newBalance) {
-    _ledgerVersion += 1;
-    updateBalance(newBalance);
-  }
-
   /// Applies a settled, authoritative balance and re-anchors the local version
-  /// to the server's. Used after get_my_round_result_v2, which is the final
-  /// word on a round, so it must win even if an optimistic bump ran ahead.
+  /// to the server's. Used after place_bet and get_my_round_result, which are
+  /// the final word, so this must win even if an optimistic update ran ahead.
   void syncAuthoritativeBalance(int newBalance, int version) {
     _ledgerVersion = version;
     updateBalance(newBalance);
   }
 
-  UserModel? get user    => _user;
-  DateTime? get sessionStartAt => _sessionStartAt;
-  bool get isLoggedIn    => _user != null;
-  bool get isLoading     => _loading;
-  String? get error      => _error;
-  int get balance        => _user?.balance ?? 0;
-  String get username    => _user?.username ?? '';
-  String get agentName   => _user?.agentName ?? 'N/A';
-  String get token       => _user?.token ?? '';
+  /// Applies a locally predicted balance — the win shown the instant the wheel
+  /// stops — and claims the next ledger slot so a heartbeat issued before the
+  /// payout cannot undo it.
+  ///
+  /// Only valid when the database is known to be incrementing too, i.e. an
+  /// actual win payout. Claiming a slot for a non-event would leave the client
+  /// permanently ahead of the server and freeze the balance.
+  void applyOptimisticBalance(int newBalance) {
+    _ledgerVersion += 1;
+    updateBalance(newBalance);
+  }
 
-  Future<bool> login(String username, String password) async {
+  // ── Login / logout ─────────────────────────────────────────────────────────
+
+  Future<LoginOutcome> login(String username, String password) async {
     _loading = true;
     _error = null;
     notifyListeners();
 
-    try {
-      final res = await ApiService().login(username.trim(), password.trim());
-      final userData = Map<String, dynamic>.from(res['user'] as Map);
-      userData['token'] = res['token'];
-      _user = UserModel.fromJson(userData);
-      _ledgerVersion = 0;   // M-5: unknown at login; accept the first heartbeat.
+    final outcome = await ApiService().login(username, password);
 
-      final sessionStartStr = res['sessionStartAt'] ?? res['session_start_at'];
-      _sessionStartAt = sessionStartStr != null 
-          ? DateTime.tryParse(sessionStartStr.toString()) 
-          : null;
-      _sessionStartAt ??= DateTime.now().toUtc();
-
-      await AuthService().saveSession(_user!, _sessionStartAt!);
-      _startHeartbeatTimer();
+    if (!outcome.success) {
+      _error = outcome.error;
       _loading = false;
       notifyListeners();
-      return true;
-    } catch (e) {
-      _error = e.toString();
-      _loading = false;
-      notifyListeners();
-      return false;
+      return outcome;
     }
+
+    final profile = outcome.profile!;
+    _user = UserModel.fromJson(profile);
+    _ledgerVersion = (profile[Field.ledgerVersion] as num?)?.toInt() ?? 0;
+    _sessionStartAt = DateTime.now().toUtc();
+    _forcedLogout = false;
+    _forcedLogoutReason = null;
+
+    await AuthService().saveSession(_user!, _sessionStartAt!);
+    _startHeartbeat();
+
+    _loading = false;
+    notifyListeners();
+    return outcome;
   }
 
-  void _startHeartbeatTimer() {
+  void _startHeartbeat() {
     _heartbeatTimer?.cancel();
     if (_user == null) return;
+
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
-      if (_user != null && token.isNotEmpty) {
-        final res = await ApiService().updateHeartbeat(token, _user!.id);
-        if (res != null) {
-          if (res['allowed'] == false) {
-            final reason = res['reason']?.toString();
-            final msg = reason == 'account_blocked'
-                ? 'Account is blocked. Please contact your Agent.'
-                : 'Account logged in on another device.';
-            await logout();
-            setError(msg);
-          } else if (res['allowed'] == true && res.containsKey('balance') && res['balance'] != null) {
-            // M-5: apply only if this response is at least as fresh as what we
-            // already have. `uncommittedStake` is still subtracted because
-            // chips placed on the board are deducted locally and do not reach
-            // the database until submit_round_bet runs at the close of betting.
-            final liveBal = (res['balance'] as num).toInt();
-            final version = (res['ledger_version'] as num?)?.toInt() ?? 0;
-            final uncommittedStake = _uncommittedBetGetter?.call() ?? 0;
-            updateBalanceWithVersion(
-              (liveBal - uncommittedStake).clamp(0, 99999999),
-              version,
-            );
-          }
-        }
+      final current = _user;
+      if (current == null || current.token == null) return;
+
+      final res = await ApiService().heartbeat(current.token!);
+      if (res == null) return; // transport hiccup — keep the session
+
+      if (res[Field.allowed] != true) {
+        final reason = res[Field.reason]?.toString();
+        final message = reason == ReasonCode.accountBlocked
+            ? 'Your account has been blocked. Please contact your Agent.'
+            : 'Your account was opened on another device.';
+        await _endSession(forced: true, reason: message);
+        return;
       }
+
+      final balance = (res[Field.coinBalance] as num?)?.toInt();
+      final version = (res[Field.ledgerVersion] as num?)?.toInt() ?? 0;
+      if (balance == null) return;
+
+      // Subtract chips already on the board: they are deducted locally but have
+      // no counterpart in the database until betting closes.
+      final uncommitted = _uncommittedStakeGetter?.call() ?? 0;
+      updateBalanceWithVersion((balance - uncommitted).clamp(0, 1 << 62), version);
     });
   }
 
-  void _stopHeartbeatTimer() {
+  Future<void> _endSession({required bool forced, String? reason}) async {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
-  }
 
-  int? Function()? _uncommittedBetGetter;
-  void setUncommittedBetGetter(int? Function()? getter) {
-    _uncommittedBetGetter = getter;
-  }
-
-  Future<bool> tryAutoLogin() async {
-    try {
-      final saved = await AuthService().loadSession();
-      if (saved != null) {
-        final (user, sessionStartAt) = saved;
-        _user = user;
-        _sessionStartAt = sessionStartAt;
-        if (user.token != null && user.token!.isNotEmpty) {
-          try {
-            await Supabase.instance.client.auth.setSession(user.token!);
-          } catch (e) {
-            debugPrint('AuthProvider.tryAutoLogin setSession error: $e');
-          }
-        }
-        _startHeartbeatTimer();
-        notifyListeners();
-
-        // FIX #4: Fetch fresh live balance from DB after restoring session.
-        // The saved token may be stale (e.g. player won and balance changed since last save).
-        if (user.token != null && user.token!.isNotEmpty) {
-          try {
-            final fresh = await ApiService().fetchProfile(user.token!, user.id);
-            if (fresh != null) {
-              final freshBal = (fresh['balance'] as num?)?.toInt();
-              if (freshBal != null) updateBalance(freshBal);
-            }
-          } catch (e) {
-            debugPrint('AuthProvider.tryAutoLogin freshBalance error: $e');
-          }
-        }
-
-        return true;
-      }
-    } catch (e) {
-      debugPrint('AuthProvider.tryAutoLogin error: $e');
+    if (_user != null) {
+      await ApiService().logout();
     }
-    _loading = false;
+    await AuthService().clearSession();
+
+    _user = null;
+    _sessionStartAt = null;
+    _ledgerVersion = 0;
+    _forcedLogout = forced;
+    _forcedLogoutReason = reason;
+    _error = forced ? reason : null;
     notifyListeners();
-    return false;
   }
 
-  void updateBalance(int newBalance) {
-    if (_user == null) return;
-    _user = _user!.copyWith(balance: newBalance);
-    notifyListeners();
-  }
+  Future<void> logout() => _endSession(forced: false);
+
+  // ── Misc ───────────────────────────────────────────────────────────────────
 
   void clearError() {
     _error = null;
@@ -193,15 +201,14 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final success = await ApiService().changePassword(
-        token: token,
+      final ok = await ApiService().changePassword(
         username: username,
         currentPassword: currentPassword,
         newPassword: newPassword,
       );
       _loading = false;
       notifyListeners();
-      return success;
+      return ok;
     } catch (e) {
       _error = e.toString().replaceAll('Exception: ', '');
       _loading = false;
@@ -210,18 +217,9 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> logout() async {
-    _stopHeartbeatTimer();
-    if (_user != null) {
-      try {
-        await ApiService().clearSessionRemote(token, _user!.id);
-        await ApiService().logout(token);
-      } catch (_) {}
-    }
-    await AuthService().clearSession();
-    _user = null;
-    _sessionStartAt = null;
-    _error = null;
-    notifyListeners();
+  @override
+  void dispose() {
+    _heartbeatTimer?.cancel();
+    super.dispose();
   }
 }

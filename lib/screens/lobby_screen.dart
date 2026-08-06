@@ -235,7 +235,7 @@ class _TopBar extends StatelessWidget {
           ),
           SizedBox(width: 6 * scaleFactor),
           Text(
-            '${auth.balance}',
+            '${auth.coinBalance}',
             style: AppTextStyles.number(
               size: 14 * scaleFactor,
               color: AppColors.goldBright,

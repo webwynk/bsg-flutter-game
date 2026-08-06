@@ -6,6 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/game_provider.dart';
 import '../../providers/history_provider.dart';
 import '../../models/spin_result_model.dart';
+import '../../models/bet_model.dart';
 import '../../theme/app_colors.dart';
 // ignore: unused_import
 import '../../theme/app_text_styles.dart';
@@ -53,7 +54,7 @@ class _InfoDialogState extends State<InfoDialog>
       final auth = Provider.of<AuthProvider>(context, listen: false);
       if (auth.isLoggedIn) {
         Provider.of<HistoryProvider>(context, listen: false)
-            .loadFirstPage(auth.token, userId: auth.user?.id, since: auth.sessionStartAt);
+            .loadFirstPage(since: auth.sessionStartAt);
       }
     });
   }
@@ -405,7 +406,7 @@ class _HistoryTab extends StatelessWidget {
             const SizedBox(height: 12),
             GestureDetector(
               onTap: () {
-                history.loadFirstPage(auth.token, userId: auth.user?.id, since: auth.sessionStartAt);
+                history.loadFirstPage(since: auth.sessionStartAt);
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(
@@ -523,7 +524,7 @@ class _HistoryTab extends StatelessWidget {
                             flex: 10,
                             child: Center(
                               child: Text(
-                                '${history.totalPlay}',
+                                '${history.totalStake}',
                                 style: const TextStyle(
                                   fontFamily: 'Oswald',
                                   fontSize: 11,
@@ -538,12 +539,12 @@ class _HistoryTab extends StatelessWidget {
                             flex: 10,
                             child: Center(
                               child: Text(
-                                history.totalWin > 0 ? '+${history.totalWin}' : '0',
+                                history.totalPayout > 0 ? '+${history.totalPayout}' : '0',
                                 style: TextStyle(
                                   fontFamily: 'Oswald',
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
-                                  color: history.totalWin > 0
+                                  color: history.totalPayout > 0
                                       ? const Color(0xFF44D680)
                                       : Colors.white30,
                                 ),
@@ -1264,12 +1265,29 @@ class _LimitTable extends StatelessWidget {
               color: AppColors.goldDark.withValues(alpha: 0.4)),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Column(children: [
-          _LimitHeader(),
-          const _LimitRow('Singles Play', '2', '10,000', border: true),
-          const _LimitRow('Doubles Play', '2', '1,000', border: true),
-          const _LimitRow('Triples Play', '2', '100', border: false),
-        ]),
+        // F-15 FIX: read the live limits instead of hard-coding them.
+        // These were fixed strings ('2' / '10,000' / '1,000' / '100'), so if an
+        // administrator changed play_limits the dialog kept showing the old
+        // numbers while the game enforced the new ones.
+        child: Consumer<GameProvider>(
+          builder: (_, game, __) {
+            final limits = game.playLimits;
+            String fmt(int v) => v.toString().replaceAllMapped(
+                  RegExp(r'(\d)(?=(\d{3})+$)'),
+                  (m) => '${m[1]},',
+                );
+            final single = limits.limitsFor(BoardType.single);
+            final dbl = limits.limitsFor(BoardType.double_);
+            final triple = limits.limitsFor(BoardType.triple);
+
+            return Column(children: [
+              _LimitHeader(),
+              _LimitRow('Singles Play', fmt(single.min), fmt(single.max), border: true),
+              _LimitRow('Doubles Play', fmt(dbl.min), fmt(dbl.max), border: true),
+              _LimitRow('Triples Play', fmt(triple.min), fmt(triple.max), border: false),
+            ]);
+          },
+        ),
       );
 }
 

@@ -181,7 +181,7 @@ class _StatsPanel extends StatelessWidget {
                         FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
-                            '${auth.balance}',
+                            '${auth.coinBalance}',
                             style: AppTextStyles.number(size: 15, color: AppColors.goldBright),
                           ),
                         ),

@@ -21,7 +21,10 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> {
   bool _allowPop = false;
-  late GameProvider _gameProvider;
+  // F-7: nullable, not late. This is assigned in a post-frame callback, so
+  // popping the screen before the first frame completed made dispose() throw
+  // LateInitializationError and crash the app.
+  GameProvider? _gameProvider;
 
   @override
   void initState() {
@@ -32,17 +35,19 @@ class _GameScreenState extends State<GameScreen> {
       DeviceOrientation.landscapeRight,
     ]);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _gameProvider = context.read<GameProvider>();
+      if (!mounted) return;
+      final game = context.read<GameProvider>();
+      _gameProvider = game;
       final auth = context.read<AuthProvider>();
       // M-5: heartbeat polling is no longer suspended here. It used to be, which
       // silently disabled the very balance re-sync that _syncBalanceInBackground
       // relied on. Ordering is handled by ledger_version instead; the getter
       // below stays because chips on the board are deducted locally and have no
       // counterpart in the database until betting closes.
-      auth.setUncommittedBetGetter(() => _gameProvider.uncommittedStake);
-      _gameProvider.setAutoSpinCallback(_handleSpin);
+      auth.setUncommittedStakeGetter(() => _gameProvider?.uncommittedStake ?? 0);
+      game.setAutoSpinCallback(_handleSpin);
       // Attach RoundSyncService — syncs timer to server and listens for results
-      RoundSyncService().attach(_gameProvider, auth);
+      RoundSyncService().attach(game, auth);
     });
   }
 
@@ -78,7 +83,6 @@ class _GameScreenState extends State<GameScreen> {
       final singleBets = Map<String, int>.from(game.board.single);
       final doubleBets = Map<String, int>.from(game.board.double_);
       final tripleBets = Map<String, int>.from(game.board.triple);
-      final totalStake = game.totalBet;
 
       // M-3 FIX: the return value used to be discarded, so a server-rejected
       // bet was completely silent — the wheel spun, the balance stayed reduced,
@@ -87,8 +91,6 @@ class _GameScreenState extends State<GameScreen> {
         singleBets: singleBets,
         doubleBets: doubleBets,
         tripleBets: tripleBets,
-        totalStake: totalStake,
-        token:      auth.token,
         auth:       auth,
       );
 
@@ -112,13 +114,16 @@ class _GameScreenState extends State<GameScreen> {
     RoundSyncService().detach();
     try {
       final auth = context.read<AuthProvider>();
-      auth.setUncommittedBetGetter(null);
+      auth.setUncommittedStakeGetter(null);
     } catch (_) {}
-    _gameProvider.abortSpin();
-    _gameProvider.stopCountdown();
-    _gameProvider.setAutoSpinCallback(null);
-    _gameProvider.clearRebetSnapshot();
-    _gameProvider.clearSpinHistory();
+    final game = _gameProvider;
+    if (game != null) {
+      game.abortSpin();
+      game.stopCountdown();
+      game.setAutoSpinCallback(null);
+      game.clearRebetSnapshot();
+      game.clearSpinHistory();
+    }
     super.dispose();
   }
 

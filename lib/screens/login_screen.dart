@@ -46,13 +46,25 @@ class _LoginScreenState extends State<LoginScreen> {
       _shake();
       return;
     }
-    final success = await auth.login(username, password);
+    final outcome = await auth.login(username, password);
     if (!mounted) return;
-    if (success) {
+
+    if (outcome.success) {
       Navigator.pushReplacementNamed(context, '/lobby');
-    } else {
-      _shake();
+      return;
     }
+
+    // Q6: a second device is refused rather than displacing the first. Say so
+    // plainly, including when the other session will go stale, so the player
+    // does not read it as a wrong password and keep retrying.
+    if (outcome.sessionHeldElsewhere) {
+      final secs = outcome.secondsUntilFree;
+      auth.setError(secs > 0
+          ? 'Already playing on another device. Try again in ${secs}s.'
+          : 'This account is already playing on another device.');
+    }
+
+    _shake();
   }
 
   void _shake() {

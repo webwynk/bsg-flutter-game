@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/spin_result_model.dart';
 import '../models/bet_model.dart';
 import '../models/play_limits_config.dart';
-import '../services/api_service.dart';
 import '../services/round_api_service.dart';
 import '../services/sound_service.dart';
 import '../services/round_sync_service.dart';
@@ -43,8 +42,10 @@ class GameProvider extends ChangeNotifier {
   }
 
   Future<void> _loadPlayLimits() async {
-    // Override fallback with real server limits (may raise or lower caps).
-    final limitsJson = await ApiService().fetchPlayLimits();
+    // Override the fallback with the server's limits. If the call fails the
+    // fallback stays in force, so caps are never absent.
+    final limitsJson = await RoundApiService().getPlayLimits();
+    if (limitsJson == null) return;
     _playLimits = PlayLimitsConfig.fromJson(limitsJson);
     notifyListeners();
   }
@@ -209,7 +210,7 @@ class GameProvider extends ChangeNotifier {
     if (_countdown <= 5) return;
     if (_activeChip == null) return;
     final amount = _activeChip!.amount;
-    if (auth.balance < amount) {
+    if (auth.coinBalance < amount) {
       _error = 'INSUFFICIENT_COINS';
       notifyListeners();
       return; // insufficient funds guard
@@ -231,7 +232,7 @@ class GameProvider extends ChangeNotifier {
     _lastWinBoxResult = null; // reset WIN display as soon as user bets
     map[cellKey] = currentAmount + amount;
     _history.add(BetAction(board: boardType, cellKey: cellKey, amount: amount));
-    auth.updateBalance(auth.balance - amount);
+    auth.updateBalance(auth.coinBalance - amount);
 
     SoundService().playNumberSelect();
     HapticFeedback.selectionClick();
@@ -274,13 +275,13 @@ class GameProvider extends ChangeNotifier {
     _lastWinBoxResult = null; // reset WIN display as soon as user bets
     bool hasInsufficientFunds = false;
     for (final key in validKeys) {
-      if (auth.balance < amount) {
+      if (auth.coinBalance < amount) {
         hasInsufficientFunds = true;
         break;
       }
       map[key] = (map[key] ?? 0) + amount;
       _history.add(BetAction(board: boardType, cellKey: key, amount: amount));
-      auth.updateBalance(auth.balance - amount);
+      auth.updateBalance(auth.coinBalance - amount);
     }
     if (hasInsufficientFunds) {
       _error = 'INSUFFICIENT_COINS';
@@ -325,7 +326,7 @@ class GameProvider extends ChangeNotifier {
       map.clear();
       _history.removeWhere((action) => action.board == boardType);
     }
-    auth.updateBalance(auth.balance + totalRefund);
+    auth.updateBalance(auth.coinBalance + totalRefund);
 
     // 2. Build candidates (100 cells)
     List<String> pool = [];
@@ -359,13 +360,13 @@ class GameProvider extends ChangeNotifier {
     _rebetUsed = true; // any manual bet switches REBET → DOUBLE
     bool hasInsufficientFunds = false;
     for (final key in selectedKeys) {
-      if (auth.balance < betAmount) {
+      if (auth.coinBalance < betAmount) {
         hasInsufficientFunds = true;
         break;
       }
       map[key] = betAmount;
       _history.add(BetAction(board: boardType, cellKey: key, amount: betAmount));
-      auth.updateBalance(auth.balance - betAmount);
+      auth.updateBalance(auth.coinBalance - betAmount);
     }
     if (hasInsufficientFunds) {
       _error = 'INSUFFICIENT_COINS';
@@ -405,39 +406,49 @@ class GameProvider extends ChangeNotifier {
     }
 
     // Check balance against cells that WILL be doubled
-    if (auth.balance < extraCost) {
+    if (auth.coinBalance < extraCost) {
       _error = 'INSUFFICIENT_COINS';
       notifyListeners();
       return;
     }
 
     _lastRejection = BetRejection.ok;
-    auth.updateBalance(auth.balance - extraCost);
+    auth.updateBalance(auth.coinBalance - extraCost);
     _lastWinBoxResult = null; // reset WIN display when user doubles
 
-    // Double only cells within their cap
+    // F-8 FIX — decide skip/double ONCE per cell, then apply that same decision
+    // to both the board and the undo history.
+    //
+    // The previous version made the decision twice. The board loop skipped a
+    // cell when `value * 2 > cap`, but the history loop then re-read the board
+    // AFTER the update and doubled the record whenever `currentVal <= cap` —
+    // which is true for a skipped cell, since it was left unchanged. The undo
+    // entry therefore doubled while the stake did not.
+    //
+    // Reproduction (triple cap 100): stake 60 on "000" -> DOUBLE leaves the
+    // cell at 60 but records 120 -> REMOVE refunds 120 for a 60-coin stake.
+    // The player's displayed balance gained 60 coins they never staked, and
+    // their next bet was rejected server-side for insufficient funds.
+    final doubled = <BoardType, Set<String>>{};
+
     for (final type in BoardType.values) {
       final cap = _playLimits.limitsFor(type).max;
       final map = _board.boardFor(type);
-      map.updateAll((key, value) {
-        if (value * 2 > cap) return value; // skip — already at cap
-        return value * 2;
-      });
+      final applied = <String>{};
+
+      for (final key in map.keys.toList()) {
+        final value = map[key]!;
+        if (value * 2 > cap) continue; // at cap — leave the stake alone
+        map[key] = value * 2;
+        applied.add(key);
+      }
+      doubled[type] = applied;
     }
 
-    // If some cells were skipped, show the warning
-    if (anySkipped) {
-      _lastRejection = BetRejection(BetRejectReason.cellMaxExceeded, board: skippedBoard, cap: skippedCap ?? 0);
-    }
-
-    // Double all entry amounts in history to keep it synced with the board, respecting cap limits
+    // Only history entries whose cell actually doubled are doubled too.
     for (int i = 0; i < _history.length; i++) {
       final action = _history[i];
-      final cap = _playLimits.limitsFor(action.board).max;
-      final boardMap = _board.boardFor(action.board);
-      final currentVal = boardMap[action.cellKey] ?? 0;
-
-      if (currentVal <= cap) {
+      if (doubled[action.board]?.contains(action.cellKey) ?? false) {
         _history[i] = BetAction(
           board: action.board,
           cellKey: action.cellKey,
@@ -445,6 +456,12 @@ class GameProvider extends ChangeNotifier {
         );
       }
     }
+
+    // If some cells were skipped, show the warning
+    if (anySkipped) {
+      _lastRejection = BetRejection(BetRejectReason.cellMaxExceeded, board: skippedBoard, cap: skippedCap ?? 0);
+    }
+
     _updateTimerState(auth);
     notifyListeners();
   }
@@ -453,7 +470,7 @@ class GameProvider extends ChangeNotifier {
   void clearBets(AuthProvider auth) {
     if (_isSpinning || _countdown <= 5) return;
     // Refund the full board total back to balance
-    auth.updateBalance(auth.balance + _board.total);
+    auth.updateBalance(auth.coinBalance + _board.total);
     _board.clearAll();
     _history.clear();
     _rebetUsed = false; // allow REBET to reappear after clearing
@@ -475,7 +492,7 @@ class GameProvider extends ChangeNotifier {
     } else {
       map[last.cellKey] = remaining;
     }
-    auth.updateBalance(auth.balance + last.amount);
+    auth.updateBalance(auth.coinBalance + last.amount);
     _checkAndRestoreActiveChip();
     _updateTimerState(auth);
     notifyListeners();
@@ -499,7 +516,7 @@ class GameProvider extends ChangeNotifier {
     } else {
       map[cellKey] = remaining;
     }
-    auth.updateBalance(auth.balance + action.amount);
+    auth.updateBalance(auth.coinBalance + action.amount);
     SoundService().playButtonClick();
     HapticFeedback.selectionClick();
     _checkAndRestoreActiveChip();
@@ -529,7 +546,7 @@ class GameProvider extends ChangeNotifier {
       } else {
         map[cellKey] = remaining;
       }
-      auth.updateBalance(auth.balance + action.amount);
+      auth.updateBalance(auth.coinBalance + action.amount);
       anyRemoved = true;
     }
 
@@ -571,7 +588,7 @@ class GameProvider extends ChangeNotifier {
 
     // Calculate total cost of previous bets
     final total = _lastBetSnapshot!.total;
-    if (auth.balance < total) {
+    if (auth.coinBalance < total) {
       _error = 'INSUFFICIENT_COINS';
       notifyListeners();
       return;
@@ -587,7 +604,7 @@ class GameProvider extends ChangeNotifier {
       }
     }
 
-    auth.updateBalance(auth.balance - total);
+    auth.updateBalance(auth.coinBalance - total);
     _rebetUsed = true; // switches button back to DOUBLE
     _lastWinBoxResult = null; // reset WIN display on rebet
     SoundService().playChipClick();
@@ -597,32 +614,30 @@ class GameProvider extends ChangeNotifier {
 
   Future<void> loadGlobalHistory() async {
     try {
+      // v2 returns typed RecentRound objects, and only rounds that were really
+      // drawn. v1 synthesised MD5 digits for missing rounds, so the strip could
+      // show numbers that never settled a bet (finding C-3).
       final rounds = await RoundApiService().getRecentRounds(limit: 10);
       if (rounds.isNotEmpty) {
-        _globalHistory.clear();
-        for (final r in rounds) {
-          if (r['red'] != null && r['green'] != null && r['black'] != null) {
-            _globalHistory.add(SpinResult(
-              id: r['id']?.toString() ?? 'round_${r['round_number']}',
-              red: (r['red'] as num).toInt(),
-              green: (r['green'] as num).toInt(),
-              black: (r['black'] as num).toInt(),
-              mode: 'global',
-              selections: [],
-              chipValue: 0,
-              won: false,
-              deductedAmount: 0,
-              winAmount: 0,
-              singleWinAmount: 0,
-              doubleWinAmount: 0,
-              tripleWinAmount: 0,
-              netChange: 0,
-              createdAt: r['scheduled_at'] != null
-                  ? DateTime.tryParse(r['scheduled_at'].toString()) ?? DateTime.now()
-                  : DateTime.now(),
-            ));
-          }
-        }
+        _globalHistory
+          ..clear()
+          ..addAll(rounds.map((r) => SpinResult(
+                id: r.roundId,
+                red: r.red,
+                green: r.green,
+                black: r.black,
+                mode: 'global',
+                selections: const [],
+                chipValue: 0,
+                won: false,
+                deductedAmount: 0,
+                winAmount: 0,
+                singleWinAmount: 0,
+                doubleWinAmount: 0,
+                tripleWinAmount: 0,
+                netChange: 0,
+                createdAt: r.scheduledAt,
+              )));
         notifyListeners();
       }
     } catch (e) {
@@ -699,7 +714,10 @@ class GameProvider extends ChangeNotifier {
   void stopCountdown() {
     _countdownTimer?.cancel();
     _countdownTimer = null;
-    _countdown = 60;
+    // F-11: recompute from the wall clock rather than hard-coding a value.
+    // v1 reset to 60 in a 90-second model, so the UI briefly showed a
+    // countdown that had never been correct.
+    _countdown = _cycleToCountdown(_computeUtcRemainingCycle());
     notifyListeners();
   }
 
@@ -741,8 +759,8 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
 
     // FIX #2: Snapshot the authoritative post-bet balance ONCE at spin start.
-    // Never use live auth.balance for win math — it may be polluted by a stale heartbeat.
-    final balanceAtSpinStart = auth.balance;
+    // Never use live auth.coinBalance for win math — it may be polluted by a stale heartbeat.
+    final balanceAtSpinStart = auth.coinBalance;
 
     // Snapshot existing bets BEFORE clearing them
     final singleSnap = Map<String, int>.from(_board.single);
@@ -882,10 +900,7 @@ class GameProvider extends ChangeNotifier {
 
     for (int attempt = 1; attempt <= 4 && !synced; attempt++) {
       try {
-        final myResult = await RoundApiService().getMyRoundResult(
-          roundId: roundId,
-          token: auth.token,
-        );
+        final myResult = await RoundApiService().getMyRoundResult(roundId);
         if (myResult != null) {
           if (!myResult.placedBet) {
             // DB has no bet row for this round. Two possible causes:
@@ -896,18 +911,18 @@ class GameProvider extends ChangeNotifier {
             // version instead of relying on the heartbeat, which used to be
             // suspended inside the game screen and so never re-synced at all.
             placedBetNotFound = true;
-            auth.syncAuthoritativeBalance(myResult.balance, myResult.ledgerVersion);
+            auth.syncAuthoritativeBalance(myResult.coinBalance, myResult.ledgerVersion);
             debugPrint('_syncBalanceInBackground: placed_bet=false on attempt $attempt. Bet may have failed to reach DB.');
             break; // Stop retrying — more retries won't create the bet row
-          } else if (myResult.isResolved && myResult.balance >= 0) {
+          } else if (myResult.isSettled && myResult.coinBalance >= 0) {
             // Bet fully settled by server. DB balance is the single source of
             // truth, so re-anchor the local version to the server's — this also
             // corrects any drift left by the optimistic win update.
-            auth.syncAuthoritativeBalance(myResult.balance, myResult.ledgerVersion);
+            auth.syncAuthoritativeBalance(myResult.coinBalance, myResult.ledgerVersion);
             _balanceSyncFailed = false;
             synced = true;
             notifyListeners();
-          } else if (myResult.placedBet && !myResult.isResolved) {
+          } else if (myResult.placedBet && !myResult.isSettled) {
             // Bet exists on server but resolve_round_payouts hasn't run yet — retry
             debugPrint('_syncBalanceInBackground: bet not yet resolved on server, attempt $attempt');
           }
@@ -984,7 +999,7 @@ class GameProvider extends ChangeNotifier {
   /// or the player sees coins missing that they still have.
   void refundRejectedBets(AuthProvider auth) {
     if (_board.isEmpty) return;
-    auth.updateBalance(auth.balance + _board.total);
+    auth.updateBalance(auth.coinBalance + _board.total);
     _board.clearAll();
     _history.clear();
     _lastBetSnapshot = null;

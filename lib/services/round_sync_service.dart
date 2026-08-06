@@ -124,16 +124,18 @@ class RoundSyncService extends ChangeNotifier {
 
   /// Submits the player's bets to the server for the current active round.
   /// Returns true if bets were submitted and accepted by DB.
+  ///
+  /// v2: `totalStake` and `token` are gone. The server recomputes the stake
+  /// from the bet maps — v1 accepted a client total and ignored it — and the
+  /// authenticated Supabase client carries the identity.
   Future<bool> submitBets({
     required Map<String, int> singleBets,
     required Map<String, int> doubleBets,
     required Map<String, int> tripleBets,
-    required int totalStake,
-    required String token,
     required AuthProvider auth,
   }) async {
     _lastSubmitError = null;
-    if (totalStake == 0) {
+    if (singleBets.isEmpty && doubleBets.isEmpty && tripleBets.isEmpty) {
       return true;
     }
 
@@ -156,26 +158,17 @@ class RoundSyncService extends ChangeNotifier {
     // FIX BUG #6: Save which round the bets were submitted to
     _betRoundId = roundId;
 
-    final result = await _api.submitBet(
+    final result = await _api.placeBet(
       roundId:    roundId,
       singleBets: singleBets,
       doubleBets: doubleBets,
       tripleBets: tripleBets,
-      totalStake: totalStake,
-      token:      token,
     );
 
     if (result.success) {
-      // Update local balance to server-confirmed value.
-      // M-5: anchor to the version the deduction produced so an in-flight
-      // heartbeat carrying the pre-bet balance cannot undo it.
-      if (result.balanceAfter != null) {
-        if (result.ledgerVersion != null) {
-          auth.syncAuthoritativeBalance(result.balanceAfter!, result.ledgerVersion!);
-        } else {
-          auth.updateBalance(result.balanceAfter!);
-        }
-      }
+      // Anchor to the version the deduction produced, so an in-flight heartbeat
+      // carrying the pre-bet balance cannot undo it.
+      auth.syncAuthoritativeBalance(result.coinBalance, result.ledgerVersion);
       return true;
     } else {
       _lastSubmitError = result.error;

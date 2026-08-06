@@ -11,7 +11,6 @@ import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/lobby_screen.dart';
 import 'screens/game_screen.dart';
-import 'screens/profile_screen.dart';
 import 'theme/app_colors.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -48,6 +47,39 @@ void main() async {
   runApp(const BsgApp());
 }
 
+final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
+/// Sends the player back to the login screen when the server ends their
+/// session — either the account was blocked, or another device took it over
+/// after this one stopped heartbeating.
+///
+/// F-4: without this the app logged the player out internally but left them on
+/// a fully interactive game screen. Their bets simply stopped being accepted.
+class _ForcedLogoutWatcher extends StatelessWidget {
+  final Widget? child;
+  const _ForcedLogoutWatcher({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AuthProvider>(
+      builder: (context, auth, _) {
+        if (auth.forcedLogout) {
+          final reason = auth.forcedLogoutReason;
+          // Navigate after this frame — we are inside a build.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final nav = _navigatorKey.currentState;
+            if (nav == null) return;
+            auth.clearForcedLogout();
+            nav.pushNamedAndRemoveUntil('/login', (_) => false);
+            if (reason != null) auth.setError(reason);
+          });
+        }
+        return child ?? const SizedBox.shrink();
+      },
+    );
+  }
+}
+
 class BsgApp extends StatelessWidget {
   const BsgApp({super.key});
 
@@ -62,6 +94,13 @@ class BsgApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Best Smart Game',
         debugShowCheckedModeBanner: false,
+        // F-4 FIX: when the server ends a session, get the player off the game
+        // screen. The heartbeat used to log them out internally and set an
+        // error string that only the login screen renders, so a blocked or
+        // displaced player kept tapping numbers on a session that no longer
+        // existed, with a stale balance and no explanation.
+        navigatorKey: _navigatorKey,
+        builder: (context, child) => _ForcedLogoutWatcher(child: child),
         theme: ThemeData(
           brightness: Brightness.dark,
           scaffoldBackgroundColor: AppColors.bgBase,
@@ -82,7 +121,6 @@ class BsgApp extends StatelessWidget {
           '/login':   (_) => const LoginScreen(),
           '/lobby':   (_) => const LobbyScreen(),
           '/game':    (_) => const GameScreen(),
-          '/profile': (_) => const ProfileScreen(),
         },
       ),
     );
