@@ -49,7 +49,7 @@ class AuthProvider extends ChangeNotifier {
   int get balance        => _user?.balance ?? 0;
   String get username    => _user?.username ?? '';
   String get agentName   => _user?.agentName ?? 'N/A';
-  String get token       => _user?.token ?? '';
+  String get token => Supabase.instance.client.auth.currentSession?.accessToken ?? _user?.token ?? '';
 
   Future<bool> login(String username, String password) async {
     _loading = true;
@@ -60,6 +60,7 @@ class AuthProvider extends ChangeNotifier {
       final res = await ApiService().login(username.trim(), password.trim());
       final userData = Map<String, dynamic>.from(res['user'] as Map);
       userData['token'] = res['token'];
+      userData['refresh_token'] = res['refreshToken'];
       _user = UserModel.fromJson(userData);
       
       final sessionStartStr = res['sessionStartAt'] ?? res['session_start_at'];
@@ -126,9 +127,9 @@ class AuthProvider extends ChangeNotifier {
         final (user, sessionStartAt) = saved;
         _user = user;
         _sessionStartAt = sessionStartAt;
-        if (user.token != null && user.token!.isNotEmpty) {
+        if (user.refreshToken != null && user.refreshToken!.isNotEmpty) {
           try {
-            await Supabase.instance.client.auth.setSession(user.token!);
+            await Supabase.instance.client.auth.setSession(user.refreshToken!);
           } catch (e) {
             debugPrint('AuthProvider.tryAutoLogin setSession error: $e');
           }
