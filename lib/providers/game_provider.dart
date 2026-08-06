@@ -13,6 +13,8 @@ import '../services/round_sync_service.dart';
 import 'auth_provider.dart';
 
 
+enum BetSubmissionStatus { idle, submitting, submitted, failed }
+
 class GameProvider extends ChangeNotifier {
   GameProvider() {
     // Bug #8 fix: initialise with safe fallback limits immediately so caps are
@@ -33,8 +35,6 @@ class GameProvider extends ChangeNotifier {
   void clearBalanceSyncFailed() {
     _balanceSyncFailed = false;
   }
-
-enum BetSubmissionStatus { idle, submitting, submitted, failed }
 
   BetSubmissionStatus _betStatus = BetSubmissionStatus.idle;
   String? _submittedRoundId;
