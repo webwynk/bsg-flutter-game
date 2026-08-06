@@ -46,12 +46,48 @@ class _GameScreenState extends State<GameScreen> {
       // below stays because chips on the board are deducted locally and have no
       // counterpart in the database until betting closes.
       auth.setUncommittedStakeGetter(() => _gameProvider?.uncommittedStake ?? 0);
-      game.setAutoSpinCallback(_handleSpin);
+      game.setAutoSpinCallback(_handleSpin, noBetsCallback: _handleEarlyBetSubmission);
       // Attach RoundSyncService — syncs timer to server and listens for results
       RoundSyncService().attach(game, auth);
     });
   }
 
+  Future<void> _handleEarlyBetSubmission() async {
+    final game = context.read<GameProvider>();
+    final auth = context.read<AuthProvider>();
+
+    if (game.isSpinning || game.board.isEmpty) return;
+
+    game.closeDrawer();
+    game.markBetsSubmitted();
+
+    final sync = RoundSyncService();
+
+    final minViolation = game.validateMinimums();
+    if (minViolation != null) {
+      game.refundRejectedBets(auth);
+      if (mounted) _showBetRejectedDialog(context, 'BELOW_MIN');
+      return;
+    }
+
+    final singleBets = Map<String, int>.from(game.board.single);
+    final doubleBets = Map<String, int>.from(game.board.double_);
+    final tripleBets = Map<String, int>.from(game.board.triple);
+
+    final accepted = await sync.submitBets(
+      singleBets: singleBets,
+      doubleBets: doubleBets,
+      tripleBets: tripleBets,
+      auth:       auth,
+    );
+
+    if (!accepted) {
+      game.refundRejectedBets(auth);
+      if (mounted) {
+        _showBetRejectedDialog(context, sync.lastSubmitError);
+      }
+    }
+  }
 
   Future<void> _handleSpin() async {
     final game = context.read<GameProvider>();
@@ -61,18 +97,12 @@ class _GameScreenState extends State<GameScreen> {
 
     game.closeDrawer();
 
-    // M-5: markBetsSubmitted() sets uncommittedStake to 0 before submitBets()
-    // has reached the database, so for 100-500ms a heartbeat could read the
-    // stale pre-bet balance. That race is now closed by ledger_version — the
-    // stale response carries an older version and is discarded — rather than by
-    // a global lock whose release could be skipped by an early return.
-    game.markBetsSubmitted();
-
     final sync = RoundSyncService();
 
-    // 1. Submit bets to server if player placed any
+    // 1. Submit bets to server if player placed any that haven't been submitted yet
     if (!game.board.isEmpty) {
-      // M-3 FIX: catch a below-minimum stake before the round trip.
+      game.markBetsSubmitted();
+
       final minViolation = game.validateMinimums();
       if (minViolation != null) {
         game.refundRejectedBets(auth);
@@ -85,9 +115,6 @@ class _GameScreenState extends State<GameScreen> {
       final doubleBets = Map<String, int>.from(game.board.double_);
       final tripleBets = Map<String, int>.from(game.board.triple);
 
-      // M-3 FIX: the return value used to be discarded, so a server-rejected
-      // bet was completely silent — the wheel spun, the balance stayed reduced,
-      // and no bet row existed. Refund the local deduction and tell the player.
       final accepted = await sync.submitBets(
         singleBets: singleBets,
         doubleBets: doubleBets,
@@ -349,6 +376,10 @@ class _GameScreenState extends State<GameScreen> {
       'UNAUTHENTICATED' => (
         'SESSION EXPIRED',
         'Your session is no longer valid. Your coins have been returned. Please exit and log in again.'
+      ),
+      'OFFLINE' => (
+        'NO CONNECTION',
+        'Could not reach the server to send your bet. Your coins have been returned — please check your connection.'
       ),
       _ => (
         'BET NOT PLACED',

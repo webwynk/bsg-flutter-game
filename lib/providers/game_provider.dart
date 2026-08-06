@@ -162,8 +162,11 @@ class GameProvider extends ChangeNotifier {
   }
 
   // ── Auto Spin Callback ──────────────────────────────────────────
-  void setAutoSpinCallback(VoidCallback? callback) {
-    _onTimerExpire = callback;
+  VoidCallback? _onNoBets;
+
+  void setAutoSpinCallback(VoidCallback? expireCallback, {VoidCallback? noBetsCallback}) {
+    _onTimerExpire = expireCallback;
+    _onNoBets = noBetsCallback;
   }
 
   // ── Mode management ───────────────────────────────────────────────
@@ -689,10 +692,11 @@ class GameProvider extends ChangeNotifier {
         
         _countdown = _cycleToCountdown(currentCycle);
 
-        if (_countdown == 5 && previous >= 14 && _onTimerExpire != null) {
+        if (_countdown == 5 && previous >= 14) {
           SoundService().playNoBets();
           _lastWinBoxResult = null;
           if (_isDrawerOpen) closeDrawer();
+          _onNoBets?.call(); // Triggers early bet submission at NO MORE PLAY (second 85)
         }
 
         // Did we cross the betting boundary? (previous 14 -> current 13)

@@ -207,26 +207,19 @@ class RoundSyncService extends ChangeNotifier {
       return true;
     }
 
-    // Always re-read the round from the server immediately before submitting.
-    //
-    // This used to reuse the cached _currentRound, which is only ever refreshed
-    // inside fetchAndDeliverResult — i.e. once per round, during the draw
-    // window. By the time the next round's bet was submitted the cache still
-    // held the PREVIOUS round, so every bet after the first was booked one
-    // round behind. Live evidence: a bet created at 21:26:48 was recorded
-    // against round 17340305, which had ended at 21:25:18.
-    //
-    // Fail closed. If the round cannot be read we refuse the bet rather than
-    // fall back to a possibly-stale id — booking a stake into a dead round is
-    // strictly worse than not betting, because the round can never settle it.
-    final targetRound = await _api.getCurrentRound();
-    if (targetRound == null) {
-      debugPrint('RoundSyncService.submitBets: could not read the current round');
-      _lastSubmitError = _api.lastRoundError ?? BetError.offline;
-      return false;
+    // Use the active _currentRound if valid (updated every 2s by background poll).
+    // Only fetch fresh if absent or no longer accepting bets.
+    var targetRound = _currentRound;
+    if (targetRound == null || !targetRound.acceptsBets) {
+      targetRound = await _api.getCurrentRound();
+      if (targetRound == null) {
+        debugPrint('RoundSyncService.submitBets: could not read the current round');
+        _lastSubmitError = _api.lastRoundError ?? BetError.offline;
+        return false;
+      }
+      _currentRound = targetRound;
+      _calibrateServerTimeOffset(targetRound);
     }
-    _currentRound = targetRound;
-    _calibrateServerTimeOffset(targetRound);
 
     final roundId = targetRound.roundId;
 
