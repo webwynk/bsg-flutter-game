@@ -1,4 +1,4 @@
-package com.bsg.best_smart_game
+package com.bestsmartgame.app
 
 import io.flutter.embedding.android.FlutterActivity
 
