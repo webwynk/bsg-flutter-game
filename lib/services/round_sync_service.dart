@@ -305,6 +305,14 @@ class RoundSyncService extends ChangeNotifier {
 
     game.onGlobalResult(spinResult, auth);
     game.loadGlobalHistory();
+
+    // Issue #43 fix: refresh the payout multiplier once per round, right as
+    // this round's result lands -- the next round (whose own pinned rate the
+    // server already captured at creation) has just begun. Piggybacks on
+    // this method's existing exactly-once-per-round delivery guarantee
+    // rather than adding a new timer; a fetch failure just leaves the
+    // previous value in place until the next round's delivery retries it.
+    game.refreshPlayLimits();
   }
 
   /// Manual retry when connection was lost.
