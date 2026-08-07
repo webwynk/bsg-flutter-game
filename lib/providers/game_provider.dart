@@ -812,9 +812,12 @@ class GameProvider extends ChangeNotifier {
     final doubleBetAmt = doubleSnap[doubleKeyPadded] ?? doubleSnap[doubleKeyUnpadded] ?? 0;
     final tripleBetAmt = tripleSnap[tripleKeyPadded] ?? tripleSnap[tripleKeyUnpadded] ?? 0;
 
-    final singleWin = singleBetAmt * 9;
-    final doubleWin = doubleBetAmt * 90;
-    final tripleWin = tripleBetAmt * 900;
+    // Issue #5 fix: was hardcoded * 9 / * 90 / * 900. Multiplier now comes
+    // from the server (game_config.payout_multiplier_*, via get_play_limits),
+    // the same single source of truth settle_round pays real coins from.
+    final singleWin = (singleBetAmt * _playLimits.limitsFor(BoardType.single).multiplier).round();
+    final doubleWin = (doubleBetAmt * _playLimits.limitsFor(BoardType.double_).multiplier).round();
+    final tripleWin = (tripleBetAmt * _playLimits.limitsFor(BoardType.triple).multiplier).round();
     final totalWin  = singleWin + doubleWin + tripleWin;
     final totalDeducted = _board.total; // already deducted server-side via submitBets
 

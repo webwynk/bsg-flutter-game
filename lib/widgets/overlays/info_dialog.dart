@@ -1088,47 +1088,59 @@ class _PayoutTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          SizedBox(height: 4),
-          _SectionTitle(title: 'Game Play Payout'),
-          SizedBox(height: 8),
-          _PayoutCard(
-            ringColor: Color(0xFF1a4a1a),
-            ringBorder: Color(0xFF44aa44),
-            ringLabel: 'INNER WHEEL',
-            mode: 'Singles Play',
-            desc: 'Play 10 chips on a single number',
-            payout: '90',
+    // Issue #5 fix: was hardcoded '90' / '900' / '9000' (10 chips x the
+    // hardcoded x9/x90/x900 multiplier). Now reads the live multiplier from
+    // GameProvider, the same source settle_round pays real coins from, so
+    // this screen can never drift from what the game actually pays.
+    return Consumer<GameProvider>(
+      builder: (_, game, __) {
+        final limits = game.playLimits;
+        String payoutFor(BoardType t) =>
+            (10 * limits.limitsFor(t).multiplier).round().toString();
+
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 4),
+              const _SectionTitle(title: 'Game Play Payout'),
+              const SizedBox(height: 8),
+              _PayoutCard(
+                ringColor: const Color(0xFF1a4a1a),
+                ringBorder: const Color(0xFF44aa44),
+                ringLabel: 'INNER WHEEL',
+                mode: 'Singles Play',
+                desc: 'Play 10 chips on a single number',
+                payout: payoutFor(BoardType.single),
+              ),
+              const SizedBox(height: 6),
+              _PayoutCard(
+                ringColor: const Color(0xFF002244),
+                ringBorder: const Color(0xFF4488cc),
+                ringLabel: 'MIDDLE WHEEL',
+                mode: 'Doubles Play',
+                desc: 'Play 10 chips on a single number',
+                payout: payoutFor(BoardType.double_),
+              ),
+              const SizedBox(height: 6),
+              _PayoutCard(
+                ringColor: const Color(0xFF4a0000),
+                ringBorder: const Color(0xFFcc4444),
+                ringLabel: 'OUTER WHEEL',
+                mode: 'Triples Play',
+                desc: 'Play 10 chips on a single number',
+                payout: payoutFor(BoardType.triple),
+              ),
+              const SizedBox(height: 16),
+              const _SectionTitle(title: 'Play Limits'),
+              const SizedBox(height: 8),
+              const _LimitTable(),
+              const SizedBox(height: 8),
+            ],
           ),
-          SizedBox(height: 6),
-          _PayoutCard(
-            ringColor: Color(0xFF002244),
-            ringBorder: Color(0xFF4488cc),
-            ringLabel: 'MIDDLE WHEEL',
-            mode: 'Doubles Play',
-            desc: 'Play 10 chips on a single number',
-            payout: '900',
-          ),
-          SizedBox(height: 6),
-          _PayoutCard(
-            ringColor: Color(0xFF4a0000),
-            ringBorder: Color(0xFFcc4444),
-            ringLabel: 'OUTER WHEEL',
-            mode: 'Triples Play',
-            desc: 'Play 10 chips on a single number',
-            payout: '9000',
-          ),
-          SizedBox(height: 16),
-          _SectionTitle(title: 'Play Limits'),
-          SizedBox(height: 8),
-          _LimitTable(),
-          SizedBox(height: 8),
-        ],
-      ),
+        );
+      },
     );
   }
 }
