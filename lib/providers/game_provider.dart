@@ -797,6 +797,15 @@ class GameProvider extends ChangeNotifier {
     // since there's no longer a screen to reveal the result on anyway.
     _completeWheelReveal();
 
+    // The "WIN: X" badge is normally cleared either by placing a new bet or
+    // by the countdown ticking down to 5s while the player stays on screen --
+    // neither is guaranteed here: the countdown timer just stopped above, and
+    // right after a win the board is already empty (the round's own cleanup
+    // already ran), so the board-clear block below wouldn't touch it either.
+    // Cleared unconditionally so a stale win from an already-finished round
+    // can't still be showing the next time the player opens the game.
+    _lastWinBoxResult = null;
+
     // The board is always cleared here, regardless of submission status --
     // onGlobalResult()'s own cleanup can't be relied on to do it, since
     // polling (and therefore onGlobalResult itself) stops the moment this
