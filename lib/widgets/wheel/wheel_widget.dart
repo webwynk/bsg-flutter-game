@@ -102,6 +102,10 @@ class _WheelWidgetState extends State<WheelWidget>
           _showFinalResult = true;
         });
         _nPulseCtrl.stop();
+        // All 3 rings have now genuinely landed on screen -- tell the
+        // provider so it can reveal the balance/popup in sync with this,
+        // instead of on its own separate, blindly-timed clock.
+        _gameProvider?.notifyWheelRevealComplete();
       }
     });
 

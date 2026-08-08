@@ -102,6 +102,20 @@ class GameProvider extends ChangeNotifier {
   SpinResult? _lastWinBoxResult;
   SpinResult? _pendingResult;
 
+  // Completed by WheelWidget the instant its 3rd (black) ring finishes
+  // landing -- the real signal that all 3 digits are visually revealed.
+  // onGlobalResult() waits on this instead of guessing a fixed duration, so
+  // the balance/popup reveal can never outrun what's actually on screen.
+  Completer<void>? _wheelRevealCompleter;
+
+  /// Called by WheelWidget once its animation has genuinely finished.
+  void notifyWheelRevealComplete() => _completeWheelReveal();
+
+  void _completeWheelReveal() {
+    final c = _wheelRevealCompleter;
+    if (c != null && !c.isCompleted) c.complete();
+  }
+
   String? _error;
 
   // ── Countdown ─────────────────────────────────────────────────────
@@ -739,6 +753,10 @@ class GameProvider extends ChangeNotifier {
     _onTimerExpire = null;
     stopCountdown();
     SoundService().stopAll();
+    // Unblock onGlobalResult() immediately if it's mid-wait for the wheel --
+    // otherwise it would sit idle until the safety timeout, for no reason,
+    // since there's no longer a screen to reveal the result on anyway.
+    _completeWheelReveal();
   }
 
   void resetCountdown(AuthProvider auth) {
@@ -796,13 +814,29 @@ class GameProvider extends ChangeNotifier {
       createdAt:       serverResult.createdAt,
     );
 
-    // Trigger wheel animation
+    // Trigger wheel animation. The completer is created and assigned before
+    // notifyListeners() so it's guaranteed to exist by the time the wheel
+    // widget reacts and starts animating -- no window where the wheel could
+    // finish and call notifyWheelRevealComplete() before anything is
+    // listening for it.
+    final revealCompleter = Completer<void>();
+    _wheelRevealCompleter = revealCompleter;
     _pendingResult = pendingSpin;
     _isWaitingForResult = false;
     notifyListeners();
 
-    // Wait for wheel to finish animating (8s)
-    await Future.delayed(const Duration(milliseconds: 8000));
+    // Wait for the wheel to report it has genuinely finished revealing all 3
+    // digits, instead of guessing a fixed duration -- a device hiccup could
+    // previously make the real 8-second wait outrun the wheel's own (~7s)
+    // animation, revealing the balance/popup while the wheel was still mid-
+    // spin. The 9s ceiling is a safety net only (covers the wheel's own
+    // worst-case ~7s plus tolerance for it to start reacting), not the
+    // primary mechanism -- it should essentially never be hit in practice.
+    try {
+      await revealCompleter.future.timeout(const Duration(milliseconds: 9000));
+    } on TimeoutException {
+      debugPrint('onGlobalResult: wheel did not report completion within 9s; revealing anyway.');
+    }
     if (_spinAborted) return;
 
     // Ask the server for the real, confirmed result. Sequential and
