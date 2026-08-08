@@ -757,7 +757,24 @@ class GameProvider extends ChangeNotifier {
 
   /// Called when user exits the game screen.
   /// Aborts any pending spin, cancels timers, and clears callbacks.
-  void abortSpin() {
+  ///
+  /// Issue #10 fix: if the current board has chips that were never actually
+  /// submitted to the server (_submittedBets is only ever true once
+  /// submission has been attempted), they're refunded and the board cleared
+  /// here -- otherwise a player exiting mid-round returns to a stale board
+  /// showing bets they never really placed. Deliberately does NOT touch
+  /// _lastBetSnapshot -- that's the *previous*, actually-completed round's
+  /// bets, kept for the REBET button, and has nothing to do with this
+  /// abandoned board. If a submission was already attempted (_submittedBets
+  /// is true), this does nothing -- that case is already handled correctly
+  /// by _handleEarlyBetSubmission's own accept/reject logic, which still
+  /// runs even after this screen is gone.
+  ///
+  /// [auth] is nullable so every other abort mechanic below (unchanged from
+  /// before this fix) still runs unconditionally even in the rare case the
+  /// caller couldn't obtain an AuthProvider (e.g. context already torn
+  /// down) -- only the new refund step is skipped in that case.
+  void abortSpin(AuthProvider? auth) {
     _spinAborted = true;
     _isSpinning = false;
     _onTimerExpire = null;
@@ -767,6 +784,15 @@ class GameProvider extends ChangeNotifier {
     // otherwise it would sit idle until the safety timeout, for no reason,
     // since there's no longer a screen to reveal the result on anyway.
     _completeWheelReveal();
+
+    if (auth != null && !_submittedBets && !_board.isEmpty) {
+      auth.updateBalance(auth.coinBalance + _board.total);
+      _board.clearAll();
+      _history.clear();
+      _rebetUsed = false;
+      _checkAndRestoreActiveChip();
+      notifyListeners();
+    }
   }
 
   void resetCountdown(AuthProvider auth) {

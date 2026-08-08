@@ -147,14 +147,15 @@ class _GameScreenState extends State<GameScreen> {
     SoundService().setInGameScreen(false);
     SoundService().stopAll();
     RoundSyncService().detach();
+    AuthProvider? auth;
     try {
-      final auth = context.read<AuthProvider>();
+      auth = context.read<AuthProvider>();
       auth.setUncommittedStakeGetter(null);
       auth.setIsSpinningGetter(null);
     } catch (_) {}
     final game = _gameProvider;
     if (game != null) {
-      game.abortSpin();
+      game.abortSpin(auth);
       game.stopCountdown();
       game.setAutoSpinCallback(null);
       game.clearRebetSnapshot();
