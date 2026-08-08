@@ -54,7 +54,7 @@ class _InfoDialogState extends State<InfoDialog>
       final auth = Provider.of<AuthProvider>(context, listen: false);
       if (auth.isLoggedIn) {
         Provider.of<HistoryProvider>(context, listen: false)
-            .loadFirstPage(since: auth.sessionStartAt);
+            .loadSession(since: auth.sessionStartAt);
       }
     });
   }
@@ -366,9 +366,15 @@ class _HistoryTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     final history = Provider.of<HistoryProvider>(context);
-    final game = Provider.of<GameProvider>(context, listen: false);
 
-    final displayRecords = history.records.isNotEmpty ? history.records : game.spinHistory;
+    // Issue #11 fix: previously fell back to GameProvider.spinHistory when
+    // `history.records` was empty. That local list wasn't session-scoped (it
+    // survived logout via disk persistence, but got wiped just by leaving this
+    // screen) and duplicated data this tab's real, database-backed source
+    // already provides reliably. Now that loadSession() always fetches the
+    // full session, an empty list here means the player genuinely hasn't
+    // played yet this session -- there's nothing left for a fallback to add.
+    final displayRecords = history.records;
 
     if (!auth.isLoggedIn) {
       return const _EmptyState(
@@ -406,7 +412,7 @@ class _HistoryTab extends StatelessWidget {
             const SizedBox(height: 12),
             GestureDetector(
               onTap: () {
-                history.loadFirstPage(since: auth.sessionStartAt);
+                history.loadSession(since: auth.sessionStartAt);
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(

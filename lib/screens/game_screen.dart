@@ -152,7 +152,6 @@ class _GameScreenState extends State<GameScreen> {
       game.stopCountdown();
       game.setAutoSpinCallback(null);
       game.clearRebetSnapshot();
-      game.clearSpinHistory();
     }
     super.dispose();
   }

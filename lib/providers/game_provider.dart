@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/spin_result_model.dart';
 import '../models/bet_model.dart';
 import '../models/play_limits_config.dart';
@@ -20,7 +18,6 @@ class GameProvider extends ChangeNotifier {
     // Bug #8 fix: initialise with safe fallback limits immediately so caps are
     // enforced from the very first frame — before the server responds.
     _playLimits = PlayLimitsConfig.fallback();
-    _loadDrawnNumbersHistory();
     _loadPlayLimits(); // server values will override the fallback when ready
   }
 
@@ -79,26 +76,6 @@ class GameProvider extends ChangeNotifier {
   // when a fresh round -- and its own pinned rate -- has just begun.
   Future<void> refreshPlayLimits() => _loadPlayLimits();
 
-  Future<void> _loadDrawnNumbersHistory() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final listJson = prefs.getString('bsg_drawn_numbers_history');
-      if (listJson != null && listJson.isNotEmpty) {
-        final list = jsonDecode(listJson) as List;
-        _spinHistory.clear();
-        _spinHistory.addAll(list.map((e) => SpinResult.fromJson(e as Map<String, dynamic>)));
-        notifyListeners();
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _saveDrawnNumbersHistory() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final listJson = jsonEncode(_spinHistory.map((e) => e.toJson()).toList());
-      await prefs.setString('bsg_drawn_numbers_history', listJson);
-    } catch (_) {}
-  }
   // ── Mode ─────────────────────────────────────────────────────────
   String _mode = 'single';
   bool _isDrawerOpen = false;
@@ -133,8 +110,6 @@ class GameProvider extends ChangeNotifier {
   VoidCallback? _onTimerExpire;
 
   // ── History ───────────────────────────────────────────────────────
-  final List<int> _blackHistory = [];    // last 30 BLACK ring results
-  final List<SpinResult> _spinHistory = [];
   final List<SpinResult> _globalHistory = [];
 
   // ── Triple page ───────────────────────────────────────────────────
@@ -156,7 +131,6 @@ class GameProvider extends ChangeNotifier {
   SpinResult? get lastWinBoxResult => _lastWinBoxResult;
   SpinResult? get pendingResult => _pendingResult;
   int get countdown          => _countdown;
-  List<int> get blackHistory => List.unmodifiable(_blackHistory);
 
   /// True when REBET button should be shown instead of DOUBLE.
   bool get canRebet =>
@@ -165,7 +139,6 @@ class GameProvider extends ChangeNotifier {
       !_rebetUsed &&
       !_isSpinning &&
       _board.isEmpty;
-  List<SpinResult> get spinHistory => List.unmodifiable(_spinHistory);
   List<SpinResult> get globalHistory => List.unmodifiable(_globalHistory);
   int get triplePage         => _triplePage;
 
@@ -851,14 +824,6 @@ class GameProvider extends ChangeNotifier {
     _globalHistory.insert(0, resolvedResult);
     if (_globalHistory.length > 10) _globalHistory.removeLast();
 
-    if (totalDeducted > 0) {
-      _blackHistory.add(serverResult.black);
-      if (_blackHistory.length > 30) _blackHistory.removeAt(0);
-      _spinHistory.insert(0, resolvedResult);
-      if (_spinHistory.length > 50) _spinHistory.removeLast();
-      _saveDrawnNumbersHistory();
-    }
-
     // Reveal result to UI & play win audio
     _lastResult = resolvedResult;
     _lastWinBoxResult = resolvedResult;
@@ -993,13 +958,6 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
     debugPrint('_fetchConfirmedResult: still not settled after full retry budget, preserving local state');
     return pending;
-  }
-
-
-  void clearSpinHistory() {
-    _spinHistory.clear();
-    _blackHistory.clear();
-    notifyListeners();
   }
 
 
