@@ -766,22 +766,26 @@ class GameProvider extends ChangeNotifier {
   /// Called when user exits the game screen.
   /// Aborts any pending spin, cancels timers, and clears callbacks.
   ///
-  /// Issue #10 fix: if the current board has chips that were never actually
-  /// submitted to the server (_submittedBets is only ever true once
-  /// submission has been attempted), they're refunded and the board cleared
-  /// here -- otherwise a player exiting mid-round returns to a stale board
-  /// showing bets they never really placed. Deliberately does NOT touch
-  /// _lastBetSnapshot -- that's the *previous*, actually-completed round's
-  /// bets, kept for the REBET button, and has nothing to do with this
-  /// abandoned board. If a submission was already attempted (_submittedBets
-  /// is true), this does nothing -- that case is already handled correctly
-  /// by _handleEarlyBetSubmission's own accept/reject logic, which still
-  /// runs even after this screen is gone.
+  /// Issue #10 fix: the board is always cleared here if it has anything on
+  /// it -- onGlobalResult()'s own end-of-round cleanup can't be relied on to
+  /// do this, since polling (and onGlobalResult itself) stops the moment
+  /// this screen is left and won't resume until the player returns.
+  /// Whether the balance is also *refunded* depends on _submittedBets: if
+  /// the bet was never actually sent to the server, it's refunded (nothing
+  /// real happened); if it was already submitted, the board still clears
+  /// (so the player doesn't see stale chips) but the coins are left alone --
+  /// that's a real, valid bet the server will settle on its own regardless
+  /// of this client's connection state, and the balance updates correctly
+  /// via the heartbeat or the next round's own confirmation. Deliberately
+  /// does NOT touch _lastBetSnapshot -- that's the *previous*, actually-
+  /// completed round's bets, kept for the REBET button, unrelated to this
+  /// abandoned board.
   ///
   /// [auth] is nullable so every other abort mechanic below (unchanged from
   /// before this fix) still runs unconditionally even in the rare case the
   /// caller couldn't obtain an AuthProvider (e.g. context already torn
-  /// down) -- only the new refund step is skipped in that case.
+  /// down) -- only the refund step (never the board-clear itself) is
+  /// skipped in that case.
   void abortSpin(AuthProvider? auth) {
     _spinAborted = true;
     _isSpinning = false;
@@ -808,6 +812,12 @@ class GameProvider extends ChangeNotifier {
       _board.clearAll();
       _history.clear();
       _rebetUsed = false;
+      // Matches clearBets()/refundRejectedBets()'s existing cleanup exactly,
+      // for consistency -- reset so a stale "submitted" status from this
+      // abandoned round can't linger into whatever the player does next.
+      _submittedBets = false;
+      _betStatus = BetSubmissionStatus.idle;
+      _submittedRoundId = null;
       _checkAndRestoreActiveChip();
       notifyListeners();
     }
