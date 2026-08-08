@@ -44,6 +44,7 @@ class RoundSyncService extends ChangeNotifier {
 
   // ── Polling & Server Clock Offset ──────────────────────────────────
   int? _deliveredRoundNumber;      // single-delivery lock per round number
+  int? _lastRoundNumberForLimits;  // last round number play limits were refreshed for
   int _serverTimeOffset = 0;       // dynamic clock offset between server and device
 
   int get serverTimeOffset => _serverTimeOffset;
@@ -130,6 +131,20 @@ class RoundSyncService extends ChangeNotifier {
         _connectionError = null;
         _isConnecting = false;
         notifyListeners();
+      }
+
+      // Issue #43 fix: refresh the payout multiplier when the round number
+      // ITSELF actually changes, not when the previous round's result is
+      // delivered (get_current_round()'s draw fires ~13s before the new
+      // round is created -- refreshing at delivery time asked for the rate
+      // before the round holding the new one even existed, so it silently
+      // re-fetched the OLD round's own rate instead). Driven by the server's
+      // own reported round number rather than predicted client-side clock
+      // math, so it can never fire early -- worst case it's a couple of
+      // seconds late (one poll cycle), never wrong.
+      if (_lastRoundNumberForLimits != round.roundNumber) {
+        _lastRoundNumberForLimits = round.roundNumber;
+        game.refreshPlayLimits();
       }
 
       if (round.red != null && round.green != null && round.black != null &&
@@ -305,14 +320,6 @@ class RoundSyncService extends ChangeNotifier {
 
     game.onGlobalResult(spinResult, auth);
     game.loadGlobalHistory();
-
-    // Issue #43 fix: refresh the payout multiplier once per round, right as
-    // this round's result lands -- the next round (whose own pinned rate the
-    // server already captured at creation) has just begun. Piggybacks on
-    // this method's existing exactly-once-per-round delivery guarantee
-    // rather than adding a new timer; a fetch failure just leaves the
-    // previous value in place until the next round's delivery retries it.
-    game.refreshPlayLimits();
   }
 
   /// Manual retry when connection was lost.
