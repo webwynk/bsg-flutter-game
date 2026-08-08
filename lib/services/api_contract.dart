@@ -150,7 +150,12 @@ class ErrCode {
   static const badBetKey        = 'P0122';
   static const belowMin         = 'P0123';
   static const exceedsMax       = 'P0124';
-  static const emptyBet         = 'P0125';
+  // P0125 (EMPTY_BET) has no client-side mapping -- confirmed unreachable
+  // from this app: place_bet is only ever called with a non-empty board,
+  // guarded independently at three separate points (the automatic countdown-
+  // driven submission, its backup at the draw moment, and submitBets()'s own
+  // internal check). The database's own P0125 check stays as-is regardless --
+  // this only removes the now-dead client-side recognition of that code.
 }
 
 /// UI-facing sentinels. Kept separate from [ErrCode] so the presentation layer
@@ -163,7 +168,6 @@ class BetError {
   static const exceedsMax        = 'EXCEEDS_MAX';
   static const roundClosed       = 'ROUND_CLOSED';
   static const badKey            = 'BAD_KEY';
-  static const emptyBet          = 'EMPTY_BET';
   static const unauthenticated   = 'UNAUTHENTICATED';
   static const accountBlocked    = 'ACCOUNT_BLOCKED';
   static const offline           = 'OFFLINE';

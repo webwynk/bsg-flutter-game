@@ -196,7 +196,13 @@ class RoundApiService {
     if (has(ErrCode.roundClosed, 'round_closed')) return BetError.roundClosed;
     if (has(ErrCode.roundNotFound, 'round_not_found')) return BetError.roundClosed;
     if (has(ErrCode.badBetKey, 'bad_')) return BetError.badKey;
-    if (has(ErrCode.emptyBet, 'empty_bet')) return BetError.emptyBet;
+
+    // No case for EMPTY_BET (P0125): confirmed unreachable from this app --
+    // place_bet is only ever called with a non-empty board, independently
+    // guarded at three separate points before any request reaches the
+    // server. See ErrCode's own comment for the full explanation. If this
+    // ever changes, add the case back rather than letting it silently fall
+    // through to the generic OFFLINE case below.
 
     return BetError.offline;
   }
