@@ -102,6 +102,16 @@ class GameProvider extends ChangeNotifier {
   SpinResult? _lastWinBoxResult;
   SpinResult? _pendingResult;
 
+  // Balance data _fetchConfirmedResult() has learned from the server but not
+  // yet applied. It only ever records these -- it must never call
+  // auth.syncAuthoritativeBalance() itself, or the balance can update the
+  // instant the server answers (often mid-spin, since the server usually
+  // finishes settling well before the wheel stops), bypassing the staged
+  // reveal timing entirely. onGlobalResult() is the sole place that applies
+  // these, at the correct moment.
+  int? _pendingSyncBalance;
+  int? _pendingSyncLedgerVersion;
+
   // Completed by WheelWidget the instant its 3rd (black) ring finishes
   // landing -- the real signal that all 3 digits are visually revealed.
   // onGlobalResult() waits on this instead of guessing a fixed duration, so
@@ -782,6 +792,8 @@ class GameProvider extends ChangeNotifier {
     _spinAborted = false;
     _lastResult = null;
     _pendingResult = null;
+    _pendingSyncBalance = null; // defensive: discard any unconsumed data from a prior aborted spin
+    _pendingSyncLedgerVersion = null;
     _balanceSyncFailed = false; // FIX #3A: Clear any stale banner from previous round BEFORE spin starts
     _stopCountdownTimer();
     notifyListeners();
@@ -859,7 +871,7 @@ class GameProvider extends ChangeNotifier {
       final betRoundId = RoundSyncService().betRoundId;
       final cleanRoundId = (betRoundId ?? serverResult.id).replaceFirst('round_', '');
       final results = await Future.wait([
-        _fetchConfirmedResult(cleanRoundId, auth, pendingSpin),
+        _fetchConfirmedResult(cleanRoundId, pendingSpin),
         Future.delayed(const Duration(milliseconds: 300)),
       ]);
       resolvedResult = results[0] as SpinResult;
@@ -871,7 +883,15 @@ class GameProvider extends ChangeNotifier {
     if (_globalHistory.length > 10) _globalHistory.removeLast();
 
     // Balance + the small "WIN: X" badge reveal now -- wheel-stop + 300ms
-    // (or later, only if the server genuinely hadn't answered by then).
+    // (or later, only if the server genuinely hadn't answered by then). This
+    // is the ONLY place _fetchConfirmedResult()'s discovered balance is ever
+    // applied -- see _pendingSyncBalance's doc comment for why it isn't
+    // applied inside the fetch itself.
+    if (_pendingSyncBalance != null && _pendingSyncLedgerVersion != null) {
+      auth.syncAuthoritativeBalance(_pendingSyncBalance!, _pendingSyncLedgerVersion!);
+      _pendingSyncBalance = null;
+      _pendingSyncLedgerVersion = null;
+    }
     _lastWinBoxResult = resolvedResult;
     _pendingResult = null;
     notifyListeners();
@@ -942,9 +962,15 @@ class GameProvider extends ChangeNotifier {
   /// round (Issue #42's batching) degrades to "not yet resolved" rather than
   /// polling forever or flooding the server the way a flat, aggressive
   /// interval would at real scale.
+  ///
+  /// Deliberately does not call auth.syncAuthoritativeBalance() itself --
+  /// only records what it learns into _pendingSyncBalance/_pendingSyncLedger-
+  /// Version. Calling AuthProvider directly here would apply the balance the
+  /// instant the server answers (often mid-spin, since the server usually
+  /// finishes settling before the wheel even stops), bypassing
+  /// onGlobalResult()'s staged reveal timing entirely.
   Future<SpinResult> _fetchConfirmedResult(
     String roundId,
-    AuthProvider auth,
     SpinResult pending,
   ) async {
     const delays = [
@@ -971,14 +997,17 @@ class GameProvider extends ChangeNotifier {
           //   A) submit_round_bet failed (M-3 now surfaces this to the player)
           //   B) Timing race: bet row not yet visible (very rare)
           // In case A the DB balance is the ground truth -- no stake was ever
-          // deducted server-side.
-          auth.syncAuthoritativeBalance(myResult.coinBalance, myResult.ledgerVersion);
+          // deducted server-side. Recorded, not applied here -- see the
+          // _pendingSyncBalance doc comment for why.
+          _pendingSyncBalance = myResult.coinBalance;
+          _pendingSyncLedgerVersion = myResult.ledgerVersion;
           debugPrint('_fetchConfirmedResult: placed_bet=false on attempt ${attempt + 1}.');
           return pending; // nothing more to learn -- stop retrying
         }
 
         if (myResult.isSettled) {
-          auth.syncAuthoritativeBalance(myResult.coinBalance, myResult.ledgerVersion);
+          _pendingSyncBalance = myResult.coinBalance;
+          _pendingSyncLedgerVersion = myResult.ledgerVersion;
           _balanceSyncFailed = false;
           return SpinResult(
             id:              pending.id,

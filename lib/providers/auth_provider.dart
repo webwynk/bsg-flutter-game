@@ -41,6 +41,13 @@ class AuthProvider extends ChangeNotifier {
   /// balance is higher than the displayed one until then.
   int? Function()? _uncommittedStakeGetter;
 
+  /// Lets the heartbeat check whether a spin's result is currently being
+  /// revealed, so a background check can't jump ahead of GameProvider's own
+  /// staged balance reveal. Stateless -- read fresh every heartbeat tick, not
+  /// a lock, so there's nothing to leak or forget to release; if it ever says
+  /// "skip," the next tick 15 seconds later simply tries again.
+  bool Function()? _isSpinningGetter;
+
   UserModel? get user => _user;
   DateTime? get sessionStartAt => _sessionStartAt;
   bool get isLoggedIn => _user != null;
@@ -55,6 +62,10 @@ class AuthProvider extends ChangeNotifier {
 
   void setUncommittedStakeGetter(int? Function()? getter) {
     _uncommittedStakeGetter = getter;
+  }
+
+  void setIsSpinningGetter(bool Function()? getter) {
+    _isSpinningGetter = getter;
   }
 
   void clearForcedLogout() {
@@ -152,6 +163,12 @@ class AuthProvider extends ChangeNotifier {
       final balance = (res[Field.coinBalance] as num?)?.toInt();
       final version = (res[Field.ledgerVersion] as num?)?.toInt() ?? 0;
       if (balance == null) return;
+
+      // A spin's result is actively being revealed -- don't let this
+      // background check jump ahead of GameProvider's own staged reveal
+      // timing. Harmless to skip: the next tick 15 seconds later just
+      // tries again, same as if this one had never run.
+      if (_isSpinningGetter?.call() == true) return;
 
       // Subtract chips already on the board: they are deducted locally but have
       // no counterpart in the database until betting closes.

@@ -40,12 +40,17 @@ class _GameScreenState extends State<GameScreen> {
       final game = context.read<GameProvider>();
       _gameProvider = game;
       final auth = context.read<AuthProvider>();
-      // M-5: heartbeat polling is no longer suspended here. It used to be, which
-      // silently disabled the very balance re-sync that _syncBalanceInBackground
-      // relied on. Ordering is handled by ledger_version instead; the getter
-      // below stays because chips on the board are deducted locally and have no
+      // M-5: the heartbeat timer itself is no longer suspended here (that used
+      // to use a lock that could leak and freeze the balance forever).
+      // Ordering is handled by ledger_version instead; the getter below stays
+      // because chips on the board are deducted locally and have no
       // counterpart in the database until betting closes.
       auth.setUncommittedStakeGetter(() => _gameProvider?.uncommittedStake ?? 0);
+      // Issue #48 amendment: the heartbeat still runs every 15s (including its
+      // blocked-account check, never skipped), but won't *apply* a balance it
+      // fetches while a spin is actively revealing -- stateless read each
+      // tick, not a lock, so a skipped tick just tries again next time.
+      auth.setIsSpinningGetter(() => _gameProvider?.isSpinning ?? false);
       game.setAutoSpinCallback(_handleSpin, noBetsCallback: _handleEarlyBetSubmission);
       // Attach RoundSyncService — syncs timer to server and listens for results
       RoundSyncService().attach(game, auth);
@@ -145,6 +150,7 @@ class _GameScreenState extends State<GameScreen> {
     try {
       final auth = context.read<AuthProvider>();
       auth.setUncommittedStakeGetter(null);
+      auth.setIsSpinningGetter(null);
     } catch (_) {}
     final game = _gameProvider;
     if (game != null) {
