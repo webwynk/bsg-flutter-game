@@ -332,13 +332,4 @@ class RoundSyncService extends ChangeNotifier {
     // here was redundant as well as racy. Removed.
     game.onGlobalResult(spinResult, auth);
   }
-
-  /// Manual retry when connection was lost.
-
-  Future<void> retry(GameProvider game, AuthProvider auth) async {
-    _isConnecting = true;
-    _connectionError = null;
-    notifyListeners();
-    await _fetchInitialRound(game, auth);
-  }
 }

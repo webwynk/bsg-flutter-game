@@ -1,3 +1,4 @@
+import 'dart:io' show Platform, exit;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,6 +32,10 @@ class _GameScreenState extends State<GameScreen> {
   // in a try/catch specifically because it can fail there, which was
   // silently skipping the mid-round-exit refund this field exists to fix.
   AuthProvider? _authProvider;
+  // Tracks which BetError reason the connection-lost dialog was last shown
+  // for, so it's shown once per distinct disconnection rather than once per
+  // rebuild (RoundSyncService can notify repeatedly while still down).
+  String? _connectionDialogShownFor;
 
   @override
   void initState() {
@@ -405,21 +410,51 @@ class _GameScreenState extends State<GameScreen> {
       ),
     };
 
+    _showActionDialog(
+      context,
+      icon: Icons.report_gmailerrorred_rounded,
+      title: title,
+      message: message,
+      barrierDismissible: true,
+      autoDismissAfter: const Duration(seconds: 5),
+    );
+  }
+
+  /// Shared centered popup used for both bet-rejection notices and the
+  /// connection-lost dialog -- one visual implementation instead of two
+  /// duplicated ~150-line copies of the same card/icon/title/message/button
+  /// structure.
+  ///
+  /// [onPressed] fires only on a manual tap, never on [autoDismissAfter]'s
+  /// silent timeout -- an auto-dismiss is "the player didn't need to see
+  /// this anymore," not "the player confirmed an action."
+  void _showActionDialog(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String message,
+    VoidCallback? onPressed,
+    String buttonLabel = 'OK',
+    bool barrierDismissible = true,
+    Duration? autoDismissAfter,
+  }) {
     bool isClosed = false;
     SoundService().playNotification();
     showGeneralDialog(
       context: context,
-      barrierDismissible: true,
-      barrierLabel: 'BetRejected',
+      barrierDismissible: barrierDismissible,
+      barrierLabel: 'ActionDialog',
       barrierColor: Colors.black.withValues(alpha: 0.75),
       transitionDuration: const Duration(milliseconds: 280),
       pageBuilder: (ctx, anim1, anim2) {
-        Future.delayed(const Duration(seconds: 5), () {
-          if (ctx.mounted && !isClosed && Navigator.of(ctx).canPop()) {
-            isClosed = true;
-            Navigator.of(ctx).pop();
-          }
-        });
+        if (autoDismissAfter != null) {
+          Future.delayed(autoDismissAfter, () {
+            if (ctx.mounted && !isClosed && Navigator.of(ctx).canPop()) {
+              isClosed = true;
+              Navigator.of(ctx).pop();
+            }
+          });
+        }
 
         return Center(
           child: ClipRRect(
@@ -458,9 +493,9 @@ class _GameScreenState extends State<GameScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
-                        Icons.report_gmailerrorred_rounded,
-                        color: Color(0xFFFFD54F),
+                      Icon(
+                        icon,
+                        color: const Color(0xFFFFD54F),
                         size: 48,
                       ),
                       const SizedBox(height: 12),
@@ -493,6 +528,7 @@ class _GameScreenState extends State<GameScreen> {
                             isClosed = true;
                             SoundService().playButtonClick();
                             Navigator.of(ctx).pop();
+                            onPressed?.call();
                           }
                         },
                         child: Container(
@@ -510,10 +546,10 @@ class _GameScreenState extends State<GameScreen> {
                               BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(0, 2)),
                             ],
                           ),
-                          child: const Center(
+                          child: Center(
                             child: Text(
-                              'OK',
-                              style: TextStyle(
+                              buttonLabel,
+                              style: const TextStyle(
                                 fontFamily: 'DMSans',
                                 fontWeight: FontWeight.bold,
                                 fontSize: 12,
@@ -540,6 +576,78 @@ class _GameScreenState extends State<GameScreen> {
         );
       },
     );
+  }
+
+  /// Shown whenever RoundSyncService can't reach the server for any reason.
+  /// Replaces the old top-of-screen banner. Every reason now ends the same
+  /// way -- a full, clean logout -- rather than the old split between
+  /// "RETRY" (for a dropped connection) and "LOG IN" (for session/account
+  /// issues only). No ambiguous "maybe still connected" state to leave a
+  /// real-money session sitting in. Not dismissible by tapping outside and
+  /// has no auto-timeout -- this needs a conscious tap.
+  void _showConnectionLostDialog(BuildContext context, String reason) {
+    final (icon, title, message) = switch (reason) {
+      BetError.offline => (
+        Icons.wifi_off_rounded,
+        'CONNECTION LOST',
+        'Could not reach the server. For your safety you will be logged out — please sign back in once reconnected.'
+      ),
+      BetError.unauthenticated => (
+        Icons.error_outline_rounded,
+        'SESSION EXPIRED',
+        'Your session is no longer valid. You will be logged out — please sign in again.'
+      ),
+      BetError.accountBlocked => (
+        Icons.error_outline_rounded,
+        'ACCOUNT BLOCKED',
+        'Your account has been blocked. Please contact your agent. You will be logged out.'
+      ),
+      _ => (
+        Icons.error_outline_rounded,
+        'SERVER ERROR',
+        'The server reported a problem ($reason). You will be logged out — please try again shortly.'
+      ),
+    };
+
+    _showActionDialog(
+      context,
+      icon: icon,
+      title: title,
+      message: message,
+      barrierDismissible: false,
+      onPressed: () async {
+        // Order matters: refund/clear the board FIRST, while auth still has
+        // a real, non-null user -- logging out first would silently defeat
+        // any refund, since AuthProvider.updateBalance() no-ops once the
+        // user is null. Handles all three of the user's described cases at
+        // once: unsubmitted bet -> refunded and cleared; already-submitted
+        // bet -> left alone to settle normally, board still cleared; no bet
+        // at all -> nothing to do, straight through to logout.
+        final game = context.read<GameProvider>();
+        final auth = context.read<AuthProvider>();
+        game.abortSpin(auth);
+        // Awaited so the session is genuinely torn down (local storage
+        // cleared, server notified) before the app closes -- closing first
+        // would risk killing the process mid-cleanup.
+        await auth.logout();
+        _closeApp();
+      },
+    );
+  }
+
+  /// Closes the app outright rather than returning to the login screen --
+  /// this app is not distributed through the App Store/Play Store, so the
+  /// usual "never let an app quit itself" guideline doesn't apply here.
+  /// SystemNavigator.pop() is the correct, standard way to exit on Android
+  /// (properly signals the OS to tear the activity down); it has documented,
+  /// limited effect on iOS, where dart:io's exit() is the reliable way to
+  /// actually terminate the process.
+  void _closeApp() {
+    if (Platform.isIOS) {
+      exit(0);
+    } else {
+      SystemNavigator.pop();
+    }
   }
 
   void _showInsufficientCoinsDialog(BuildContext context) {
@@ -908,139 +1016,34 @@ class _GameScreenState extends State<GameScreen> {
                     : const SizedBox.shrink(),
               ),
 
-              // ── No Connection overlay ────────────────────────────────
+              // ── No Connection / Session dialog ───────────────────────
+              // Replaces the old thin top banner (which offered "RETRY" for
+              // a dropped connection, only forcing logout for session/
+              // account issues). Now every disconnection reason shows the
+              // same centered popup and always ends in a full, clean logout
+              // -- no ambiguous "maybe still connected" state to leave a
+              // real-money session sitting in.
               ListenableBuilder(
                 listenable: RoundSyncService(),
                 builder: (context, _) {
                   final sync = RoundSyncService();
                   final reason = sync.connectionError;
                   if (sync.isConnected || reason == null) {
+                    _connectionDialogShownFor = null;
                     return const SizedBox.shrink();
                   }
-                  // Show the banner for ANY failure to read the round, and name
-                  // the real cause. It used to render only for the literal
-                  // string 'NO_CONNECTION', which the service hard-coded for
-                  // every failure — so a server error was reported to the
-                  // player as a network outage.
-                  return Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: _NoConnectionBanner(
-                      reason: reason,
-                      onRetry: () {
-                        final game = context.read<GameProvider>();
-                        final auth = context.read<AuthProvider>();
-                        sync.retry(game, auth);
-                      },
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Banner shown at the top of the game screen when the round cannot be read.
-///
-/// [reason] is a [BetError] sentinel describing the ACTUAL failure. Reporting
-/// every failure as "no internet" sent players chasing their wi-fi while the
-/// real fault was server-side, and hid genuine faults from us during testing.
-class _NoConnectionBanner extends StatelessWidget {
-  final VoidCallback onRetry;
-  final String reason;
-  const _NoConnectionBanner({required this.onRetry, required this.reason});
-
-  /// Player-facing text for each cause. Anything unrecognised is reported
-  /// honestly as a server problem rather than blamed on the connection.
-  String get _message {
-    switch (reason) {
-      case BetError.offline:
-        return 'NO INTERNET CONNECTION — Game paused';
-      case BetError.unauthenticated:
-        return 'SESSION EXPIRED — please sign in again';
-      case BetError.accountBlocked:
-        return 'ACCOUNT BLOCKED — contact your agent';
-      default:
-        return 'SERVER UNAVAILABLE ($reason) — Game paused';
-    }
-  }
-
-  IconData get _icon => reason == BetError.offline
-      ? Icons.wifi_off_rounded
-      : Icons.error_outline_rounded;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xCC3A0000), Color(0xCC1A0000)],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-            border: const Border(
-              bottom: BorderSide(color: AppColors.goldPrimary, width: 1.5),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(_icon, color: AppColors.goldBright, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  _message,
-                  style: const TextStyle(
-                    fontFamily: 'DMSans',
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                    color: Colors.white,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  if (reason == BetError.unauthenticated || reason == BetError.accountBlocked) {
-                    final auth = context.read<AuthProvider>();
-                    auth.logout();
-                    Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
-                  } else {
-                    onRetry();
+                  // Show once per distinct reason, not on every rebuild --
+                  // RoundSyncService can notify repeatedly while still
+                  // disconnected (each failed poll), which would otherwise
+                  // stack duplicate dialogs.
+                  if (_connectionDialogShownFor != reason) {
+                    _connectionDialogShownFor = reason;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _showConnectionLostDialog(context, reason);
+                    });
                   }
+                  return const SizedBox.shrink();
                 },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFFFD700), Color(0xFF8B6914)],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    (reason == BetError.unauthenticated || reason == BetError.accountBlocked)
-                        ? 'LOG IN'
-                        : 'RETRY',
-                    style: const TextStyle(
-                      fontFamily: 'DMSans',
-                      fontWeight: FontWeight.w900,
-                      fontSize: 11,
-                      color: Color(0xFF350000),
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                ),
               ),
             ],
           ),
@@ -1049,3 +1052,4 @@ class _NoConnectionBanner extends StatelessWidget {
     );
   }
 }
+
