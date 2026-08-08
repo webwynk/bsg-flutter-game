@@ -318,8 +318,16 @@ class RoundSyncService extends ChangeNotifier {
       createdAt:       round.scheduledAt,
     );
 
+    // Issue: this used to also call game.loadGlobalHistory() here, racing
+    // against onGlobalResult()'s own wheel-synced insert into the same list.
+    // Since loadGlobalHistory() has no wait built in, it would usually win
+    // that race -- showing this round's digits in the grid almost
+    // immediately, then onGlobalResult() would add the same round again once
+    // the wheel actually finished, several seconds later. onGlobalResult()
+    // already correctly maintains the grid on every round it processes
+    // (all rounds, not just ones this player bet on), so the extra fetch
+    // here was redundant as well as racy. Removed.
     game.onGlobalResult(spinResult, auth);
-    game.loadGlobalHistory();
   }
 
   /// Manual retry when connection was lost.

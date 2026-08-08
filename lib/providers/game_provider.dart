@@ -878,9 +878,16 @@ class GameProvider extends ChangeNotifier {
     }
     if (_spinAborted) return;
 
-    // ⚡ Push result to top history grid
-    _globalHistory.insert(0, resolvedResult);
-    if (_globalHistory.length > 10) _globalHistory.removeLast();
+    // ⚡ Push result to top history grid. Guarded against the round already
+    // being there -- a defense-in-depth safety net for the narrow case where
+    // loadGlobalHistory()'s own initial fetch (fired when the game screen
+    // first opens) happens to land after this insert for the same round,
+    // e.g. joining mid-round triggers a catch-up replay of the round
+    // loadGlobalHistory() may have just fetched.
+    if (_globalHistory.isEmpty || _globalHistory.first.id != resolvedResult.id) {
+      _globalHistory.insert(0, resolvedResult);
+      if (_globalHistory.length > 10) _globalHistory.removeLast();
+    }
 
     // Balance + the small "WIN: X" badge reveal now -- wheel-stop + 300ms
     // (or later, only if the server genuinely hadn't answered by then). This
