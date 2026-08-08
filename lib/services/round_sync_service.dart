@@ -179,10 +179,13 @@ class RoundSyncService extends ChangeNotifier {
     _connectionError = null;
     notifyListeners();
 
-    // If player opens game mid-spin, deliver result immediately.
+    // If player opens game mid-spin, deliver result immediately -- this is a
+    // replay of a round that already finished while they weren't here, so it
+    // shouldn't offer REBET the way a genuinely-watched live round does.
     final nowSecs = syncedNowSecs;
     final cycle = 103 - (nowSecs % 103);
     if (cycle <= 13) {
+      game.markPendingCatchUpReplay();
       fetchAndDeliverResult(game, auth);
     }
   }

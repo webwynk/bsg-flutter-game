@@ -112,6 +112,14 @@ class GameProvider extends ChangeNotifier {
   int? _pendingSyncBalance;
   int? _pendingSyncLedgerVersion;
 
+  // Set by RoundSyncService._fetchInitialRound() right before it triggers a
+  // catch-up replay of a round that already finished while this player
+  // wasn't on the game screen. onGlobalResult()'s tail cleanup checks this so
+  // it doesn't set up a REBET option for a round the player only just caught
+  // the replay of, rather than actually watching live.
+  bool _isCatchUpReplay = false;
+  void markPendingCatchUpReplay() => _isCatchUpReplay = true;
+
   // Completed by WheelWidget the instant its 3rd (black) ring finishes
   // landing -- the real signal that all 3 digits are visually revealed.
   // onGlobalResult() waits on this instead of guessing a fixed duration, so
@@ -821,6 +829,12 @@ class GameProvider extends ChangeNotifier {
     _pendingSyncBalance = null; // defensive: discard any unconsumed data from a prior aborted spin
     _pendingSyncLedgerVersion = null;
     _balanceSyncFailed = false; // FIX #3A: Clear any stale banner from previous round BEFORE spin starts
+    // Captured into a local and reset immediately -- not left live across the
+    // whole function -- so it can never leak into a later round if THIS
+    // round's own processing gets aborted before reaching the tail cleanup
+    // below where it's actually used.
+    final isCatchUpReplay = _isCatchUpReplay;
+    _isCatchUpReplay = false;
     _stopCountdownTimer();
     notifyListeners();
 
@@ -966,7 +980,11 @@ class GameProvider extends ChangeNotifier {
     _isWaitingForResult = false;
     _lastResult = null;
 
-    if (!_board.isEmpty) {
+    if (isCatchUpReplay) {
+      // This round already finished while the player wasn't on the game
+      // screen -- they only just caught its replay after rejoining, not
+      // watched it live. Don't offer it as a REBET option.
+    } else if (!_board.isEmpty) {
       _lastBetSnapshot = BetBoardState()
         ..single.addAll(_board.single)
         ..double_.addAll(_board.double_)
