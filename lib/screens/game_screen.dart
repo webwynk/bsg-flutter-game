@@ -26,6 +26,11 @@ class _GameScreenState extends State<GameScreen> {
   // popping the screen before the first frame completed made dispose() throw
   // LateInitializationError and crash the app.
   GameProvider? _gameProvider;
+  // Issue #10 fix: cached the same way as _gameProvider, for the same reason
+  // -- context.read<AuthProvider>() inside dispose() (see below) is wrapped
+  // in a try/catch specifically because it can fail there, which was
+  // silently skipping the mid-round-exit refund this field exists to fix.
+  AuthProvider? _authProvider;
 
   @override
   void initState() {
@@ -40,6 +45,7 @@ class _GameScreenState extends State<GameScreen> {
       final game = context.read<GameProvider>();
       _gameProvider = game;
       final auth = context.read<AuthProvider>();
+      _authProvider = auth;
       // M-5: the heartbeat timer itself is no longer suspended here (that used
       // to use a lock that could leak and freeze the balance forever).
       // Ordering is handled by ledger_version instead; the getter below stays
@@ -147,12 +153,16 @@ class _GameScreenState extends State<GameScreen> {
     SoundService().setInGameScreen(false);
     SoundService().stopAll();
     RoundSyncService().detach();
-    AuthProvider? auth;
-    try {
-      auth = context.read<AuthProvider>();
+    // Issue #10 fix: use the cached reference (set in initState's post-frame
+    // callback, same pattern as _gameProvider below) instead of
+    // context.read<AuthProvider>() here -- that call was wrapped in a
+    // try/catch specifically because it can fail at this exact point in the
+    // widget lifecycle, which was silently skipping the refund below.
+    final auth = _authProvider;
+    if (auth != null) {
       auth.setUncommittedStakeGetter(null);
       auth.setIsSpinningGetter(null);
-    } catch (_) {}
+    }
     final game = _gameProvider;
     if (game != null) {
       game.abortSpin(auth);

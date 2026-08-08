@@ -793,8 +793,18 @@ class GameProvider extends ChangeNotifier {
     // since there's no longer a screen to reveal the result on anyway.
     _completeWheelReveal();
 
-    if (auth != null && !_submittedBets && !_board.isEmpty) {
-      auth.updateBalance(auth.coinBalance + _board.total);
+    // The board is always cleared here, regardless of submission status --
+    // onGlobalResult()'s own cleanup can't be relied on to do it, since
+    // polling (and therefore onGlobalResult itself) stops the moment this
+    // screen is left, and won't resume until the player comes back. A
+    // submitted bet is only ever refunded if it was never actually sent to
+    // the server (!_submittedBets) -- a real, submitted bet is left to settle
+    // normally; its balance still correctly arrives via the heartbeat or the
+    // next round's own confirmation, independent of this board's state.
+    if (!_board.isEmpty) {
+      if (auth != null && !_submittedBets) {
+        auth.updateBalance(auth.coinBalance + _board.total);
+      }
       _board.clearAll();
       _history.clear();
       _rebetUsed = false;
