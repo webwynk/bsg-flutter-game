@@ -79,7 +79,7 @@ class _ResultOverlayState extends State<ResultOverlay> {
                   ),
                   child: _buildCard(result).animate()
                     .scale(begin: const Offset(0.5, 0.5),
-                      curve: Curves.elasticOut, duration: 500.ms)
+                      curve: Curves.easeOutCubic, duration: 400.ms)
                     .fadeIn(duration: 300.ms),
                 ),
               ),

@@ -838,11 +838,19 @@ class GameProvider extends ChangeNotifier {
       debugPrint('onGlobalResult: wheel did not report completion within 9s; revealing anyway.');
     }
     if (_spinAborted) return;
+    final wheelStoppedAt = DateTime.now();
 
     // Ask the server for the real, confirmed result. Sequential and
     // awaited -- not fire-and-forget -- so two rounds' confirmations can
     // never race each other (this is what closes Issue #45's root cause
     // structurally, not just with a version-check guard).
+    //
+    // Issue #48 amendment: run the fetch alongside a flat 300ms floor and
+    // wait for whichever finishes later, so the balance can never become
+    // visible before wheel-stop + 300ms -- even though the server has
+    // typically already answered by the time the wheel stops. The fetch's
+    // own retry logic is untouched; this only holds back when its result is
+    // allowed to be revealed.
     var resolvedResult = pendingSpin;
     if (totalDeducted > 0) {
       // FIX BUG #6: Use the round ID bets were submitted to, NOT the result round ID.
@@ -850,7 +858,11 @@ class GameProvider extends ChangeNotifier {
       // the one the bet was placed on, causing get_my_round_result to return placed_bet=false.
       final betRoundId = RoundSyncService().betRoundId;
       final cleanRoundId = (betRoundId ?? serverResult.id).replaceFirst('round_', '');
-      resolvedResult = await _fetchConfirmedResult(cleanRoundId, auth, pendingSpin);
+      final results = await Future.wait([
+        _fetchConfirmedResult(cleanRoundId, auth, pendingSpin),
+        Future.delayed(const Duration(milliseconds: 300)),
+      ]);
+      resolvedResult = results[0] as SpinResult;
     }
     if (_spinAborted) return;
 
@@ -858,26 +870,37 @@ class GameProvider extends ChangeNotifier {
     _globalHistory.insert(0, resolvedResult);
     if (_globalHistory.length > 10) _globalHistory.removeLast();
 
-    // Reveal result to UI & play win audio
-    _lastResult = resolvedResult;
+    // Balance + the small "WIN: X" badge reveal now -- wheel-stop + 300ms
+    // (or later, only if the server genuinely hadn't answered by then).
     _lastWinBoxResult = resolvedResult;
     _pendingResult = null;
-    if (resolvedResult.won) {
-      SoundService().playWin();
-    }
     notifyListeners();
 
-    // Wait 5s result display window (exact 13s total sequence: 8s spin + 5s display)
+    // Wait 5s result display window (exact 13s total sequence: 7s spin + 1s gap + 5s display)
     if (resolvedResult.won) {
-      // 1. Show Win Popup for 2.5 seconds (2,500ms)
+      // 1. Popup opens at wheel-stop + 1.0s exactly -- wait out whatever's
+      // left of that budget after the balance reveal above. Clamped so a
+      // slow server response can never make this wait a negative duration.
+      final elapsedSinceWheelStop = DateTime.now().difference(wheelStoppedAt);
+      final remainingToPopup = const Duration(milliseconds: 1000) - elapsedSinceWheelStop;
+      if (remainingToPopup > Duration.zero) {
+        await Future.delayed(remainingToPopup);
+      }
+      if (_spinAborted) return;
+
+      _lastResult = resolvedResult;
+      SoundService().playWin();
+      notifyListeners();
+
+      // 2. Show Win Popup for 2.5 seconds (2,500ms)
       await Future.delayed(const Duration(milliseconds: 2500));
       if (_spinAborted) return;
 
-      // 2. Hide Win Popup after 2.5 seconds
+      // 3. Hide Win Popup after 2.5 seconds
       _lastResult = null;
       notifyListeners();
 
-      // 3. Wait remaining 2.5 seconds (2,500ms) to complete exact 5.0-second display window
+      // 4. Wait remaining 2.5 seconds (2,500ms) to complete exact 5.0-second display window
       await Future.delayed(const Duration(milliseconds: 2500));
       if (_spinAborted) return;
     } else {
