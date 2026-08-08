@@ -1,8 +1,10 @@
-# Miscellaneous
+# Miscellaneous & Temporary Files
 *.class
 *.log
 *.pyc
 *.swp
+*.tmp
+*.bak
 .DS_Store
 Thumbs.db
 .atom/
@@ -12,14 +14,26 @@ Thumbs.db
 .svn/
 .swiftpm/
 
-# IntelliJ / Android Studio / VS Code
+# Secrets, Environment & Credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.keystore
+*.jks
+
+# IDE & Tooling Metadata
 *.iml
 *.ipr
 *.iws
 .idea/
 .vscode/
+.claude/
+.antigravity/
 
-# Flutter / Dart / Pub build artifacts
+# Flutter / Dart / Pub Build Artifacts
+.flutter-sdk/
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
@@ -31,7 +45,7 @@ build/
 /build/
 /coverage/
 
-# Android build outputs & local properties
+# Android Build Outputs & Local Properties
 /android/app/debug
 /android/app/profile
 /android/app/release
@@ -41,9 +55,12 @@ build/
 *.apk
 *.aab
 
-# iOS build outputs
+# iOS Build Outputs
 /ios/Pods/
 /ios/Runner.xcworkspace/
+
+# Vercel Deployment Metadata
+.vercel/
 
 # Symbolication & Obfuscation
 app.*.symbols
