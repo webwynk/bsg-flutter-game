@@ -81,25 +81,22 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Applies a settled, authoritative balance and re-anchors the local version
-  /// to the server's. Used after place_bet and get_my_round_result, which are
-  /// the final word, so this must win even if an optimistic update ran ahead.
+  /// Applies a settled, authoritative balance — the direct, final answer to
+  /// something the app specifically asked about (place_bet's own response, or
+  /// get_my_round_result once a round is confirmed settled).
+  ///
+  /// Issue #45 fix: only applied if `version` is at least as new as what's
+  /// already stored. Without this, a delayed confirmation for an OLDER event
+  /// (e.g. a big round still draining Issue #42's settlement batches) could
+  /// arrive after a NEWER event already landed and silently overwrite it with
+  /// stale data. Same guard updateBalanceWithVersion() already uses.
   void syncAuthoritativeBalance(int newBalance, int version) {
-    _ledgerVersion = version;
-    updateBalance(newBalance);
+    if (version >= _ledgerVersion) {
+      _ledgerVersion = version;
+      updateBalance(newBalance);
+    }
   }
 
-  /// Applies a locally predicted balance — the win shown the instant the wheel
-  /// stops — and claims the next ledger slot so a heartbeat issued before the
-  /// payout cannot undo it.
-  ///
-  /// Only valid when the database is known to be incrementing too, i.e. an
-  /// actual win payout. Claiming a slot for a non-event would leave the client
-  /// permanently ahead of the server and freeze the balance.
-  void applyOptimisticBalance(int newBalance) {
-    _ledgerVersion += 1;
-    updateBalance(newBalance);
-  }
 
   // ── Login / logout ─────────────────────────────────────────────────────────
 

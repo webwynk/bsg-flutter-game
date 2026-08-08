@@ -795,40 +795,17 @@ class GameProvider extends ChangeNotifier {
     _stopCountdownTimer();
     notifyListeners();
 
-    // FIX #2: Snapshot the authoritative post-bet balance ONCE at spin start.
-    // Never use live auth.coinBalance for win math — it may be polluted by a stale heartbeat.
-    final balanceAtSpinStart = auth.coinBalance;
-
     // Snapshot existing bets BEFORE clearing them
     final singleSnap = Map<String, int>.from(_board.single);
     final doubleSnap  = Map<String, int>.from(_board.double_);
     final tripleSnap  = Map<String, int>.from(_board.triple);
-
-    // Calculate wins from local bets vs global result with robust multi-key lookup (padded & unpadded)
-    final singleKey = '${serverResult.black}';
-    final greenStr = '${serverResult.green}';
-    final blackStr = '${serverResult.black}';
-    final doubleKeyPadded = '$greenStr$blackStr'.padLeft(2, '0');
-    final doubleKeyUnpadded = (serverResult.green * 10 + serverResult.black).toString();
-
-    final redStr = '${serverResult.red}';
-    final tripleKeyPadded = '$redStr$greenStr$blackStr'.padLeft(3, '0');
-    final tripleKeyUnpadded = (serverResult.red * 100 + serverResult.green * 10 + serverResult.black).toString();
-
-    final singleBetAmt = singleSnap[singleKey] ?? singleSnap[int.tryParse(singleKey)?.toString() ?? ''] ?? 0;
-    final doubleBetAmt = doubleSnap[doubleKeyPadded] ?? doubleSnap[doubleKeyUnpadded] ?? 0;
-    final tripleBetAmt = tripleSnap[tripleKeyPadded] ?? tripleSnap[tripleKeyUnpadded] ?? 0;
-
-    // Issue #5 fix: was hardcoded * 9 / * 90 / * 900. Multiplier now comes
-    // from the server (game_config.payout_multiplier_*, via get_play_limits),
-    // the same single source of truth settle_round pays real coins from.
-    final singleWin = (singleBetAmt * _playLimits.limitsFor(BoardType.single).multiplier).round();
-    final doubleWin = (doubleBetAmt * _playLimits.limitsFor(BoardType.double_).multiplier).round();
-    final tripleWin = (tripleBetAmt * _playLimits.limitsFor(BoardType.triple).multiplier).round();
-    final totalWin  = singleWin + doubleWin + tripleWin;
     final totalDeducted = _board.total; // already deducted server-side via submitBets
 
-    final resolvedResult = SpinResult(
+    // Issue #22 resolution: no local win calculation anymore. The drawn
+    // digits are shown immediately (everyone sees the same digits at the
+    // same time -- that part never needed a guess), but the win amount is
+    // unknown until the server confirms it via _fetchConfirmedResult below.
+    final pendingSpin = SpinResult(
       id:              serverResult.id,
       red:             serverResult.red,
       green:           serverResult.green,
@@ -836,18 +813,18 @@ class GameProvider extends ChangeNotifier {
       mode:            _mode,
       selections:      [...singleSnap.keys, ...doubleSnap.keys, ...tripleSnap.keys],
       chipValue:       0,
-      won:             totalWin > 0,
+      won:             false,
       deductedAmount:  totalDeducted,
-      winAmount:       totalWin,
-      singleWinAmount: singleWin,
-      doubleWinAmount: doubleWin,
-      tripleWinAmount: tripleWin,
-      netChange:       totalWin - totalDeducted,
+      winAmount:       0,
+      singleWinAmount: 0,
+      doubleWinAmount: 0,
+      tripleWinAmount: 0,
+      netChange:       0,
       createdAt:       serverResult.createdAt,
     );
 
     // Trigger wheel animation
-    _pendingResult = resolvedResult;
+    _pendingResult = pendingSpin;
     _isWaitingForResult = false;
     notifyListeners();
 
@@ -855,7 +832,22 @@ class GameProvider extends ChangeNotifier {
     await Future.delayed(const Duration(milliseconds: 8000));
     if (_spinAborted) return;
 
-    // ⚡ INSTANT UPDATE: Push win result to top history grid immediately at second 8 (0s delay)
+    // Ask the server for the real, confirmed result. Sequential and
+    // awaited -- not fire-and-forget -- so two rounds' confirmations can
+    // never race each other (this is what closes Issue #45's root cause
+    // structurally, not just with a version-check guard).
+    var resolvedResult = pendingSpin;
+    if (totalDeducted > 0) {
+      // FIX BUG #6: Use the round ID bets were submitted to, NOT the result round ID.
+      // After a round transition, serverResult.id may point to a DIFFERENT round than
+      // the one the bet was placed on, causing get_my_round_result to return placed_bet=false.
+      final betRoundId = RoundSyncService().betRoundId;
+      final cleanRoundId = (betRoundId ?? serverResult.id).replaceFirst('round_', '');
+      resolvedResult = await _fetchConfirmedResult(cleanRoundId, auth, pendingSpin);
+    }
+    if (_spinAborted) return;
+
+    // ⚡ Push result to top history grid
     _globalHistory.insert(0, resolvedResult);
     if (_globalHistory.length > 10) _globalHistory.removeLast();
 
@@ -867,34 +859,14 @@ class GameProvider extends ChangeNotifier {
       _saveDrawnNumbersHistory();
     }
 
-    // Reveal result immediately to UI & play win audio
+    // Reveal result to UI & play win audio
     _lastResult = resolvedResult;
     _lastWinBoxResult = resolvedResult;
     _pendingResult = null;
     if (resolvedResult.won) {
-      // FIX #2: Apply win to the SNAPSHOT balance captured at spin start.
-      // Using balanceAtSpinStart (post-bet deduction) guarantees correctness:
-      //   42 (start) - 20 (bet) = 22 (balanceAtSpinStart) + 18 (win) = 40 ✅
-      // M-5: applied as an optimistic update that claims the next ledger slot.
-      // A winning round always increments profiles.ledger_version server-side,
-      // so the claim matches; any heartbeat issued before the payout is now
-      // discarded by version rather than blocked by a global lock.
-      auth.applyOptimisticBalance(balanceAtSpinStart + resolvedResult.winAmount);
       SoundService().playWin();
     }
     notifyListeners();
-
-    // FIX #3B: Only sync balance from DB when player actually placed bets this round.
-    // If totalDeducted = 0 (watching, no bet), there is no bet row in triple_chance_bets,
-    // so get_my_round_result returns placed_bet=false → retries 4× → ALWAYS shows banner.
-    if (totalDeducted > 0) {
-      // FIX BUG #6: Use the round ID bets were submitted to, NOT the result round ID.
-      // After a round transition, serverResult.id may point to a DIFFERENT round than
-      // the one the bet was placed on, causing get_my_round_result to return placed_bet=false.
-      final betRoundId = RoundSyncService().betRoundId;
-      final cleanRoundId = (betRoundId ?? serverResult.id).replaceFirst('round_', '');
-      unawaited(_syncBalanceInBackground(cleanRoundId, auth));
-    }
 
     // Wait 5s result display window (exact 13s total sequence: 8s spin + 5s display)
     if (resolvedResult.won) {
@@ -936,61 +908,91 @@ class GameProvider extends ChangeNotifier {
     resetCountdown(auth);
   }
 
-  Future<void> _syncBalanceInBackground(String roundId, AuthProvider auth) async {
-    bool synced = false;
-    bool placedBetNotFound = false;
+  /// Waits for the server's real, confirmed result for [roundId] -- replaces
+  /// the old _syncBalanceInBackground (which fired an unawaited background
+  /// guess-correction after showing a local estimate). This is now the ONLY
+  /// way a round's win amount is ever determined -- there is no local
+  /// calculation left to correct.
+  ///
+  /// Fast-first, backing off: checks immediately (often already settled by
+  /// the time the 8s spin animation finishes), then re-checks at increasing
+  /// intervals if not. Bounded (~5.7s total) so a very large, still-draining
+  /// round (Issue #42's batching) degrades to "not yet resolved" rather than
+  /// polling forever or flooding the server the way a flat, aggressive
+  /// interval would at real scale.
+  Future<SpinResult> _fetchConfirmedResult(
+    String roundId,
+    AuthProvider auth,
+    SpinResult pending,
+  ) async {
+    const delays = [
+      Duration.zero,
+      Duration(milliseconds: 200),
+      Duration(milliseconds: 500),
+      Duration(seconds: 1),
+      Duration(seconds: 2),
+      Duration(seconds: 2),
+    ];
 
-    for (int attempt = 1; attempt <= 4 && !synced; attempt++) {
+    for (int attempt = 0; attempt < delays.length; attempt++) {
+      if (delays[attempt] > Duration.zero) {
+        await Future.delayed(delays[attempt]);
+      }
+      if (_spinAborted) return pending;
+
       try {
         final myResult = await RoundApiService().getMyRoundResult(roundId);
-        if (myResult != null) {
-          if (!myResult.placedBet) {
-            // DB has no bet row for this round. Two possible causes:
-            //   A) submit_round_bet failed (M-3 now surfaces this to the player)
-            //   B) Timing race: bet row not yet visible (very rare)
-            // In case A the DB balance is the ground truth — no stake was ever
-            // deducted server-side. M-5: apply it directly at the server's own
-            // version instead of relying on the heartbeat, which used to be
-            // suspended inside the game screen and so never re-synced at all.
-            placedBetNotFound = true;
-            auth.syncAuthoritativeBalance(myResult.coinBalance, myResult.ledgerVersion);
-            debugPrint('_syncBalanceInBackground: placed_bet=false on attempt $attempt. Bet may have failed to reach DB.');
-            break; // Stop retrying — more retries won't create the bet row
-          } else if (myResult.isSettled && myResult.coinBalance >= 0) {
-            // Bet fully settled by server. DB balance is the single source of
-            // truth, so re-anchor the local version to the server's — this also
-            // corrects any drift left by the optimistic win update.
-            auth.syncAuthoritativeBalance(myResult.coinBalance, myResult.ledgerVersion);
-            _balanceSyncFailed = false;
-            synced = true;
-            notifyListeners();
-          } else if (myResult.placedBet && !myResult.isSettled) {
-            // Bet exists on server but resolve_round_payouts hasn't run yet — retry
-            debugPrint('_syncBalanceInBackground: bet not yet resolved on server, attempt $attempt');
-          }
+        if (myResult == null) continue;
+
+        if (!myResult.placedBet) {
+          // DB has no bet row for this round. Two possible causes:
+          //   A) submit_round_bet failed (M-3 now surfaces this to the player)
+          //   B) Timing race: bet row not yet visible (very rare)
+          // In case A the DB balance is the ground truth -- no stake was ever
+          // deducted server-side.
+          auth.syncAuthoritativeBalance(myResult.coinBalance, myResult.ledgerVersion);
+          debugPrint('_fetchConfirmedResult: placed_bet=false on attempt ${attempt + 1}.');
+          return pending; // nothing more to learn -- stop retrying
         }
+
+        if (myResult.isSettled) {
+          auth.syncAuthoritativeBalance(myResult.coinBalance, myResult.ledgerVersion);
+          _balanceSyncFailed = false;
+          return SpinResult(
+            id:              pending.id,
+            red:             pending.red,
+            green:           pending.green,
+            black:           pending.black,
+            mode:            pending.mode,
+            selections:      pending.selections,
+            chipValue:       0,
+            won:             myResult.totalPayout > 0,
+            deductedAmount:  pending.deductedAmount,
+            winAmount:       myResult.totalPayout,
+            singleWinAmount: myResult.singlePayout,
+            doubleWinAmount: myResult.doublePayout,
+            tripleWinAmount: myResult.triplePayout,
+            netChange:       myResult.totalPayout - pending.deductedAmount,
+            createdAt:       pending.createdAt,
+          );
+        }
+        // Bet exists but not settled yet -- large round still draining
+        // batches (Issue #42). Keep retrying.
+        debugPrint('_fetchConfirmedResult: bet not yet resolved, attempt ${attempt + 1}');
       } catch (e) {
-        debugPrint('_syncBalanceInBackground: getMyRoundResult attempt $attempt failed: $e');
-      }
-      if (!synced && !placedBetNotFound && attempt < 4) {
-        await Future.delayed(const Duration(seconds: 2));
-        if (_spinAborted) return;
+        debugPrint('_fetchConfirmedResult: getMyRoundResult attempt ${attempt + 1} failed: $e');
       }
     }
 
-    if (placedBetNotFound) {
-      // The authoritative balance was already applied above. No banner — the
-      // player's coins are safe in the DB, and M-3 shows a dialog at submission
-      // time whenever the rejection is one the server reported.
-      debugPrint('_syncBalanceInBackground: no bet row found; applied DB balance directly');
-      return;
-    }
-
-    if (!synced) {
-      _balanceSyncFailed = true;
-      notifyListeners();
-      debugPrint('_syncBalanceInBackground: balance sync failed after 4 attempts, preserving local balance');
-    }
+    // Still not settled after the full retry budget -- genuinely still
+    // catching up, most likely a very large round. Don't guess -- show as
+    // unresolved-for-now rather than a fabricated number. The player's real
+    // balance will catch up via the next round's own confirmation or the
+    // periodic heartbeat.
+    _balanceSyncFailed = true;
+    notifyListeners();
+    debugPrint('_fetchConfirmedResult: still not settled after full retry budget, preserving local state');
+    return pending;
   }
 
 
