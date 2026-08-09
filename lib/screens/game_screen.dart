@@ -456,111 +456,123 @@ class _GameScreenState extends State<GameScreen> {
           });
         }
 
-        return Center(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-              child: Container(
-                width: 320,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF220500), Color(0xFF0C0200)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppColors.goldPrimary.withValues(alpha: 0.45),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.goldPrimary.withValues(alpha: 0.12),
-                      blurRadius: 20,
-                      spreadRadius: 1,
+        // F-Step1 fix: barrierDismissible only blocks tapping outside the
+        // dialog -- it does nothing about the system back button/gesture,
+        // which by default still pops this route like any other. Without
+        // this PopScope, a player could back-gesture past the connection-
+        // lost dialog (barrierDismissible: false) and never trigger
+        // onPressed -- no refund logic, no logout, no app close. Tied to
+        // the same barrierDismissible flag so the bet-rejection and
+        // insufficient-coins dialogs (which SHOULD stay dismissible) are
+        // unaffected.
+        return PopScope(
+          canPop: barrierDismissible,
+          child: Center(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                child: Container(
+                  width: 320,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF220500), Color(0xFF0C0200)],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
                     ),
-                    const BoxShadow(
-                      color: Colors.black87,
-                      blurRadius: 25,
-                      offset: Offset(0, 10),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: AppColors.goldPrimary.withValues(alpha: 0.45),
+                      width: 1.5,
                     ),
-                  ],
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        icon,
-                        color: const Color(0xFFFFD54F),
-                        size: 48,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.goldPrimary.withValues(alpha: 0.12),
+                        blurRadius: 20,
+                        spreadRadius: 1,
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        title,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontFamily: 'DMSans',
-                          fontWeight: FontWeight.w900,
-                          fontSize: 18,
-                          color: Color(0xFFFFD54F),
-                          letterSpacing: 1.2,
+                      const BoxShadow(
+                        color: Colors.black87,
+                        blurRadius: 25,
+                        offset: Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          icon,
+                          color: const Color(0xFFFFD54F),
+                          size: 48,
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        message,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontFamily: 'DMSans',
-                          fontSize: 12,
-                          color: Colors.white70,
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      GestureDetector(
-                        onTap: () {
-                          if (!isClosed) {
-                            isClosed = true;
-                            SoundService().playButtonClick();
-                            Navigator.of(ctx).pop();
-                            onPressed?.call();
-                          }
-                        },
-                        child: Container(
-                          height: 38,
-                          width: 140,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF55FF55), Color(0xFF00AA00), Color(0xFF005500)],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFF99FF99), width: 1.2),
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(0, 2)),
-                            ],
+                        const SizedBox(height: 12),
+                        Text(
+                          title,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontFamily: 'DMSans',
+                            fontWeight: FontWeight.w900,
+                            fontSize: 18,
+                            color: Color(0xFFFFD54F),
+                            letterSpacing: 1.2,
                           ),
-                          child: Center(
-                            child: Text(
-                              buttonLabel,
-                              style: const TextStyle(
-                                fontFamily: 'DMSans',
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.white,
-                                letterSpacing: 1.0,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          message,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontFamily: 'DMSans',
+                            fontSize: 12,
+                            color: Colors.white70,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        GestureDetector(
+                          onTap: () {
+                            if (!isClosed) {
+                              isClosed = true;
+                              SoundService().playButtonClick();
+                              Navigator.of(ctx).pop();
+                              onPressed?.call();
+                            }
+                          },
+                          child: Container(
+                            height: 38,
+                            width: 140,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF55FF55), Color(0xFF00AA00), Color(0xFF005500)],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFF99FF99), width: 1.2),
+                              boxShadow: const [
+                                BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(0, 2)),
+                              ],
+                            ),
+                            child: Center(
+                              child: Text(
+                                buttonLabel,
+                                style: const TextStyle(
+                                  fontFamily: 'DMSans',
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color: Colors.white,
+                                  letterSpacing: 1.0,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -583,8 +595,9 @@ class _GameScreenState extends State<GameScreen> {
   /// way -- a full, clean logout -- rather than the old split between
   /// "RETRY" (for a dropped connection) and "LOG IN" (for session/account
   /// issues only). No ambiguous "maybe still connected" state to leave a
-  /// real-money session sitting in. Not dismissible by tapping outside and
-  /// has no auto-timeout -- this needs a conscious tap.
+  /// real-money session sitting in. Not dismissible by tapping outside, by
+  /// the system back button/gesture (see the PopScope in _showActionDialog),
+  /// or by an auto-timeout -- this needs a conscious tap on OK.
   void _showConnectionLostDialog(BuildContext context, String reason) {
     final (icon, title, message) = switch (reason) {
       BetError.offline => (
