@@ -7,6 +7,8 @@ import '../providers/history_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../services/sound_service.dart';
+import '../utils/app_exit.dart';
+import '../utils/device_type.dart';
 
 import 'package:flutter/services.dart';
 
@@ -279,17 +281,41 @@ class _TopBar extends StatelessWidget {
     );
   }
 
-  void _showSecurityDialog(BuildContext context, AuthProvider auth) {
+  /// Phone-only: forces portrait for the duration of this dialog so the
+  /// system keyboard renders in its taller/narrower portrait shape instead
+  /// of the wide, short landscape one that was hiding half the form. Never
+  /// fires on desktop/laptop/tablet (see isMobilePhone) -- those layouts
+  /// don't have this problem in the first place.
+  ///
+  /// Not dismissible by tapping outside or the back button (see PopScope in
+  /// _SecurityAccountDialog) -- only the X icon or a successful password
+  /// change closes it.
+  void _showSecurityDialog(BuildContext context, AuthProvider auth) async {
     SoundService().playNotification();
-    showGeneralDialog(
+
+    final rotateForPhone = isMobilePhone(context);
+    if (rotateForPhone) {
+      // Let the physical rotation settle BEFORE the dialog's own scale-in
+      // animation starts -- running both at once (screen rotating while the
+      // dialog is also animating in) is what would look janky. One
+      // animation finishes, then the next begins.
+      await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (!context.mounted) return;
+    }
+
+    await showGeneralDialog(
       context: context,
-      barrierDismissible: true,
+      barrierDismissible: false,
       barrierLabel: 'Security',
       barrierColor: Colors.black.withValues(alpha: 0.75),
       transitionDuration: const Duration(milliseconds: 280),
       pageBuilder: (ctx, anim1, anim2) {
-        return Center(
-          child: _SecurityAccountDialog(auth: auth, lobbyContext: context),
+        return PopScope(
+          canPop: false,
+          child: Center(
+            child: _SecurityAccountDialog(auth: auth, lobbyContext: context),
+          ),
         );
       },
       transitionBuilder: (ctx, anim, _, child) {
@@ -300,6 +326,16 @@ class _TopBar extends StatelessWidget {
         );
       },
     );
+
+    // Dialog's own exit animation has already finished by the time this
+    // await resolves -- the screen rotation below is the only animation
+    // running at this point, never competing with another one.
+    if (rotateForPhone) {
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    }
   }
 }
 
@@ -395,6 +431,11 @@ class _SecurityAccountDialogState extends State<_SecurityAccountDialog> {
         _newPasswordCtrl.clear();
         _confirmPasswordCtrl.clear();
       });
+      // Auto-close after a moment so the success message is actually seen --
+      // this used to just sit there with no way out except the X icon.
+      Future.delayed(const Duration(milliseconds: 1200), () {
+        if (mounted) Navigator.of(context).pop();
+      });
     } else {
       setState(() {
         _isSubmitting = false;
@@ -407,10 +448,12 @@ class _SecurityAccountDialogState extends State<_SecurityAccountDialog> {
   Future<void> _handleLogout() async {
     Navigator.of(context).pop(); // Close security dialog
     Provider.of<HistoryProvider>(widget.lobbyContext, listen: false).clearLocal();
+    // Full logout ends the session server-side (session_logout) before the
+    // app closes -- matches the same abortSpin/logout-before-close ordering
+    // already used for the connection-lost and blocked-account popups
+    // (Issue #51), rather than returning to the login screen.
     await widget.auth.logout();
-    if (widget.lobbyContext.mounted) {
-      Navigator.pushReplacementNamed(widget.lobbyContext, '/login');
-    }
+    closeApp();
   }
 
   @override

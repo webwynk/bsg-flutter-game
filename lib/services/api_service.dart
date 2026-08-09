@@ -193,6 +193,36 @@ class ApiService {
     }
   }
 
+  /// Releases the single-device session slot WITHOUT signing out of
+  /// Supabase Auth -- used when the app is backgrounded/closing, not when
+  /// the player deliberately logs out. The local session (saved
+  /// credentials, heartbeat timer) is left untouched; reopening the app
+  /// calls [reclaimSession] to silently get the slot back, or correctly
+  /// discover someone else took it in the meantime.
+  Future<void> releaseSessionSlot() async {
+    try {
+      await _db.rpc(Rpc.sessionLogout);
+    } catch (e) {
+      debugPrint('ApiService.releaseSessionSlot: $e');
+    }
+  }
+
+  /// Re-claims the single-device session slot after [releaseSessionSlot]
+  /// ran while backgrounded. Same RPC a fresh login uses, so the response
+  /// shape (`allowed`/`reason`) is handled identically either way.
+  Future<Map<String, dynamic>?> reclaimSession(String sessionToken) async {
+    try {
+      final res = await _db.rpc(Rpc.sessionLogin, params: {
+        RpcParam.sessionToken: sessionToken,
+      });
+      if (res == null) return null;
+      return Map<String, dynamic>.from(res as Map);
+    } catch (e) {
+      debugPrint('ApiService.reclaimSession: $e');
+      return null;
+    }
+  }
+
   /// Keeps the session alive and returns the authoritative balance.
   ///
   /// Returns null on a transport error so the caller can tell "no answer" from

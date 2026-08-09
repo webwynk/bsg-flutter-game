@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -80,6 +81,84 @@ class _ForcedLogoutWatcher extends StatelessWidget {
   }
 }
 
+/// Feature 2 (single-device session), Option B: the app has no way to know
+/// it's being closed -- confirmed by grepping the whole codebase for any
+/// AppLifecycleState handling before this existed (there was none). Without
+/// this, closing the app (not tapping Logout) leaves the single-device slot
+/// claimed until the 90s->30s grace window naturally expires, so a second
+/// device waits that long to get in.
+///
+/// Debounced on `paused` (backgrounded) so a brief app-switch -- checking a
+/// notification, answering a call -- doesn't release an actively-playing
+/// slot out from under the player. `detached` (Android's stronger "the
+/// activity is being torn down" signal) releases immediately, no debounce.
+///
+/// Honest about the limit: this is reliable on Android, best-effort on iOS,
+/// where a hard swipe-to-kill gives apps no guaranteed chance to run any
+/// code at all. The shortened grace period (Option A, session_grace_sec
+/// 90->30) is the safety net for whatever this can't catch.
+class _SessionLifecycleGuard extends StatefulWidget {
+  final Widget? child;
+  const _SessionLifecycleGuard({required this.child});
+
+  @override
+  State<_SessionLifecycleGuard> createState() => _SessionLifecycleGuardState();
+}
+
+class _SessionLifecycleGuardState extends State<_SessionLifecycleGuard> with WidgetsBindingObserver {
+  Timer? _releaseTimer;
+  bool _slotReleased = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _releaseTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final auth = context.read<AuthProvider>();
+    if (!auth.isLoggedIn) return; // nothing to release/reclaim
+
+    switch (state) {
+      case AppLifecycleState.paused:
+        _releaseTimer?.cancel();
+        _releaseTimer = Timer(const Duration(seconds: 5), () => _release(auth));
+        break;
+      case AppLifecycleState.detached:
+        // The OS is tearing this down right now -- no time to wait and see.
+        _releaseTimer?.cancel();
+        _release(auth);
+        break;
+      case AppLifecycleState.resumed:
+        _releaseTimer?.cancel();
+        if (_slotReleased) {
+          _slotReleased = false;
+          auth.reclaimSessionAfterResume();
+        }
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+        break; // transient (e.g. a system dialog) -- not a real background
+    }
+  }
+
+  Future<void> _release(AuthProvider auth) async {
+    _slotReleased = true;
+    await auth.releaseSessionSlot();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child ?? const SizedBox.shrink();
+}
+
 class BsgApp extends StatelessWidget {
   const BsgApp({super.key});
 
@@ -100,7 +179,9 @@ class BsgApp extends StatelessWidget {
         // displaced player kept tapping numbers on a session that no longer
         // existed, with a stale balance and no explanation.
         navigatorKey: _navigatorKey,
-        builder: (context, child) => _ForcedLogoutWatcher(child: child),
+        builder: (context, child) => _SessionLifecycleGuard(
+          child: _ForcedLogoutWatcher(child: child),
+        ),
         theme: ThemeData(
           brightness: Brightness.dark,
           scaffoldBackgroundColor: AppColors.bgBase,

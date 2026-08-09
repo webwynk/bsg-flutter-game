@@ -197,6 +197,35 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> logout() => _endSession(forced: false);
 
+  /// Releases the single-device session slot without a full logout --
+  /// called when the app has been backgrounded for a few seconds (see the
+  /// lifecycle guard in main.dart), not on a deliberate player logout.
+  /// Local state (saved credentials, heartbeat timer) is left running;
+  /// [reclaimSessionAfterResume] handles what happens if the app comes back.
+  Future<void> releaseSessionSlot() async {
+    if (_user == null) return;
+    await ApiService().releaseSessionSlot();
+  }
+
+  /// Called when the app resumes after [releaseSessionSlot] ran while
+  /// backgrounded. Re-claims the slot exactly like a fresh login would --
+  /// either silently succeeds (nobody else logged in while this device was
+  /// away), or correctly force-logs-out this device if someone did, the
+  /// same way a heartbeat-detected displacement already does today.
+  Future<void> reclaimSessionAfterResume() async {
+    final token = _user?.token;
+    if (token == null) return;
+    final data = await ApiService().reclaimSession(token);
+    if (data == null) return; // transport hiccup -- the next heartbeat sorts it out
+    if (data[Field.allowed] != true) {
+      final reason = data[Field.reason]?.toString();
+      final message = reason == ReasonCode.accountBlocked
+          ? 'Your account has been blocked. Please contact your Agent.'
+          : 'Your account was opened on another device.';
+      await _endSession(forced: true, reason: message);
+    }
+  }
+
   // ── Misc ───────────────────────────────────────────────────────────────────
 
   void clearError() {
