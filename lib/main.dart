@@ -13,6 +13,8 @@ import 'screens/login_screen.dart';
 import 'screens/lobby_screen.dart';
 import 'screens/game_screen.dart';
 import 'theme/app_colors.dart';
+import 'utils/app_exit.dart';
+import 'widgets/dialogs/action_dialog.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'constants.dart';
@@ -81,33 +83,45 @@ class _ForcedLogoutWatcher extends StatelessWidget {
   }
 }
 
-/// Feature 2 (single-device session), Option B: the app has no way to know
-/// it's being closed -- confirmed by grepping the whole codebase for any
-/// AppLifecycleState handling before this existed (there was none). Without
-/// this, closing the app (not tapping Logout) leaves the single-device slot
-/// claimed until the 90s->30s grace window naturally expires, so a second
-/// device waits that long to get in.
+/// Single-device session + "away too long" handling for backgrounding the
+/// app. Two related jobs, one guard:
+///
+///  1. Free the single-device seat once the player has genuinely been away
+///     for a while -- confirmed by grepping the whole codebase that, before
+///     this existed, nothing anywhere watched for the app being backgrounded
+///     at all, so closing the app (not tapping Logout) left the seat claimed
+///     until the server's own 30s heartbeat-silence fallback kicked in.
+///  2. If THIS device comes back after being away 20+ seconds, don't quietly
+///     resume as if nothing happened -- resolve whatever bet was on the
+///     board (submit it if the round's cutoff genuinely passed while frozen,
+///     otherwise refund it exactly like a normal mid-round exit already
+///     does), then tell the player plainly they were away and log them out.
+///     Deliberately no silent "welcome back" path -- every return past the
+///     threshold ends the same, honest way.
 ///
 /// Debounced on `paused` (backgrounded) so a brief app-switch -- checking a
-/// notification, answering a call -- doesn't release an actively-playing
-/// slot out from under the player. `detached` (Android's stronger "the
-/// activity is being torn down" signal) releases immediately, no debounce.
+/// notification, answering a call -- does nothing at all. `detached`
+/// (Android's stronger "the activity is being torn down" signal) releases
+/// the seat immediately, no debounce, since there's no "waiting to see if
+/// they come back" to do when the app is already being destroyed.
 ///
-/// Honest about the limit: this is reliable on Android, best-effort on iOS,
-/// where a hard swipe-to-kill gives apps no guaranteed chance to run any
-/// code at all. The shortened grace period (Option A, session_grace_sec
-/// 90->30) is the safety net for whatever this can't catch.
-class _SessionLifecycleGuard extends StatefulWidget {
+/// Honest about the limit: reliable on Android, best-effort on iOS, where a
+/// hard swipe-to-kill gives apps no guaranteed chance to run any code at
+/// all. The shortened server-side grace period (session_grace_sec 90->30)
+/// is the safety net for whatever this can't catch.
+class _AwaySessionGuard extends StatefulWidget {
   final Widget? child;
-  const _SessionLifecycleGuard({required this.child});
+  const _AwaySessionGuard({required this.child});
 
   @override
-  State<_SessionLifecycleGuard> createState() => _SessionLifecycleGuardState();
+  State<_AwaySessionGuard> createState() => _AwaySessionGuardState();
 }
 
-class _SessionLifecycleGuardState extends State<_SessionLifecycleGuard> with WidgetsBindingObserver {
+class _AwaySessionGuardState extends State<_AwaySessionGuard> with WidgetsBindingObserver {
+  static const _awayThreshold = Duration(seconds: 20);
+
   Timer? _releaseTimer;
-  bool _slotReleased = false;
+  bool _wasAwayPastThreshold = false;
 
   @override
   void initState() {
@@ -125,23 +139,22 @@ class _SessionLifecycleGuardState extends State<_SessionLifecycleGuard> with Wid
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final auth = context.read<AuthProvider>();
-    if (!auth.isLoggedIn) return; // nothing to release/reclaim
+    if (!auth.isLoggedIn) return; // nothing to release or resolve
 
     switch (state) {
       case AppLifecycleState.paused:
         _releaseTimer?.cancel();
-        _releaseTimer = Timer(const Duration(seconds: 5), () => _release(auth));
+        _releaseTimer = Timer(_awayThreshold, () => _markAwayAndRelease(auth));
         break;
       case AppLifecycleState.detached:
-        // The OS is tearing this down right now -- no time to wait and see.
         _releaseTimer?.cancel();
-        _release(auth);
+        _markAwayAndRelease(auth);
         break;
       case AppLifecycleState.resumed:
         _releaseTimer?.cancel();
-        if (_slotReleased) {
-          _slotReleased = false;
-          auth.reclaimSessionAfterResume();
+        if (_wasAwayPastThreshold) {
+          _wasAwayPastThreshold = false;
+          _resolveAwayReturn();
         }
         break;
       case AppLifecycleState.inactive:
@@ -150,9 +163,44 @@ class _SessionLifecycleGuardState extends State<_SessionLifecycleGuard> with Wid
     }
   }
 
-  Future<void> _release(AuthProvider auth) async {
-    _slotReleased = true;
+  Future<void> _markAwayAndRelease(AuthProvider auth) async {
+    _wasAwayPastThreshold = true;
     await auth.releaseSessionSlot();
+  }
+
+  /// Resolves the bet (if any), then shows the "away" popup. Resolution
+  /// happens BEFORE the popup, not inside its OK button -- so the outcome is
+  /// already settled by the time the player sees anything, no waiting on a
+  /// network call after they tap OK.
+  Future<void> _resolveAwayReturn() async {
+    final auth = context.read<AuthProvider>();
+    final game = context.read<GameProvider>();
+
+    // If the round's cutoff genuinely passed while the timer was frozen in
+    // the background, this submits the bet now -- the same trigger the
+    // normal 5-second mark uses, not a separate path. abortSpin() below then
+    // correctly sees a submitted bet and leaves it alone instead of wrongly
+    // refunding one that should go through. If nothing was on the board
+    // (e.g. the player was on the Lobby), both calls are harmless no-ops.
+    game.catchUpMissedSubmissionIfNeeded();
+    game.abortSpin(auth);
+
+    isClosingApp.value = true;
+    final navContext = _navigatorKey.currentContext;
+    if (navContext == null) return;
+
+    showActionDialog(
+      navContext,
+      icon: Icons.timer_off_rounded,
+      title: 'YOU WERE AWAY',
+      message: 'You were away for a while, so for your safety you have been logged out.',
+      barrierDismissible: false,
+      onPressed: () async {
+        await auth.logout();
+        isClosingApp.value = false;
+        closeApp();
+      },
+    );
   }
 
   @override
@@ -179,7 +227,7 @@ class BsgApp extends StatelessWidget {
         // displaced player kept tapping numbers on a session that no longer
         // existed, with a stale balance and no explanation.
         navigatorKey: _navigatorKey,
-        builder: (context, child) => _SessionLifecycleGuard(
+        builder: (context, child) => _AwaySessionGuard(
           child: _ForcedLogoutWatcher(child: child),
         ),
         theme: ThemeData(

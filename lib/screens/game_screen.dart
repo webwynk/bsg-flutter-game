@@ -864,8 +864,11 @@ class _GameScreenState extends State<GameScreen> {
                   // Show once per distinct reason, not on every rebuild --
                   // RoundSyncService can notify repeatedly while still
                   // disconnected (each failed poll), which would otherwise
-                  // stack duplicate dialogs.
-                  if (_connectionDialogShownFor != reason) {
+                  // stack duplicate dialogs. Also skip entirely if the
+                  // away-too-long flow is already closing the app -- showing
+                  // a second, redundant popup right as the app is on its way
+                  // out would be pointless and confusing.
+                  if (_connectionDialogShownFor != reason && !isClosingApp.value) {
                     _connectionDialogShownFor = reason;
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted) _showConnectionLostDialog(context, reason);

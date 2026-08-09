@@ -308,13 +308,16 @@ class _TopBar extends StatelessWidget {
       context: context,
       barrierDismissible: false,
       barrierLabel: 'Security',
-      barrierColor: Colors.black.withValues(alpha: 0.75),
+      barrierColor: Colors.black.withValues(alpha: 0.88),
       transitionDuration: const Duration(milliseconds: 280),
       pageBuilder: (ctx, anim1, anim2) {
         return PopScope(
           canPop: false,
           child: Center(
-            child: _SecurityAccountDialog(auth: auth, lobbyContext: context),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              child: _SecurityAccountDialog(auth: auth, lobbyContext: context),
+            ),
           ),
         );
       },
@@ -459,259 +462,297 @@ class _SecurityAccountDialogState extends State<_SecurityAccountDialog> {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-          child: Container(
-            width: 360,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF220500), Color(0xFF0C0200)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: AppColors.goldPrimary.withValues(alpha: 0.5),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.goldPrimary.withValues(alpha: 0.15),
-                  blurRadius: 20,
-                  spreadRadius: 1,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 380),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1E0502), Color(0xFF0D0201), Color(0xFF060100)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                 ),
-                const BoxShadow(
-                  color: Colors.black87,
-                  blurRadius: 25,
-                  offset: Offset(0, 10),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: AppColors.goldBright.withValues(alpha: 0.45),
+                  width: 1.5,
                 ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Dialog Header
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF3E0800),
-                          shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.goldPrimary.withValues(alpha: 0.25),
+                    blurRadius: 28,
+                    spreadRadius: 1,
+                  ),
+                  const BoxShadow(
+                    color: Colors.black,
+                    blurRadius: 30,
+                    offset: Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Dialog Header: Glowing Badge + Title + Modern Circular Close Button
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(9),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF4A0A02), Color(0xFF220301)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.goldBright.withValues(alpha: 0.6),
+                              width: 1.2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.goldPrimary.withValues(alpha: 0.2),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.lock_reset_rounded,
+                            color: AppColors.goldBright,
+                            size: 20,
+                          ),
                         ),
-                        child: const Icon(
-                          Icons.lock_reset_rounded,
-                          color: AppColors.goldBright,
-                          size: 22,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'SECURITY & ACCOUNT',
+                                style: TextStyle(
+                                  fontFamily: 'DMSans',
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 14,
+                                  color: AppColors.goldBright,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '@${widget.auth.username}',
+                                  style: TextStyle(
+                                    fontFamily: 'DMSans',
+                                    fontSize: 10,
+                                    color: Colors.white.withValues(alpha: 0.75),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF330E08),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              color: Colors.white70,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Password Form Fields
+                    _buildPasswordField(
+                      controller: _currentPasswordCtrl,
+                      label: 'Current Password',
+                      obscure: _obscureCurrent,
+                      onToggleObscure: () => setState(() => _obscureCurrent = !_obscureCurrent),
+                    ),
+                    const SizedBox(height: 10),
+
+                    _buildPasswordField(
+                      controller: _newPasswordCtrl,
+                      label: 'New Password (min 6 chars)',
+                      obscure: _obscureNew,
+                      onToggleObscure: () => setState(() => _obscureNew = !_obscureNew),
+                    ),
+                    const SizedBox(height: 10),
+
+                    _buildPasswordField(
+                      controller: _confirmPasswordCtrl,
+                      label: 'Confirm New Password',
+                      obscure: _obscureConfirm,
+                      onToggleObscure: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Status / Error / Success Banner
+                    if (_statusMessage != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                        decoration: BoxDecoration(
+                          color: _isSuccess ? const Color(0xFF003810) : const Color(0xFF380000),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: _isSuccess ? const Color(0xFF00FF55) : const Color(0xFFFF5555),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          _statusMessage!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'DMSans',
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: _isSuccess ? const Color(0xFF88FFB0) : const Color(0xFFFF9999),
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(height: 14),
+                    ],
+
+                    // UPDATE PASSWORD Button (Metallic Gold 3D Button)
+                    GestureDetector(
+                      onTap: _isSubmitting ? null : _handleChangePassword,
+                      child: Container(
+                        height: 42,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: _isSubmitting
+                                ? [const Color(0xFF554400), const Color(0xFF332200)]
+                                : [const Color(0xFFFFE066), const Color(0xFFD4A017), const Color(0xFF7A5200)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.goldBright, width: 1.2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.goldPrimary.withValues(alpha: 0.3),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: _isSubmitting
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                                  ),
+                                )
+                              : const Text(
+                                  'UPDATE PASSWORD',
+                                  style: TextStyle(
+                                    fontFamily: 'DMSans',
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 12,
+                                    color: Colors.black,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Divider Separator with Centered Pill
+                    Row(
+                      children: [
+                        Expanded(child: Container(height: 1, color: AppColors.goldPrimary.withValues(alpha: 0.2))),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                          ),
+                          child: Text(
+                            'OR',
+                            style: TextStyle(
+                              fontFamily: 'DMSans',
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white.withValues(alpha: 0.45),
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                        ),
+                        Expanded(child: Container(height: 1, color: AppColors.goldPrimary.withValues(alpha: 0.2))),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // LOGOUT ACCOUNT Button (Red Crimson 3D Button)
+                    GestureDetector(
+                      onTap: _handleLogout,
+                      child: Container(
+                        height: 40,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFE52E2E), Color(0xFF990000), Color(0xFF550000)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFFFAAAA).withValues(alpha: 0.8), width: 1.2),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black54, blurRadius: 6, offset: Offset(0, 3)),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Text(
-                              'SECURITY & ACCOUNT',
+                            Icon(Icons.logout_rounded, color: Colors.white, size: 16),
+                            SizedBox(width: 8),
+                            Text(
+                              'LOGOUT ACCOUNT',
                               style: TextStyle(
                                 fontFamily: 'DMSans',
                                 fontWeight: FontWeight.w900,
-                                fontSize: 15,
-                                color: AppColors.goldBright,
-                                letterSpacing: 1.2,
-                              ),
-                            ),
-                            Text(
-                              '@${widget.auth.username}',
-                              style: TextStyle(
-                                fontFamily: 'DMSans',
                                 fontSize: 11,
-                                color: Colors.white.withValues(alpha: 0.7),
-                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                letterSpacing: 1.1,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () => Navigator.of(context).pop(),
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.white10,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.close,
-                            color: Colors.white70,
-                            size: 18,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Password Form Fields
-                  _buildPasswordField(
-                    controller: _currentPasswordCtrl,
-                    label: 'Current Password',
-                    obscure: _obscureCurrent,
-                    onToggleObscure: () => setState(() => _obscureCurrent = !_obscureCurrent),
-                  ),
-                  const SizedBox(height: 10),
-
-                  _buildPasswordField(
-                    controller: _newPasswordCtrl,
-                    label: 'New Password (min 6 chars)',
-                    obscure: _obscureNew,
-                    onToggleObscure: () => setState(() => _obscureNew = !_obscureNew),
-                  ),
-                  const SizedBox(height: 10),
-
-                  _buildPasswordField(
-                    controller: _confirmPasswordCtrl,
-                    label: 'Confirm New Password',
-                    obscure: _obscureConfirm,
-                    onToggleObscure: () => setState(() => _obscureConfirm = !_obscureConfirm),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Status / Error / Success Banner
-                  if (_statusMessage != null) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _isSuccess ? const Color(0xFF003810) : const Color(0xFF380000),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: _isSuccess ? const Color(0xFF00FF55) : const Color(0xFFFF5555),
-                          width: 1,
-                        ),
-                      ),
-                      child: Text(
-                        _statusMessage!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontFamily: 'DMSans',
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: _isSuccess ? const Color(0xFF88FFB0) : const Color(0xFFFF9999),
-                        ),
-                      ),
                     ),
-                    const SizedBox(height: 12),
                   ],
-
-                  // UPDATE PASSWORD Button (Gold 3D Gradient)
-                  GestureDetector(
-                    onTap: _isSubmitting ? null : _handleChangePassword,
-                    child: Container(
-                      height: 40,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: _isSubmitting
-                              ? [const Color(0xFF554400), const Color(0xFF332200)]
-                              : [const Color(0xFFFFDD55), const Color(0xFFCC9900), const Color(0xFF664400)],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        ),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.goldBright, width: 1.2),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 2)),
-                        ],
-                      ),
-                      child: Center(
-                        child: _isSubmitting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                                ),
-                              )
-                            : const Text(
-                                'UPDATE PASSWORD',
-                                style: TextStyle(
-                                  fontFamily: 'DMSans',
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 12,
-                                  color: Colors.black,
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Divider Separator
-                  Row(
-                    children: [
-                      Expanded(child: Container(height: 1, color: Colors.white12)),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: Text(
-                          'OR',
-                          style: TextStyle(
-                            fontFamily: 'DMSans',
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white.withValues(alpha: 0.35),
-                          ),
-                        ),
-                      ),
-                      Expanded(child: Container(height: 1, color: Colors.white12)),
-                    ],
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  // LOGOUT ACCOUNT Button (Red 3D Danger Button)
-                  GestureDetector(
-                    onTap: _handleLogout,
-                    child: Container(
-                      height: 38,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFFF3333), Color(0xFF990000), Color(0xFF550000)],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        ),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFFFAAAA), width: 1.2),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(0, 2)),
-                        ],
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.logout_rounded, color: Colors.white, size: 16),
-                          SizedBox(width: 6),
-                          Text(
-                            'LOGOUT ACCOUNT',
-                            style: TextStyle(
-                              fontFamily: 'DMSans',
-                              fontWeight: FontWeight.w900,
-                              fontSize: 11,
-                              color: Colors.white,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -727,13 +768,13 @@ class _SecurityAccountDialogState extends State<_SecurityAccountDialog> {
     required VoidCallback onToggleObscure,
   }) {
     return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
+        color: const Color(0xFF140402),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppColors.goldPrimary.withValues(alpha: 0.3),
+          color: AppColors.goldPrimary.withValues(alpha: 0.35),
           width: 1,
         ),
       ),
@@ -752,13 +793,13 @@ class _SecurityAccountDialogState extends State<_SecurityAccountDialog> {
           hintStyle: TextStyle(
             fontFamily: 'DMSans',
             fontSize: 11,
-            color: Colors.white.withValues(alpha: 0.4),
+            color: Colors.white.withValues(alpha: 0.45),
           ),
           suffixIcon: GestureDetector(
             onTap: onToggleObscure,
             child: Icon(
               obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-              color: AppColors.goldPrimary.withValues(alpha: 0.7),
+              color: AppColors.goldPrimary.withValues(alpha: 0.75),
               size: 18,
             ),
           ),

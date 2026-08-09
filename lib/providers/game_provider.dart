@@ -708,6 +708,28 @@ class GameProvider extends ChangeNotifier {
     return 0;
   }
 
+  /// Called when the app resumes after being backgrounded long enough that
+  /// the countdown timer may have been frozen by the OS straight through its
+  /// own 5-second submission trigger (Timer.periodic does not queue up
+  /// missed ticks -- it just resumes from wherever the clock actually is).
+  ///
+  /// Recomputes the countdown directly from the real clock (not from
+  /// whatever the frozen timer last saw) and, if the round has genuinely
+  /// passed its cutoff but the board was never actually sent, fires the
+  /// exact same trigger the normal 5-second mark uses -- not a separate
+  /// submission path -- so _handleEarlyBetSubmission's own
+  /// markBetsSubmitted() runs synchronously before this returns, and
+  /// abortSpin()'s existing refund-if-unsubmitted check correctly sees a
+  /// bet in flight instead of wrongly refunding one that should go through.
+  void catchUpMissedSubmissionIfNeeded() {
+    if (_isSpinning || _board.isEmpty) return;
+    if (_betStatus == BetSubmissionStatus.submitted || _betStatus == BetSubmissionStatus.submitting) return;
+    final liveCountdown = _cycleToCountdown(_computeUtcRemainingCycle());
+    if (liveCountdown <= 5) {
+      _onNoBets?.call();
+    }
+  }
+
   void startCountdown() {
     _startCountdownInternal();
   }
