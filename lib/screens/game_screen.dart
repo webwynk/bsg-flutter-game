@@ -379,16 +379,17 @@ class _GameScreenState extends State<GameScreen> {
 
   /// M-3 FIX: explains why a bet the player already "paid" for was not accepted.
   /// [reason] is a sentinel from RoundApiService._mapSubmitError.
+  /// BELOW_MIN and EXCEEDS_MAX deliberately have no case here anymore --
+  /// both fall to the generic fallback below. Every direct chip-placement
+  /// path (confirmed: all 4 of them) already hard-blocks a chip before it
+  /// can go under the board minimum or over its maximum, and the in-game
+  /// "PLAY LIMIT REACHED" snackbar already covers the max side live as it
+  /// happens. The one remaining gap -- REBET restoring a stale snapshot
+  /// against limits that changed since the previous round (Issue #46,
+  /// still open) -- was confirmed and explicitly accepted: coins are still
+  /// correctly refunded either way, only the specific wording differs.
   void _showBetRejectedDialog(BuildContext context, String? reason) {
     final (title, message) = switch (reason) {
-      'BELOW_MIN' => (
-        'BET BELOW MINIMUM',
-        'One or more of your numbers was under the minimum stake for that board. Your coins have been returned.'
-      ),
-      'EXCEEDS_MAX' => (
-        'BET OVER LIMIT',
-        'One or more of your numbers was over the maximum stake for that board. Your coins have been returned.'
-      ),
       'INSUFFICIENT_COINS' => (
         'INSUFFICIENT COINS',
         'You did not have enough coins for this bet when the round closed. Your coins have been returned.'

@@ -165,12 +165,27 @@ class GameProvider extends ChangeNotifier {
   int get countdown          => _countdown;
 
   /// True when REBET button should be shown instead of DOUBLE.
+  /// Deliberately does NOT check balance -- that's canAffordRebet() below,
+  /// checked separately so an unaffordable rebet still shows the REBET
+  /// label, disabled, rather than silently falling through to DOUBLE
+  /// (which would be visually correct-looking but the wrong label, since
+  /// the board is empty here and there's nothing to double).
   bool get canRebet =>
       _lastBetSnapshot != null &&
       !_lastBetSnapshot!.isEmpty &&
       !_rebetUsed &&
       !_isSpinning &&
       _board.isEmpty;
+
+  /// True when the player currently has enough coins to actually repeat
+  /// their last bet. Only meaningful once canRebet is already true -- this
+  /// only ever gates whether the REBET button is enabled, never which
+  /// button is shown. Reads auth.coinBalance live, so this automatically
+  /// re-evaluates (and the button re-enables) the moment the balance
+  /// changes -- e.g. an agent crediting coins arrives via the existing
+  /// heartbeat sync, which already notifies listeners on every update.
+  bool canAffordRebet(AuthProvider auth) =>
+      _lastBetSnapshot != null && auth.coinBalance >= _lastBetSnapshot!.total;
   List<SpinResult> get globalHistory => List.unmodifiable(_globalHistory);
   int get triplePage         => _triplePage;
 

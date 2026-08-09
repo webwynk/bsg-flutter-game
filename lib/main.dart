@@ -123,6 +123,14 @@ class _AwaySessionGuardState extends State<_AwaySessionGuard> with WidgetsBindin
   Timer? _releaseTimer;
   bool _wasAwayPastThreshold = false;
 
+  /// True from the moment the "You were away" popup is shown until its OK
+  /// button is tapped. Bug fix: without this, backgrounding a second time
+  /// (before ever answering the first popup) would start a whole new
+  /// 20-second timer and, on returning, try to show a SECOND popup stacked
+  /// on top of the first -- this flag makes the second background period a
+  /// no-op instead, since there's already an unanswered popup waiting.
+  bool _awayPopupShowing = false;
+
   @override
   void initState() {
     super.initState();
@@ -143,6 +151,11 @@ class _AwaySessionGuardState extends State<_AwaySessionGuard> with WidgetsBindin
 
     switch (state) {
       case AppLifecycleState.paused:
+        // Already showing the popup from a previous away period? Don't
+        // start a whole new 20s cycle on top of an unanswered one -- there's
+        // nothing new to detect until the player actually responds to what's
+        // already on screen.
+        if (_awayPopupShowing) return;
         _releaseTimer?.cancel();
         _releaseTimer = Timer(_awayThreshold, () => _markAwayAndRelease(auth));
         break;
@@ -173,6 +186,12 @@ class _AwaySessionGuardState extends State<_AwaySessionGuard> with WidgetsBindin
   /// already settled by the time the player sees anything, no waiting on a
   /// network call after they tap OK.
   Future<void> _resolveAwayReturn() async {
+    // Defensive: shouldn't be reachable given the paused-case guard above
+    // (which stops a second timer from ever completing while this is true),
+    // but checked here too so this function is safe to call from anywhere,
+    // not just the one call site that currently exists.
+    if (_awayPopupShowing) return;
+
     final auth = context.read<AuthProvider>();
     final game = context.read<GameProvider>();
 
@@ -189,6 +208,7 @@ class _AwaySessionGuardState extends State<_AwaySessionGuard> with WidgetsBindin
     final navContext = _navigatorKey.currentContext;
     if (navContext == null) return;
 
+    _awayPopupShowing = true;
     showActionDialog(
       navContext,
       icon: Icons.timer_off_rounded,
@@ -196,6 +216,7 @@ class _AwaySessionGuardState extends State<_AwaySessionGuard> with WidgetsBindin
       message: 'You were away for a while, so for your safety you have been logged out.',
       barrierDismissible: false,
       onPressed: () async {
+        _awayPopupShowing = false;
         await auth.logout();
         isClosingApp.value = false;
         closeApp();

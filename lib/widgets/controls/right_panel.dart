@@ -416,6 +416,12 @@ class _ActionColumn extends StatelessWidget {
       builder: (_, game, auth, __) {
         final hasBets = game.board.total > 0;
         final showRebet = game.canRebet;
+        // Checked separately from showRebet so an unaffordable rebet still
+        // shows the REBET label (just disabled) instead of silently
+        // swapping to DOUBLE -- the board is empty whenever showRebet is
+        // true, so DOUBLE would show up correctly disabled too, but as the
+        // wrong button entirely.
+        final canAffordRebet = showRebet && game.canAffordRebet(auth);
 
         final isButtonsLocked = game.countdown <= 5 || game.isSpinning;
 
@@ -438,9 +444,11 @@ class _ActionColumn extends StatelessWidget {
                       isEnabled: !isButtonsLocked,
                       dimWhenDisabled: false,
                       onTap: () => _showInfo(context, game)),
-                  // DOUBLE / REBET — toggles based on game state
+                  // DOUBLE / REBET — toggles based on game state. REBET stays
+                  // labeled REBET even when unaffordable -- only its enabled
+                  // state depends on balance, never which button shows.
                   showRebet
-                      ? _ActionBtn(rebetBtn, isEnabled: !isButtonsLocked,
+                      ? _ActionBtn(rebetBtn, isEnabled: !isButtonsLocked && canAffordRebet,
                           onTap: () => game.rebet(auth))
                       : _ActionBtn(_btns[1], isEnabled: hasBets && !isButtonsLocked,
                           onTap: () => game.doDouble(auth)),
