@@ -57,6 +57,19 @@ class Rpc {
   /// `get_my_round_result(p_round_id uuid) -> jsonb`
   /// Read-only. Settlement happens server-side in `settle_round`.
   static const getMyRoundResult = 'get_my_round_result';
+
+  // ── Auth / failed-login lockout ───────────────────────────────────────────
+  /// `attempt_player_login(p_username text, p_password text) -> jsonb`
+  ///
+  /// Called BEFORE `signInWithPassword`, while no session exists yet -- the
+  /// only RPC in this app granted to `anon`. Does the real password
+  /// verification and the failed-attempt counting atomically, so a caller
+  /// can never inflate another player's count without actually supplying
+  /// their password. Always returns `success: true` for a non-existent
+  /// account or a non-player (staff) account -- it deliberately does not
+  /// intercept those, so the existing `signInWithPassword` + role-check flow
+  /// still produces its normal messages for them, unchanged.
+  static const attemptPlayerLogin = 'attempt_player_login';
 }
 
 /// Parameter names for the RPCs above.
@@ -69,6 +82,8 @@ class RpcParam {
   static const doubleBets   = 'p_double_bets';
   static const tripleBets   = 'p_triple_bets';
   static const limit        = 'p_limit';
+  static const username     = 'p_username';
+  static const password     = 'p_password';
 }
 
 /// Response keys shared across payloads.
@@ -108,6 +123,10 @@ class Field {
   static const placedBet = 'placed_bet';
   static const isSettled = 'is_settled';
   static const success   = 'success';
+
+  // Auth / failed-login lockout
+  static const attemptsRemaining = 'attempts_remaining';
+  static const locked            = 'locked';
 }
 
 /// Database tables the app reads directly (all writes go through RPCs).
@@ -134,6 +153,10 @@ class ReasonCode {
   /// This device's session was replaced by another. Only ever returned by the
   /// heartbeat, once a takeover has happened after the grace period.
   static const sessionDisplaced = 'session_displaced';
+
+  /// Wrong password against a real, active player account. Only ever
+  /// returned by [Rpc.attemptPlayerLogin].
+  static const invalidCredentials = 'invalid_credentials';
 }
 
 /// PostgreSQL error codes raised by the v2 functions, mapped to the sentinels

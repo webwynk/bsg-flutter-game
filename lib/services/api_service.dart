@@ -19,12 +19,23 @@ class LoginOutcome {
   /// Seconds until the other device's session goes stale and can be taken over.
   final int secondsUntilFree;
 
+  /// True when a player's account is blocked -- either just now, by hitting
+  /// 5 failed attempts, or already blocked beforehand (by an agent, or by an
+  /// earlier lockout). The UI shows the same blocked-account popup either way.
+  final bool accountBlocked;
+
+  /// Set only on a wrong password against a real player account (not staff,
+  /// not a non-existent username). Null when not applicable.
+  final int? attemptsRemaining;
+
   const LoginOutcome({
     required this.success,
     this.profile,
     this.error,
     this.sessionHeldElsewhere = false,
     this.secondsUntilFree = 0,
+    this.accountBlocked = false,
+    this.attemptsRemaining,
   });
 }
 
@@ -61,6 +72,47 @@ class ApiService {
 
     if (user.isEmpty) return const LoginOutcome(success: false, error: 'Please enter your username');
     if (pass.isEmpty) return const LoginOutcome(success: false, error: 'Please enter your password');
+
+    // ── 0. Failed-login lockout: verify + count, BEFORE any Supabase Auth
+    // call exists to spoof. attempt_player_login does the real password
+    // check itself and returns success:true as a deliberate pass-through for
+    // a non-existent username or a non-player (staff) account -- those cases
+    // fall through to the normal signInWithPassword flow below completely
+    // unchanged, so their existing messages stay exactly as they were before
+    // this feature existed. A transport hiccup here also falls through
+    // rather than blocking login on this feature's own availability.
+    try {
+      final res = await _db.rpc(Rpc.attemptPlayerLogin, params: {
+        RpcParam.username: user,
+        RpcParam.password: pass,
+      });
+      final data = Map<String, dynamic>.from(res as Map);
+
+      if (data[Field.success] != true) {
+        final reason = data[Field.reason]?.toString();
+        if (reason == ReasonCode.accountBlocked || data[Field.locked] == true) {
+          return const LoginOutcome(
+            success: false,
+            accountBlocked: true,
+            error: 'You are temporarily blocked. Please contact your agent.',
+          );
+        }
+        // invalid_credentials: a real player account, confirmed wrong password.
+        final remaining = (data[Field.attemptsRemaining] as num?)?.toInt();
+        return LoginOutcome(
+          success: false,
+          attemptsRemaining: remaining,
+          error: remaining != null
+              ? 'Wrong username or password. $remaining attempt${remaining == 1 ? '' : 's'} left.'
+              : 'Wrong username or password',
+        );
+      }
+      // success:true -- either a genuinely correct player password, or the
+      // deliberate pass-through for a non-existent/staff account. Either way,
+      // continue to the real Supabase Auth sign-in below, exactly as before.
+    } catch (e) {
+      debugPrint('ApiService.login attempt_player_login failed (continuing): $e');
+    }
 
     // ── 1. Authenticate ──────────────────────────────────────────────────────
     late final AuthResponse auth;

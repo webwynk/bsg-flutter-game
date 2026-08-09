@@ -6,7 +6,9 @@ import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../theme/app_decorations.dart';
+import '../utils/app_exit.dart';
 import '../widgets/common/loading_bar.dart';
+import '../widgets/dialogs/action_dialog.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -54,6 +56,25 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    // Blocked account -- either just now, by hitting 5 failed attempts, or
+    // already blocked beforehand. Same treatment either way: a dedicated
+    // popup instead of the usual inline error text, since this needs a
+    // conscious acknowledgement, not something to read past while retrying.
+    // There's no session to log out of here (login never succeeded), so OK
+    // just closes the app rather than calling auth.logout().
+    if (outcome.accountBlocked) {
+      _shake();
+      showActionDialog(
+        context,
+        icon: Icons.block_rounded,
+        title: 'ACCOUNT BLOCKED',
+        message: outcome.error ?? 'You are temporarily blocked. Please contact your agent.',
+        barrierDismissible: false,
+        onPressed: closeApp,
+      );
+      return;
+    }
+
     // Q6: a second device is refused rather than displacing the first. Say so
     // plainly, including when the other session will go stale, so the player
     // does not read it as a wrong password and keep retrying.
@@ -63,6 +84,10 @@ class _LoginScreenState extends State<LoginScreen> {
           ? 'Already playing on another device. Try again in ${secs}s.'
           : 'This account is already playing on another device.');
     }
+    // Every other failure (including the new "...N attempts left" text) is
+    // already in auth.error -- AuthProvider.login() sets it from
+    // outcome.error before returning, so _errorMessage() below picks it up
+    // with no further action needed here.
 
     _shake();
   }

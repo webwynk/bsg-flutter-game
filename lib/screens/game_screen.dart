@@ -1,4 +1,3 @@
-import 'dart:io' show Platform, exit;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +8,8 @@ import '../services/api_contract.dart';
 import '../services/sound_service.dart';
 import '../services/round_sync_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/app_exit.dart';
+import '../widgets/dialogs/action_dialog.dart';
 import '../widgets/wheel/wheel_widget.dart';
 import '../widgets/panels/left_tab_strip.dart';
 import '../widgets/controls/right_panel.dart';
@@ -410,7 +411,7 @@ class _GameScreenState extends State<GameScreen> {
       ),
     };
 
-    _showActionDialog(
+    showActionDialog(
       context,
       icon: Icons.report_gmailerrorred_rounded,
       title: title,
@@ -420,183 +421,13 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  /// Shared centered popup used for both bet-rejection notices and the
-  /// connection-lost dialog -- one visual implementation instead of two
-  /// duplicated ~150-line copies of the same card/icon/title/message/button
-  /// structure.
-  ///
-  /// [onPressed] fires only on a manual tap, never on [autoDismissAfter]'s
-  /// silent timeout -- an auto-dismiss is "the player didn't need to see
-  /// this anymore," not "the player confirmed an action."
-  void _showActionDialog(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String message,
-    VoidCallback? onPressed,
-    String buttonLabel = 'OK',
-    bool barrierDismissible = true,
-    Duration? autoDismissAfter,
-  }) {
-    bool isClosed = false;
-    SoundService().playNotification();
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: barrierDismissible,
-      barrierLabel: 'ActionDialog',
-      barrierColor: Colors.black.withValues(alpha: 0.75),
-      transitionDuration: const Duration(milliseconds: 280),
-      pageBuilder: (ctx, anim1, anim2) {
-        if (autoDismissAfter != null) {
-          Future.delayed(autoDismissAfter, () {
-            if (ctx.mounted && !isClosed && Navigator.of(ctx).canPop()) {
-              isClosed = true;
-              Navigator.of(ctx).pop();
-            }
-          });
-        }
-
-        // F-Step1 fix: barrierDismissible only blocks tapping outside the
-        // dialog -- it does nothing about the system back button/gesture,
-        // which by default still pops this route like any other. Without
-        // this PopScope, a player could back-gesture past the connection-
-        // lost dialog (barrierDismissible: false) and never trigger
-        // onPressed -- no refund logic, no logout, no app close. Tied to
-        // the same barrierDismissible flag so the bet-rejection and
-        // insufficient-coins dialogs (which SHOULD stay dismissible) are
-        // unaffected.
-        return PopScope(
-          canPop: barrierDismissible,
-          child: Center(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                child: Container(
-                  width: 320,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF220500), Color(0xFF0C0200)],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: AppColors.goldPrimary.withValues(alpha: 0.45),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.goldPrimary.withValues(alpha: 0.12),
-                        blurRadius: 20,
-                        spreadRadius: 1,
-                      ),
-                      const BoxShadow(
-                        color: Colors.black87,
-                        blurRadius: 25,
-                        offset: Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          icon,
-                          color: const Color(0xFFFFD54F),
-                          size: 48,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          title,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontFamily: 'DMSans',
-                            fontWeight: FontWeight.w900,
-                            fontSize: 18,
-                            color: Color(0xFFFFD54F),
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          message,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontFamily: 'DMSans',
-                            fontSize: 12,
-                            color: Colors.white70,
-                            height: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        GestureDetector(
-                          onTap: () {
-                            if (!isClosed) {
-                              isClosed = true;
-                              SoundService().playButtonClick();
-                              Navigator.of(ctx).pop();
-                              onPressed?.call();
-                            }
-                          },
-                          child: Container(
-                            height: 38,
-                            width: 140,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF55FF55), Color(0xFF00AA00), Color(0xFF005500)],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                              ),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFF99FF99), width: 1.2),
-                              boxShadow: const [
-                                BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(0, 2)),
-                              ],
-                            ),
-                            child: Center(
-                              child: Text(
-                                buttonLabel,
-                                style: const TextStyle(
-                                  fontFamily: 'DMSans',
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                  letterSpacing: 1.0,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (ctx, anim, _, child) {
-        final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
-        return ScaleTransition(
-          scale: Tween<double>(begin: 0.85, end: 1.0).animate(curved),
-          child: FadeTransition(opacity: anim, child: child),
-        );
-      },
-    );
-  }
-
   /// Shown whenever RoundSyncService can't reach the server for any reason.
   /// Replaces the old top-of-screen banner. Every reason now ends the same
   /// way -- a full, clean logout -- rather than the old split between
   /// "RETRY" (for a dropped connection) and "LOG IN" (for session/account
   /// issues only). No ambiguous "maybe still connected" state to leave a
   /// real-money session sitting in. Not dismissible by tapping outside, by
-  /// the system back button/gesture (see the PopScope in _showActionDialog),
+  /// the system back button/gesture (see the PopScope in showActionDialog),
   /// or by an auto-timeout -- this needs a conscious tap on OK.
   void _showConnectionLostDialog(BuildContext context, String reason) {
     final (icon, title, message) = switch (reason) {
@@ -622,7 +453,7 @@ class _GameScreenState extends State<GameScreen> {
       ),
     };
 
-    _showActionDialog(
+    showActionDialog(
       context,
       icon: icon,
       title: title,
@@ -643,24 +474,9 @@ class _GameScreenState extends State<GameScreen> {
         // cleared, server notified) before the app closes -- closing first
         // would risk killing the process mid-cleanup.
         await auth.logout();
-        _closeApp();
+        closeApp();
       },
     );
-  }
-
-  /// Closes the app outright rather than returning to the login screen --
-  /// this app is not distributed through the App Store/Play Store, so the
-  /// usual "never let an app quit itself" guideline doesn't apply here.
-  /// SystemNavigator.pop() is the correct, standard way to exit on Android
-  /// (properly signals the OS to tear the activity down); it has documented,
-  /// limited effect on iOS, where dart:io's exit() is the reliable way to
-  /// actually terminate the process.
-  void _closeApp() {
-    if (Platform.isIOS) {
-      exit(0);
-    } else {
-      SystemNavigator.pop();
-    }
   }
 
   void _showInsufficientCoinsDialog(BuildContext context) {
