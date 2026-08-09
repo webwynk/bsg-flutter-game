@@ -36,7 +36,7 @@ class _GameScreenState extends State<GameScreen> {
   // Tracks which BetError reason the connection-lost dialog was last shown
   // for, so it's shown once per distinct disconnection rather than once per
   // rebuild (RoundSyncService can notify repeatedly while still down).
-  String? _connectionDialogShownFor;
+  bool _connectionDialogShowing = false;
 
   @override
   void initState() {
@@ -100,9 +100,20 @@ class _GameScreenState extends State<GameScreen> {
     );
 
     if (!accepted) {
+      // Refund unconditionally here, same as always -- if this turns out to
+      // be a connectivity failure and routes to the severe dialog below, its
+      // own OK-button abortSpin() will find the board already empty and
+      // simply no-op the refund it would otherwise attempt (it only refunds
+      // when !submittedBets, which markBetsSubmitted() already set true
+      // before this call ran, so it can't be relied on alone here).
       game.refundRejectedBets(auth);
       if (mounted) {
-        _showBetRejectedDialog(context, sync.lastSubmitError);
+        final reason = sync.lastSubmitError;
+        if (reason == BetError.offline || reason == BetError.unauthenticated) {
+          _showConnectionLostDialogGuarded(context, reason!);
+        } else {
+          _showBetRejectedDialog(context, reason);
+        }
       }
     }
   }
@@ -142,9 +153,15 @@ class _GameScreenState extends State<GameScreen> {
       );
 
       if (!accepted) {
+        // See _handleEarlyBetSubmission for why refund is unconditional here.
         game.refundRejectedBets(auth);
         if (mounted) {
-          _showBetRejectedDialog(context, sync.lastSubmitError);
+          final reason = sync.lastSubmitError;
+          if (reason == BetError.offline || reason == BetError.unauthenticated) {
+            _showConnectionLostDialogGuarded(context, reason!);
+          } else {
+            _showBetRejectedDialog(context, reason);
+          }
         }
       }
     }
@@ -385,9 +402,19 @@ class _GameScreenState extends State<GameScreen> {
   /// can go under the board minimum or over its maximum, and the in-game
   /// "PLAY LIMIT REACHED" snackbar already covers the max side live as it
   /// happens. The one remaining gap -- REBET restoring a stale snapshot
-  /// against limits that changed since the previous round (Issue #46,
-  /// still open) -- was confirmed and explicitly accepted: coins are still
-  /// correctly refunded either way, only the specific wording differs.
+  /// against limits that changed since the previous round -- was confirmed
+  /// and explicitly accepted: coins are still correctly refunded either way,
+  /// only the specific wording differs. Issue #46 later disabled the REBET
+  /// button itself when unaffordable, which narrows but doesn't fully close
+  /// this specific gap.
+  ///
+  /// OFFLINE and UNAUTHENTICATED deliberately have no case here either --
+  /// both are now intercepted at the call site (see
+  /// `_handleEarlyBetSubmission`/`_handleSpin`) after all retries are
+  /// exhausted, and routed to the merged, severe `_showConnectionLostDialog`
+  /// instead: those two reasons mean a real connectivity/session problem,
+  /// which deserves the "you'll be logged out" treatment, not this dialog's
+  /// "stay in the game" one.
   void _showBetRejectedDialog(BuildContext context, String? reason) {
     final (title, message) = switch (reason) {
       'INSUFFICIENT_COINS' => (
@@ -397,14 +424,6 @@ class _GameScreenState extends State<GameScreen> {
       'ROUND_CLOSED' => (
         'ROUND CLOSED',
         'Betting for that round closed before your bet arrived. Your coins have been returned — please try the next round.'
-      ),
-      'UNAUTHENTICATED' => (
-        'SESSION EXPIRED',
-        'Your session is no longer valid. Your coins have been returned. Please exit and log in again.'
-      ),
-      'OFFLINE' => (
-        'NO CONNECTION',
-        'Could not reach the server to send your bet. Your coins have been returned — please check your connection.'
       ),
       _ => (
         'BET NOT PLACED',
@@ -422,35 +441,44 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+  /// Shared entry point for [_showConnectionLostDialog], reused by both the
+  /// background poll (via the ListenableBuilder below) and a failed bet
+  /// submission (see `_handleEarlyBetSubmission`/`_handleSpin`) -- the two
+  /// can plausibly fire around the same moment during a real outage (the
+  /// background poll keeps failing every 2s while a submission is retrying),
+  /// so both routes go through this one guard rather than each tracking
+  /// "showing" independently, which would let them stack a duplicate dialog.
+  void _showConnectionLostDialogGuarded(BuildContext context, String reason) {
+    if (_connectionDialogShowing) return;
+    _connectionDialogShowing = true;
+    _showConnectionLostDialog(context, reason);
+  }
+
   /// Shown whenever RoundSyncService can't reach the server for any reason.
-  /// Replaces the old top-of-screen banner. Every reason now ends the same
-  /// way -- a full, clean logout -- rather than the old split between
-  /// "RETRY" (for a dropped connection) and "LOG IN" (for session/account
-  /// issues only). No ambiguous "maybe still connected" state to leave a
-  /// real-money session sitting in. Not dismissible by tapping outside, by
-  /// the system back button/gesture (see the PopScope in showActionDialog),
-  /// or by an auto-timeout -- this needs a conscious tap on OK.
+  /// Replaces the old top-of-screen banner. Every connectivity/server reason
+  /// (offline, session expired, unrecognized server error) now shares one
+  /// merged message -- the player doesn't need to diagnose *why*, only that
+  /// they'll be logged out for their safety and can sign back in. The one
+  /// deliberate exception is accountBlocked: that's a real account-status
+  /// fact ("your agent blocked you"), not a connectivity problem, so folding
+  /// it into the generic message would mislead the player into thinking
+  /// it's a network issue rather than something to contact their agent
+  /// about -- same reasoning as why ROUND_CLOSED stays out of the merged
+  /// Bet Rejected message. Every reason still ends the same way -- a full,
+  /// clean logout. Not dismissible by tapping outside, by the system back
+  /// button/gesture (see the PopScope in showActionDialog), or by an
+  /// auto-timeout -- this needs a conscious tap on OK.
   void _showConnectionLostDialog(BuildContext context, String reason) {
     final (icon, title, message) = switch (reason) {
-      BetError.offline => (
-        Icons.wifi_off_rounded,
-        'CONNECTION LOST',
-        'Could not reach the server. For your safety you will be logged out — please sign back in once reconnected.'
-      ),
-      BetError.unauthenticated => (
-        Icons.error_outline_rounded,
-        'SESSION EXPIRED',
-        'Your session is no longer valid. You will be logged out — please sign in again.'
-      ),
       BetError.accountBlocked => (
         Icons.error_outline_rounded,
         'ACCOUNT BLOCKED',
         'Your account has been blocked. Please contact your agent. You will be logged out.'
       ),
       _ => (
-        Icons.error_outline_rounded,
-        'SERVER ERROR',
-        'The server reported a problem ($reason). You will be logged out — please try again shortly.'
+        Icons.wifi_off_rounded,
+        'CONNECTION LOST',
+        'Could not stay connected to the server. For your safety you will be logged out — please sign back in once reconnected.'
       ),
     };
 
@@ -849,9 +877,10 @@ class _GameScreenState extends State<GameScreen> {
               // ── No Connection / Session dialog ───────────────────────
               // Replaces the old thin top banner (which offered "RETRY" for
               // a dropped connection, only forcing logout for session/
-              // account issues). Now every disconnection reason shows the
-              // same centered popup and always ends in a full, clean logout
-              // -- no ambiguous "maybe still connected" state to leave a
+              // account issues). Every disconnection reason except a genuine
+              // account block now shows the same one merged "CONNECTION
+              // LOST" popup and always ends in a full, clean logout -- no
+              // ambiguous "maybe still connected" state to leave a
               // real-money session sitting in.
               ListenableBuilder(
                 listenable: RoundSyncService(),
@@ -859,20 +888,21 @@ class _GameScreenState extends State<GameScreen> {
                   final sync = RoundSyncService();
                   final reason = sync.connectionError;
                   if (sync.isConnected || reason == null) {
-                    _connectionDialogShownFor = null;
+                    _connectionDialogShowing = false;
                     return const SizedBox.shrink();
                   }
-                  // Show once per distinct reason, not on every rebuild --
-                  // RoundSyncService can notify repeatedly while still
-                  // disconnected (each failed poll), which would otherwise
-                  // stack duplicate dialogs. Also skip entirely if the
+                  // Show at most once per outage, regardless of how many
+                  // times the reason changes while still disconnected (e.g.
+                  // offline -> unauthenticated) or how many times
+                  // RoundSyncService notifies (each failed poll) -- a
+                  // reason-keyed guard would let those cases stack a second
+                  // dialog on top of the first. Also skip entirely if the
                   // away-too-long flow is already closing the app -- showing
                   // a second, redundant popup right as the app is on its way
                   // out would be pointless and confusing.
-                  if (_connectionDialogShownFor != reason && !isClosingApp.value) {
-                    _connectionDialogShownFor = reason;
+                  if (!isClosingApp.value) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) _showConnectionLostDialog(context, reason);
+                      if (mounted) _showConnectionLostDialogGuarded(context, reason);
                     });
                   }
                   return const SizedBox.shrink();

@@ -110,9 +110,11 @@ class RoundSyncService extends ChangeNotifier {
 
       if (round == null) {
         _failedPollCount++;
-        // Require 2 consecutive failed polls before marking connection as dead,
-        // so transient PC emulator NAT stutters do not trigger the banner.
-        if (_failedPollCount >= 2) {
+        // Require 3 consecutive failed polls (~6s) before marking connection as
+        // dead, so a brief blip -- a tunnel, one dropped packet, a momentary
+        // server stutter -- never interrupts the player. Only a real, sustained
+        // outage reaches the popup.
+        if (_failedPollCount >= 3) {
           final err = _api.lastRoundError ?? BetError.offline;
           if (_isConnected || _connectionError != err) {
             _isConnected = false;
@@ -276,12 +278,36 @@ class RoundSyncService extends ChangeNotifier {
     // Save which round the bets were submitted to
     _betRoundId = roundId;
 
-    final result = await _api.placeBet(
+    PlaceBetResult result = await _api.placeBet(
       roundId:    roundId,
       singleBets: singleBets,
       doubleBets: doubleBets,
       tripleBets: tripleBets,
     );
+
+    // Enterprise retry: only re-attempt when the failure looks like a
+    // transient connectivity blip (OFFLINE, or UNAUTHENTICATED -- a JWT that
+    // briefly failed to attach reads the same way as a dropped request).
+    // Every other reason (INSUFFICIENT_COINS, ROUND_CLOSED, BELOW_MIN,
+    // EXCEEDS_MAX, BAD_KEY, ACCOUNT_BLOCKED) is a real, final answer from the
+    // server -- retrying would either get the identical answer again or, for
+    // ROUND_CLOSED specifically, be pointless since that round is genuinely
+    // over. Capped at 3 total attempts, ~1s apart, so a real, sustained
+    // outage still fails fast -- worst case this adds ~2s, comfortably
+    // inside the 5-second window between the submission trigger (05s) and
+    // the round's own close (00s).
+    const retryableErrors = {BetError.offline, BetError.unauthenticated};
+    var attempt = 1;
+    while (!result.success && retryableErrors.contains(result.error) && attempt < 3) {
+      attempt++;
+      await Future.delayed(const Duration(seconds: 1));
+      result = await _api.placeBet(
+        roundId:    roundId,
+        singleBets: singleBets,
+        doubleBets: doubleBets,
+        tripleBets: tripleBets,
+      );
+    }
 
     if (result.success) {
       game.setBetStatus(BetSubmissionStatus.submitted, roundId: roundId);
