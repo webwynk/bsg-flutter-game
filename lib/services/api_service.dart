@@ -170,6 +170,17 @@ class ApiService {
       // the web dashboard.
       final role = data[Field.role]?.toString();
       if (role != 'player') {
+        // Order matters, same reasoning as logout(): session_logout needs a
+        // valid auth.uid(), so it must run before signOut() clears it.
+        // Belt-and-braces alongside session_login's own database-level fix
+        // (Issue #12) -- session_login no longer claims an active_sessions
+        // slot for a staff caller at all, but this still releases one on the
+        // off chance any future code path reaches this branch differently.
+        try {
+          await _db.rpc(Rpc.sessionLogout);
+        } catch (e) {
+          debugPrint('ApiService.login session_logout (staff rejection): $e');
+        }
         await _db.auth.signOut();
         return const LoginOutcome(
           success: false,
