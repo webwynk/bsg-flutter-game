@@ -204,6 +204,19 @@ class ApiService {
     }
   }
 
+  /// Fires whenever Supabase's SDK force-ends the current session for a
+  /// reason the app didn't initiate itself (e.g. a background token refresh
+  /// failing because the account was banned) -- as opposed to this app's own
+  /// deliberate logout() call. AuthProvider listens to react immediately
+  /// instead of only discovering the dead session indirectly, later, via a
+  /// failed heartbeat.
+  Stream<void> get onForcedSignOut => _db.auth.onAuthStateChange
+      .where((state) =>
+          state.event == AuthChangeEvent.signedOut &&
+          state.signOutReason != null &&
+          state.signOutReason != SignOutReason.userInitiated)
+      .map((_) {});
+
   /// Releases the single-device session slot WITHOUT signing out of
   /// Supabase Auth -- used once the app has been backgrounded past the
   /// away-threshold, not on a deliberate player logout. The local session
@@ -230,6 +243,15 @@ class ApiService {
       });
       if (res == null) return null;
       return Map<String, dynamic>.from(res as Map);
+    } on AuthException catch (e) {
+      // Issue #57 Fix C, defense-in-depth: no valid session existed to even
+      // attempt this call with -- most likely onForcedSignOut (Fix A)
+      // already ended it, or is about to. Distinct from a genuine transport
+      // hiccup: return a synthetic result the caller can recognize instead
+      // of null, so this tick still ends the session rather than assuming
+      // it's safe to keep waiting.
+      debugPrint('ApiService.heartbeat: no valid session ($e)');
+      return {Field.allowed: false, Field.reason: ReasonCode.sessionMissing};
     } catch (e) {
       debugPrint('ApiService.heartbeat: $e');
       return null;

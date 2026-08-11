@@ -35,6 +35,23 @@ class AuthProvider extends ChangeNotifier {
 
   int _ledgerVersion = 0;
 
+  /// Reacts the moment Supabase's SDK force-ends the session for a reason
+  /// this app didn't initiate (Issue #57) -- e.g. a background token
+  /// refresh failing because the account was just banned -- instead of only
+  /// discovering it indirectly, later, via a failed heartbeat.
+  StreamSubscription<void>? _forcedSignOutSub;
+
+  AuthProvider() {
+    _forcedSignOutSub = ApiService().onForcedSignOut.listen((_) {
+      if (_user != null) {
+        _endSession(
+          forced: true,
+          reason: 'Your session has ended. Please log in again.',
+        );
+      }
+    });
+  }
+
   /// Stake sitting on the board that has not reached the database yet.
   /// Chips are deducted locally the moment they are placed, but nothing is
   /// written until place_bet runs at the close of betting, so the server's
@@ -153,9 +170,16 @@ class AuthProvider extends ChangeNotifier {
 
       if (res[Field.allowed] != true) {
         final reason = res[Field.reason]?.toString();
-        final message = reason == ReasonCode.accountBlocked
-            ? 'Your account has been blocked. Please contact your Agent.'
-            : 'Your account was opened on another device.';
+        final message = switch (reason) {
+          ReasonCode.accountBlocked =>
+            'Your account has been blocked. Please contact your Agent.',
+          // Issue #57 Fix C: distinct from account_blocked/session_displaced
+          // -- we genuinely don't know which of those it was, only that no
+          // session existed to ask. Matches Fix A's own neutral wording.
+          ReasonCode.sessionMissing =>
+            'Your session has ended. Please log in again.',
+          _ => 'Your account was opened on another device.',
+        };
         await _endSession(forced: true, reason: message);
         return;
       }
@@ -246,6 +270,7 @@ class AuthProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _forcedSignOutSub?.cancel();
     _heartbeatTimer?.cancel();
     super.dispose();
   }

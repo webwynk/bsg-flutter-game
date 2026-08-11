@@ -109,7 +109,15 @@ class _GameScreenState extends State<GameScreen> {
       game.refundRejectedBets(auth);
       if (mounted) {
         final reason = sync.lastSubmitError;
-        if (reason == BetError.offline || reason == BetError.unauthenticated) {
+        // Issue #57: accountBlocked must route here too -- it's a real
+        // account-status fact, not a connectivity problem, and this is the
+        // dialog that already renders it correctly (see
+        // _showConnectionLostDialog's own accountBlocked case below).
+        // Falling through to _showBetRejectedDialog's generic fallback
+        // showed "Bet Not Placed" instead of telling the player why.
+        if (reason == BetError.offline ||
+            reason == BetError.unauthenticated ||
+            reason == BetError.accountBlocked) {
           _showConnectionLostDialogGuarded(context, reason!);
         } else {
           _showBetRejectedDialog(context, reason);
@@ -157,7 +165,11 @@ class _GameScreenState extends State<GameScreen> {
         game.refundRejectedBets(auth);
         if (mounted) {
           final reason = sync.lastSubmitError;
-          if (reason == BetError.offline || reason == BetError.unauthenticated) {
+          // Issue #57: same fix as _handleEarlyBetSubmission -- see its
+          // comment for why accountBlocked must route here too.
+          if (reason == BetError.offline ||
+              reason == BetError.unauthenticated ||
+              reason == BetError.accountBlocked) {
             _showConnectionLostDialogGuarded(context, reason!);
           } else {
             _showBetRejectedDialog(context, reason);

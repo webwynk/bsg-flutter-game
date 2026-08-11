@@ -157,6 +157,14 @@ class ReasonCode {
   /// Wrong password against a real, active player account. Only ever
   /// returned by [Rpc.attemptPlayerLogin].
   static const invalidCredentials = 'invalid_credentials';
+
+  /// Issue #57 Fix C -- client-synthesized only, never returned by any RPC.
+  /// [ApiService.heartbeat] uses this to signal "no valid session existed
+  /// to even attempt the call with" (an [AuthException]), distinct from a
+  /// genuine transport hiccup -- so a heartbeat tick that loses the race
+  /// against [ApiService.onForcedSignOut] (Fix A) still ends the session
+  /// instead of silently waiting for the next tick.
+  static const sessionMissing = 'session_missing';
 }
 
 /// PostgreSQL error codes raised by the v2 functions, mapped to the sentinels
