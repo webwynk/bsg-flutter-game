@@ -31,6 +31,7 @@ Thumbs.db
 .vscode/
 .claude/
 .antigravity/
+devtools_options.yaml
 
 # Flutter / Dart / Pub Build Artifacts
 .flutter-sdk/
