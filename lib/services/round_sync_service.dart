@@ -29,6 +29,15 @@ class RoundSyncService extends ChangeNotifier {
   String? _connectionError;
   int _failedPollCount = 0;
 
+  // Issue #56 (part 2): bumped by every attach()/detach(), captured locally
+  // by attach() as "myGeneration". Lets a still-in-flight attach() (its
+  // _fetchInitialRound retry loop still running) recognize, once it finally
+  // resolves, that it's been superseded by a detach() or a newer attach()
+  // in the meantime -- so it neither writes its (possibly stale) results
+  // over a newer attempt's already-correct state, nor starts an orphaned
+  // polling timer for a screen that's no longer open.
+  int _attachGeneration = 0;
+
   // M-3 FIX: retain why the last submission failed so the UI can explain it.
   // Previously submitBets() returned false and the caller discarded it, so a
   // server-rejected bet was completely invisible to the player.
@@ -60,6 +69,7 @@ class RoundSyncService extends ChangeNotifier {
 
   /// Called from GameScreen.initState — attaches to the game provider
   Future<void> attach(GameProvider game, AuthProvider auth) async {
+    final myGeneration = ++_attachGeneration;
     _isConnecting = true;
     _connectionError = null;
     // Issue #56: RoundSyncService is a singleton, so without this a quick
@@ -72,12 +82,22 @@ class RoundSyncService extends ChangeNotifier {
 
     game.startCountdown();
     game.loadGlobalHistory();
-    await _fetchInitialRound(game, auth);
+    await _fetchInitialRound(game, auth, myGeneration);
+
+    // Issue #56 (part 2): a detach() (or a newer attach()) happened while
+    // _fetchInitialRound's retry loop was still running above -- this call
+    // is stale. Starting a polling timer now would orphan it: nothing would
+    // ever cancel a timer created after the screen that owns it already
+    // called detach().
+    if (myGeneration != _attachGeneration) return;
     _startPolling(game, auth);
   }
 
   /// Called from GameScreen.dispose — cleans up.
   void detach() {
+    // Issue #56 (part 2): invalidates any attach() still awaiting
+    // _fetchInitialRound above -- see _attachGeneration's own comment.
+    _attachGeneration++;
     _pollTimer?.cancel();
     _pollTimer = null;
     _deliveredRoundNumber = null;
@@ -176,7 +196,7 @@ class RoundSyncService extends ChangeNotifier {
   /// mid-blip) was enough on its own to trigger the severe "Connection
   /// Lost" popup, which always ends in a full logout regardless of whether
   /// the very next check would have succeeded.
-  Future<void> _fetchInitialRound(GameProvider game, AuthProvider auth) async {
+  Future<void> _fetchInitialRound(GameProvider game, AuthProvider auth, int myGeneration) async {
     GlobalRoundState? round;
     var attempt = 1;
     while (true) {
@@ -185,6 +205,14 @@ class RoundSyncService extends ChangeNotifier {
       attempt++;
       await Future.delayed(const Duration(milliseconds: 500));
     }
+
+    // Issue #56 (part 2): a detach() (or a newer attach()) already
+    // superseded this call while the retry loop above was still running.
+    // Bail out before writing anything -- this attempt's results (success
+    // or failure) are stale and must not clobber whatever a newer attach()
+    // has already established, or is about to.
+    if (myGeneration != _attachGeneration) return;
+
     if (round == null) {
       _isConnected = false;
       _isConnecting = false;
