@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'providers/auth_provider.dart';
 import 'providers/game_provider.dart';
@@ -28,12 +27,6 @@ void main() async {
     // ignore: deprecated_member_use
     anonKey: kSupabaseAnonKey,
   );
-
-  // Clear personal game history on app startup (game close / restart)
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('bsg_local_game_history');
-  } catch (_) {}
 
   // Start in portrait on app launch
   await SystemChrome.setPreferredOrientations([
