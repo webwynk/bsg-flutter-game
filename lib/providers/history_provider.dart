@@ -26,7 +26,6 @@ class HistoryProvider extends ChangeNotifier {
   String? _error;
 
   List<SpinResult> get records => List.unmodifiable(_records);
-  int get totalRecords => _records.length;
   int get totalStake => _totalStake;
   int get totalPayout => _totalPayout;
   bool get isLoading => _isLoading;
