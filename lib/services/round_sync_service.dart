@@ -188,13 +188,27 @@ class RoundSyncService extends ChangeNotifier {
     final cycle = 103 - (nowSecs % 103);
     if (cycle <= 13) {
       game.markPendingCatchUpReplay();
+      // Return value deliberately ignored here: this is a replay of a round
+      // that already finished while the player wasn't looking, not a bet
+      // they're actively watching resolve, and this service has no
+      // BuildContext to show a dialog from anyway. If it fails, the player
+      // simply doesn't see a replay animation -- a much lower-stakes gap
+      // than the live-spin case game_screen.dart handles.
       fetchAndDeliverResult(game, auth);
     }
   }
 
   /// Called at 00s remaining by GameProvider clock to deliver the result.
   /// Uses a robust 8-attempt polling loop to handle multi-device clock drift and network lag.
-  Future<void> fetchAndDeliverResult(GameProvider game, AuthProvider auth) async {
+  ///
+  /// Issue #14: returns false if the round's numbers never arrived within
+  /// the retry budget (the round genuinely failed to resolve server-side --
+  /// with get_current_round()'s own fault-isolation fix, this now reliably
+  /// means "still not drawn" rather than a thrown error). Previously this
+  /// returned void and gave up completely silently: no wheel animation, no
+  /// message, the player's stake just never resolved. The caller uses the
+  /// false return to refund the player and tell them honestly instead.
+  Future<bool> fetchAndDeliverResult(GameProvider game, AuthProvider auth) async {
     for (int attempt = 1; attempt <= 8; attempt++) {
       final round = await _api.getCurrentRound();
       if (round != null) {
@@ -205,9 +219,9 @@ class RoundSyncService extends ChangeNotifier {
             _deliveredRoundNumber = round.roundNumber;
             debugPrint('RoundSyncService: exactly-once delivery for round #${round.roundNumber} on attempt $attempt');
             _deliverResult(round, game, auth);
-            return;
+            return true;
           } else {
-            return; // Already delivered for this round
+            return true; // Already delivered for this round
           }
         }
       }
@@ -215,6 +229,8 @@ class RoundSyncService extends ChangeNotifier {
         await Future.delayed(const Duration(milliseconds: 1000));
       }
     }
+    debugPrint('RoundSyncService: gave up waiting for round result after 8 attempts');
+    return false;
   }
 
   /// Submits the player's bets to the server for the current active round.

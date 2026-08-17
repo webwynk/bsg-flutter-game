@@ -144,6 +144,11 @@ class _GameScreenState extends State<GameScreen> {
       if (minViolation != null) {
         game.refundRejectedBets(auth);
         if (mounted) _showBetRejectedDialog(context, 'BELOW_MIN');
+        // Still fetches the round's result for the wheel animation (this
+        // player is now a spectator for this round) -- but deliberately
+        // doesn't react to a false return with a second dialog on top of
+        // the BELOW_MIN one just shown above; nothing was staked here to
+        // refund a second time.
         await sync.fetchAndDeliverResult(game, auth);
         return;
       }
@@ -179,7 +184,19 @@ class _GameScreenState extends State<GameScreen> {
     }
 
     // 2. FETCH RESULT EXACTLY ONCE! (For both bettors and spectators)
-    await sync.fetchAndDeliverResult(game, auth);
+    final delivered = await sync.fetchAndDeliverResult(game, auth);
+    // Issue #14: the round genuinely never resolved server-side within the
+    // retry budget. Deliberately does NOT call refundRejectedBets here --
+    // that only changes the on-screen number, not the server's real
+    // balance, and place_bet already deducted the stake for real the moment
+    // this bet was accepted. Claiming a refund that hasn't actually happened
+    // would be reversed a few seconds later by the next honest balance
+    // sync, with no explanation. Just tell the player the truth instead:
+    // the round is unresolved, their real balance will catch up
+    // automatically via the normal sync path once it's ready.
+    if (!delivered && mounted) {
+      _showServerErrorDialog(context);
+    }
   }
 
 
@@ -448,6 +465,35 @@ class _GameScreenState extends State<GameScreen> {
       icon: Icons.report_gmailerrorred_rounded,
       title: title,
       message: message,
+      barrierDismissible: true,
+      autoDismissAfter: const Duration(seconds: 5),
+    );
+  }
+
+  /// Issue #14: shown when a round genuinely fails to resolve server-side
+  /// (the draw itself never completed, not a connectivity/session problem --
+  /// those still go to the severe _showConnectionLostDialog). One honest,
+  /// reusable message for "the server had a problem, not you, not your
+  /// wifi" -- rather than a bespoke message per failure mode. Same
+  /// stay-in-the-game treatment as _showBetRejectedDialog: this doesn't end
+  /// the session, the player just continues to the next round.
+  ///
+  /// Deliberately does NOT claim coins were refunded: place_bet deducts the
+  /// stake from the server-side balance the moment a bet is accepted, well
+  /// before the round is ever drawn. If this round never resolved, that
+  /// deduction is still real and hasn't been reversed by anything -- saying
+  /// otherwise here would be an outright false statement that the very next
+  /// heartbeat/round-poll balance sync would silently contradict a few
+  /// seconds later. The truthful state is "unresolved, will update once
+  /// it's ready" -- the server's own authoritative balance is always what
+  /// actually displays, via the normal sync path, whatever that turns out
+  /// to be.
+  void _showServerErrorDialog(BuildContext context) {
+    showActionDialog(
+      context,
+      icon: Icons.sync_problem_rounded,
+      title: 'SERVER ERROR',
+      message: 'This round is taking longer than expected to resolve. Your balance will update automatically once it\'s ready.',
       barrierDismissible: true,
       autoDismissAfter: const Duration(seconds: 5),
     );
