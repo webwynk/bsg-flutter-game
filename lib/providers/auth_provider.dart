@@ -71,8 +71,6 @@ class AuthProvider extends ChangeNotifier {
   String? get error => _error;
   int get coinBalance => _user?.coinBalance ?? 0;
   String get username => _user?.username ?? '';
-  String get token => _user?.token ?? '';
-  int get ledgerVersion => _ledgerVersion;
   bool get forcedLogout => _forcedLogout;
   String? get forcedLogoutReason => _forcedLogoutReason;
 

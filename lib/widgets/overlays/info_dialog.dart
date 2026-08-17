@@ -952,36 +952,6 @@ class _HistoryDetailDialog extends StatelessWidget {
             _DetailRow('Total Win', '${record.winAmount} coins',
                 color:
                     isWin ? const Color(0xFF44D680) : Colors.white30),
-            if (record.selections.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text('Picks:',
-                  style: GoogleFonts.oswald(
-                      fontSize: 11,
-                      color: Colors.white38,
-                      letterSpacing: 0.5)),
-              const SizedBox(height: 5),
-              Wrap(
-                spacing: 5,
-                runSpacing: 5,
-                children: record.selections
-                    .map((sel) => Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(
-                                color: AppColors.goldDark, width: 1),
-                            color: AppColors.goldPrimary
-                                .withValues(alpha: 0.06),
-                          ),
-                          child: Text(sel,
-                              style: GoogleFonts.oswald(
-                                  fontSize: 11,
-                                  color: AppColors.goldBright)),
-                        ))
-                    .toList(),
-              ),
-            ],
           ],
         ),
       ),

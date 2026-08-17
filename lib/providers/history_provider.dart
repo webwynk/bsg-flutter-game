@@ -45,11 +45,17 @@ class HistoryProvider extends ChangeNotifier {
     try {
       // The embedded round gives the digits for display. `bets` has a real FK to
       // `rounds`, so this resolves reliably.
+      //
+      // Issue #85: single_bets/double_bets/triple_bets, round_number, and
+      // is_settled used to be selected here too, but nothing in the mapping
+      // below ever read them -- fetched every session load, then discarded.
+      // Removed rather than left unused; the player-facing "Picks:" detail
+      // they would have fed was a confirmed-unwanted feature, not a bug to fix.
       var query = _db.from(Tbl.bets).select(
-            'id, round_id, single_bets, double_bets, triple_bets, '
+            'id, round_id, '
             'total_stake, single_payout, double_payout, triple_payout, '
-            'total_payout, is_settled, created_at, '
-            'rounds!inner ( round_number, red, green, black )',
+            'total_payout, created_at, '
+            'rounds!inner ( red, green, black )',
           );
 
       if (since != null) {

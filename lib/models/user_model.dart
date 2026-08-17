@@ -51,15 +51,4 @@ class UserModel {
         isActive: isActive ?? this.isActive,
         token: token ?? this.token,
       );
-
-  /// Persisted to SharedPreferences. The token is deliberately excluded — it is
-  /// stored separately, and duplicating it here meant the raw JWT sat in a
-  /// second plaintext key (audit finding S-1).
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'username': username,
-        'role': role,
-        'coin_balance': coinBalance,
-        'is_active': isActive,
-      };
 }
