@@ -96,7 +96,6 @@ class GameProvider extends ChangeNotifier {
 
   // ── Spin state ────────────────────────────────────────────────────
   bool _isSpinning = false;
-  bool _isWaitingForResult = false;
   bool _spinAborted = false; // set true when user exits mid-spin
   SpinResult? _lastResult;
   SpinResult? _lastWinBoxResult;
@@ -158,7 +157,6 @@ class GameProvider extends ChangeNotifier {
   ChipValue? get activeChip  => _activeChip;
   BetBoardState get board    => _board;
   bool get isSpinning        => _isSpinning;
-  bool get isWaitingForResult => _isWaitingForResult;
   SpinResult? get lastResult => _lastResult;
   SpinResult? get lastWinBoxResult => _lastWinBoxResult;
   SpinResult? get pendingResult => _pendingResult;
@@ -940,7 +938,6 @@ class GameProvider extends ChangeNotifier {
     final revealCompleter = Completer<void>();
     _wheelRevealCompleter = revealCompleter;
     _pendingResult = pendingSpin;
-    _isWaitingForResult = false;
     notifyListeners();
 
     // Wait for the wheel to report it has genuinely finished revealing all 3
@@ -1043,7 +1040,6 @@ class GameProvider extends ChangeNotifier {
     }
 
     // Cleanup and auto-resume UTC timer for next round cleanly at 90s
-    _isWaitingForResult = false;
     _lastResult = null;
 
     if (isCatchUpReplay) {

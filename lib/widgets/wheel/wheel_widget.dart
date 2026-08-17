@@ -36,14 +36,8 @@ class _WheelWidgetState extends State<WheelWidget>
   double _greenTarget = 0;
   double _blackTarget = 0;
 
-  // ── Idle rotation (plays between spins) ─────────────────────────────────
-  // Red + Black → clockwise (+)   Green → anticlockwise (−)
-  // Speed: 1 full rotation per 6 seconds
-  late AnimationController _idleCtrl;
-
   // ── Hub state flags ───────────────────────────────────────────────────────
   bool _isActivelySpinning = false; // true only during _spinToResult
-  bool _isPreSpinning      = false; // true during API call waiting
   bool _spinStarted     = false;
   bool _showSmoke       = false;
   bool _showN           = false;
@@ -109,12 +103,6 @@ class _WheelWidgetState extends State<WheelWidget>
       }
     });
 
-    // _idleCtrl kept but not started — wheel is static when not spinning.
-    _idleCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 8000),
-    );
-
     // ── N letter pulse ────────────────────────────────────────────────────────
     _nPulseCtrl = AnimationController(
       vsync: this,
@@ -175,42 +163,11 @@ class _WheelWidgetState extends State<WheelWidget>
       });
     }
 
-    if (!game.isSpinning) {
-      // Aborted or reset
-      if (_isPreSpinning) {
-        _idleCtrl.stop();
-        _idleCtrl.reset();
-        setState(() {
-          _isPreSpinning = false;
-          _spinStarted = false;
-          _showSmoke = false;
-          _showN = false;
-        });
-      }
-      return;
-    }
+    if (!game.isSpinning) return;
 
-    if (game.isSpinning && game.isWaitingForResult && !_isPreSpinning) {
-      _startPreSpin();
-    } else if (result != null && !_isActivelySpinning) {
+    if (result != null && !_isActivelySpinning) {
       _spinToResult(result);
     }
-  }
-
-  void _startPreSpin() {
-    _idleCtrl.duration = const Duration(milliseconds: 625);
-    _idleCtrl.repeat();
-    SoundService().playSpinStart();
-    setState(() {
-      _isPreSpinning   = true;
-      _spinStarted     = true;
-      _showSmoke       = true;
-      _showN           = true;
-      _showFinalResult = false;
-      _showRedGlow     = false;
-      _showGreenGlow   = false;
-      _showBlackGlow   = false;
-    });
   }
 
   /// Calculates CW rotation so [digit] lands at top. Used for Red and Black.
@@ -237,20 +194,6 @@ class _WheelWidgetState extends State<WheelWidget>
   }
 
   Future<void> _spinToResult(SpinResult result) async {
-    final bool wasPreSpinning = _isPreSpinning;
-
-    if (_isPreSpinning) {
-      // Capture exact current angles before stopping idle controller
-      final offset = _idleCtrl.value * 2 * pi;
-      _redAngle   += offset;
-      _greenAngle -= offset;
-      _blackAngle += offset;
-      
-      _idleCtrl.stop();
-      _idleCtrl.reset();
-      _isPreSpinning = false;
-    }
-
     // Red: 4 rotations (over 2.5 seconds)
     // Green: 8 rotations (over 5.0 seconds)
     // Black: 11 rotations (over 7.0 seconds)
@@ -274,9 +217,7 @@ class _WheelWidgetState extends State<WheelWidget>
       _showBlackGlow      = false;
     });
 
-    if (!wasPreSpinning) {
-      SoundService().playSpinStart();
-    }
+    SoundService().playSpinStart();
     _redCtrl.reset();
     _greenCtrl.reset();
     _blackCtrl.reset();
@@ -297,7 +238,7 @@ class _WheelWidgetState extends State<WheelWidget>
       _blackAngle = _blackTarget;
     }
 
-    // Wheel returns to static idle rotation after spin
+    // Wheel returns to static position after spin
     if (mounted) {
       setState(() => _isActivelySpinning = false);
     }
@@ -309,7 +250,6 @@ class _WheelWidgetState extends State<WheelWidget>
     _redCtrl.dispose();
     _greenCtrl.dispose();
     _blackCtrl.dispose();
-    _idleCtrl.dispose();
     _nPulseCtrl.dispose();
     super.dispose();
   }
@@ -341,7 +281,7 @@ class _WheelWidgetState extends State<WheelWidget>
       children: [
         // ── Layer 1: Animated rings ──────────────────────────────────────
         // AnimatedBuilder rebuilds ONLY the CustomPaint each frame.
-        // Listens to all 4 controllers (3 spin + 1 idle).
+        // Listens to all 3 spin controllers.
         Transform.translate(
           offset: Offset(0, offsetY),
           child: AnimatedBuilder(
@@ -349,7 +289,6 @@ class _WheelWidgetState extends State<WheelWidget>
               _redCtrl,
               _greenCtrl,
               _blackCtrl,
-              _idleCtrl,
             ]),
             builder: (_, __) {
               final double redA;
@@ -361,12 +300,6 @@ class _WheelWidgetState extends State<WheelWidget>
                 redA   = _redAngle   + _redAnim.value   * (_redTarget   - _redAngle);
                 greenA = _greenAngle + _greenAnim.value * (_greenTarget - _greenAngle);
                 blackA = _blackAngle + _blackAnim.value * (_blackTarget - _blackAngle);
-              } else if (_isPreSpinning) {
-                // ── Pre-spin waiting for API: spin fast CW/CCW ───────────
-                final offset = _idleCtrl.value * 2 * pi;
-                redA   = _redAngle   + offset; // clockwise
-                greenA = _greenAngle - offset; // anticlockwise
-                blackA = _blackAngle + offset; // clockwise
               } else {
                 // Static when not spinning
                 redA   = _redAngle;
