@@ -1,6 +1,6 @@
 name: best_smart_game
 description: BSG - Best Smart Game Casino App
-version: 2.0.8+64
+version: 2.0.8+65
 publish_to: none
 
 environment:
