@@ -62,6 +62,12 @@ class RoundSyncService extends ChangeNotifier {
   Future<void> attach(GameProvider game, AuthProvider auth) async {
     _isConnecting = true;
     _connectionError = null;
+    // Issue #56: RoundSyncService is a singleton, so without this a quick
+    // detach()/attach() cycle (leave the game screen, come right back)
+    // inherited whatever strikes _poll() had already accumulated before the
+    // player left. A single fresh failure after re-entry could then be
+    // enough to trip the 3-strike threshold below, not the intended 3.
+    _failedPollCount = 0;
     notifyListeners();
 
     game.startCountdown();
@@ -161,8 +167,24 @@ class RoundSyncService extends ChangeNotifier {
   }
 
   /// Fetches the initial round state when joining the game screen.
+  ///
+  /// Issue #56: retries silently up to 3 times, ~500ms apart, before giving
+  /// up -- mirroring _poll()'s own 3-strike tolerance below. Previously this
+  /// was a single, ungraced attempt: unlike every other reconnection check
+  /// in this service, one bad instant right at screen-open (a real
+  /// possibility, not a rare fluke -- e.g. quickly leaving and re-entering
+  /// mid-blip) was enough on its own to trigger the severe "Connection
+  /// Lost" popup, which always ends in a full logout regardless of whether
+  /// the very next check would have succeeded.
   Future<void> _fetchInitialRound(GameProvider game, AuthProvider auth) async {
-    final round = await _api.getCurrentRound();
+    GlobalRoundState? round;
+    var attempt = 1;
+    while (true) {
+      round = await _api.getCurrentRound();
+      if (round != null || attempt >= 3) break;
+      attempt++;
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
     if (round == null) {
       _isConnected = false;
       _isConnecting = false;
