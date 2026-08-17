@@ -202,4 +202,19 @@ class BetError {
   static const unauthenticated   = 'UNAUTHENTICATED';
   static const accountBlocked    = 'ACCOUNT_BLOCKED';
   static const offline           = 'OFFLINE';
+
+  /// Issue #23: this account isn't a player (P0114) -- e.g. a staff account
+  /// somehow ended up on the game screen and tried to bet. A real, final
+  /// answer from the server, not a connectivity problem -- never retried,
+  /// never routed to the connection-lost treatment.
+  static const notAPlayer        = 'NOT_A_PLAYER';
+
+  /// Issue #23: mapError's honest catch-all for any error this app doesn't
+  /// specifically recognize. Previously defaulted to [offline], which
+  /// falsely blamed the player's connection for literally anything
+  /// unmapped. Kept in the same retry bucket as offline/unauthenticated
+  /// (an unrecognized error might still be a transient blip worth one more
+  /// try), but displayed with its own honest "something went wrong"
+  /// message rather than a network-specific one.
+  static const unknown           = 'UNKNOWN';
 }

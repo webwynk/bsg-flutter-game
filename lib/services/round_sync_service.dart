@@ -312,7 +312,13 @@ class RoundSyncService extends ChangeNotifier {
     // outage still fails fast -- worst case this adds ~2s, comfortably
     // inside the 5-second window between the submission trigger (05s) and
     // the round's own close (00s).
-    const retryableErrors = {BetError.offline, BetError.unauthenticated};
+    // Issue #23: UNKNOWN joins this set for the same reason OFFLINE is here --
+    // an error this app doesn't recognize might still be a transient blip
+    // worth one more try. NOT_A_PLAYER deliberately stays out: it's a
+    // deterministic final answer from the server (this account isn't a
+    // player), so retrying it would only waste the 5-second submission
+    // window on a call that will never succeed.
+    const retryableErrors = {BetError.offline, BetError.unauthenticated, BetError.unknown};
     var attempt = 1;
     while (!result.success && retryableErrors.contains(result.error) && attempt < 3) {
       attempt++;

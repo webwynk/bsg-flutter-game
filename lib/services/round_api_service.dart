@@ -196,15 +196,29 @@ class RoundApiService {
     if (has(ErrCode.roundClosed, 'round_closed')) return BetError.roundClosed;
     if (has(ErrCode.roundNotFound, 'round_not_found')) return BetError.roundClosed;
     if (has(ErrCode.badBetKey, 'bad_')) return BetError.badKey;
+    // Issue #23: a staff account somehow reached the game screen and tried
+    // to bet -- exhaustively confirmed only place_bet can ever raise this,
+    // never get_current_round, so this can only be produced from a bet
+    // submission, never the background round-state poller.
+    if (has(ErrCode.notAPlayer, 'only players may place bets')) return BetError.notAPlayer;
 
     // No case for EMPTY_BET (P0125): confirmed unreachable from this app --
     // place_bet is only ever called with a non-empty board, independently
     // guarded at three separate points before any request reaches the
     // server. See ErrCode's own comment for the full explanation. If this
     // ever changes, add the case back rather than letting it silently fall
-    // through to the generic OFFLINE case below.
-
-    return BetError.offline;
+    // through to the generic UNKNOWN case below.
+    //
+    // Issue #23: the true catch-all for anything genuinely unrecognized.
+    // Previously defaulted to OFFLINE, which falsely blamed the player's
+    // connection for literally any unmapped error -- including this file's
+    // own documented design goal of not conflating server errors with real
+    // network errors. UNKNOWN stays in the same retry bucket as OFFLINE
+    // (round_sync_service.dart's retryableErrors) since an error this app
+    // doesn't recognize might still be a transient blip worth one more try,
+    // but displays its own honest "something went wrong" message instead of
+    // a network-specific one.
+    return BetError.unknown;
   }
 
   /// Why the last [getCurrentRound] failed, as a [BetError] sentinel.

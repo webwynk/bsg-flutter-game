@@ -454,6 +454,24 @@ class _GameScreenState extends State<GameScreen> {
         'ROUND CLOSED',
         'Betting for that round closed before your bet arrived. Your coins have been returned — please try the next round.'
       ),
+      // Issue #23: NOT_A_PLAYER means the server rejected this bet before
+      // touching the balance at all (place_bet's role check runs before any
+      // apply_coin_movement call -- verified directly against the live SQL),
+      // so there is nothing to "return" here, unlike the other cases above.
+      // A genuine account/permissions problem, not a transient one -- worth
+      // telling the player to contact support rather than "try next round".
+      'NOT_A_PLAYER' => (
+        'ACCOUNT NOT ELIGIBLE',
+        'This account cannot place bets. Please contact your agent or support.'
+      ),
+      // Issue #23: the honest catch-all for a genuinely unrecognized server
+      // error, after retries already failed -- kept deliberately separate
+      // from the default message below so a future bespoke case can be added
+      // here without disturbing UNKNOWN's own wording.
+      'UNKNOWN' => (
+        'BET NOT PLACED',
+        'Something went wrong on our end and your bet could not be placed. Your coins have been returned — please try the next round.'
+      ),
       _ => (
         'BET NOT PLACED',
         'Your bet could not be sent to the server. Your coins have been returned — please try the next round.'
