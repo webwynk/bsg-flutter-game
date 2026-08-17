@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -105,7 +106,7 @@ class _DoubleBody extends StatelessWidget {
     final gridAvailH = availH - colArrowH - gap;
 
     // Keep cells square; grid fills all available space
-    final cs = math_min(gridAvailW / 10, gridAvailH / 10);
+    final cs = min(gridAvailW / 10, gridAvailH / 10);
     final gridW = cs * 10;
     final gridH = cs * 10;
     final fontSize = cs * 0.30;
@@ -271,7 +272,7 @@ class _TripleBody extends StatelessWidget {
     final gridAvailW = availW - _rowArrW - _chipBtnW - _gap * 2;
     final gridAvailH = availH - _tabH - _colArrH - _gap * 2;
 
-    final cs       = math_min(gridAvailW / 10, gridAvailH / 10);
+    final cs       = min(gridAvailW / 10, gridAvailH / 10);
     final gridW    = cs * 10;
     final gridH    = cs * 10;
     final fontSize = cs * 0.26;
@@ -442,5 +443,3 @@ class _TripleBody extends StatelessWidget {
   }
 }
 
-// ignore: non_constant_identifier_names
-double math_min(double a, double b) => a < b ? a : b;

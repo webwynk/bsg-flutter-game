@@ -17,10 +17,6 @@ class UserModel {
   /// negative and never fractional, so int is exact here.
   final int coinBalance;
 
-  /// Monotonic counter bumped by the database on every balance change. Used to
-  /// discard stale responses; see AuthProvider.updateBalanceWithVersion.
-  final int ledgerVersion;
-
   final bool isActive;
   final String? token;
 
@@ -29,7 +25,6 @@ class UserModel {
     required this.username,
     this.role = 'player',
     required this.coinBalance,
-    this.ledgerVersion = 0,
     this.isActive = true,
     this.token,
   });
@@ -39,14 +34,12 @@ class UserModel {
         username: json['username']?.toString() ?? '',
         role: json['role']?.toString() ?? 'player',
         coinBalance: (json['coin_balance'] as num?)?.toInt() ?? 0,
-        ledgerVersion: (json['ledger_version'] as num?)?.toInt() ?? 0,
         isActive: json['is_active'] as bool? ?? true,
         token: json['token']?.toString(),
       );
 
   UserModel copyWith({
     int? coinBalance,
-    int? ledgerVersion,
     String? token,
     bool? isActive,
   }) =>
@@ -55,7 +48,6 @@ class UserModel {
         username: username,
         role: role,
         coinBalance: coinBalance ?? this.coinBalance,
-        ledgerVersion: ledgerVersion ?? this.ledgerVersion,
         isActive: isActive ?? this.isActive,
         token: token ?? this.token,
       );
@@ -68,7 +60,6 @@ class UserModel {
         'username': username,
         'role': role,
         'coin_balance': coinBalance,
-        'ledger_version': ledgerVersion,
         'is_active': isActive,
       };
 }

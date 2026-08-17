@@ -25,7 +25,6 @@ class RoundSyncService extends ChangeNotifier {
   GlobalRoundState? _currentRound;
   String? _betRoundId;    // FIX BUG #6: Track the round ID bets were submitted to
   bool _isConnected = false;
-  bool _isConnecting = false;
   String? _connectionError;
   int _failedPollCount = 0;
 
@@ -47,7 +46,6 @@ class RoundSyncService extends ChangeNotifier {
   GlobalRoundState? get currentRound     => _currentRound;
   String? get betRoundId                 => _betRoundId;
   bool get isConnected                   => _isConnected;
-  bool get isConnecting                  => _isConnecting;
   String? get connectionError            => _connectionError;
   String? get currentRoundId             => _currentRound?.roundId;
 
@@ -70,7 +68,6 @@ class RoundSyncService extends ChangeNotifier {
   /// Called from GameScreen.initState — attaches to the game provider
   Future<void> attach(GameProvider game, AuthProvider auth) async {
     final myGeneration = ++_attachGeneration;
-    _isConnecting = true;
     _connectionError = null;
     // Issue #56: RoundSyncService is a singleton, so without this a quick
     // detach()/attach() cycle (leave the game screen, come right back)
@@ -157,7 +154,6 @@ class RoundSyncService extends ChangeNotifier {
       if (!_isConnected || _connectionError != null) {
         _isConnected = true;
         _connectionError = null;
-        _isConnecting = false;
         notifyListeners();
       }
 
@@ -215,7 +211,6 @@ class RoundSyncService extends ChangeNotifier {
 
     if (round == null) {
       _isConnected = false;
-      _isConnecting = false;
       // Report the ACTUAL cause. This used to be hard-coded to NO_CONNECTION,
       // so a server-side failure was indistinguishable from a dead network —
       // which is how a broken draw_round presented to the player as
@@ -227,7 +222,6 @@ class RoundSyncService extends ChangeNotifier {
     _currentRound = round;
     _calibrateServerTimeOffset(round);
     _isConnected = true;
-    _isConnecting = false;
     _connectionError = null;
     notifyListeners();
 

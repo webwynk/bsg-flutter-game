@@ -8,8 +8,6 @@ import '../../providers/history_provider.dart';
 import '../../models/spin_result_model.dart';
 import '../../models/bet_model.dart';
 import '../../theme/app_colors.dart';
-// ignore: unused_import
-import '../../theme/app_text_styles.dart';
 import '../../services/sound_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────

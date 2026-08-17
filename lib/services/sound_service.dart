@@ -83,7 +83,6 @@ class SoundService {
     }
   }
   Future<void> playWin()          async => _play('win.mp3');
-  Future<void> playLose()         async => _play('lose.mp3');
   Future<void> playChipClick()    async => _playSfx('button_click.mp3');
   Future<void> playButtonClick()  async => _playSfx('button_click.mp3');
   Future<void> playNumberSelect() async => _playSfx('number-select.mp3');
@@ -119,9 +118,4 @@ class SoundService {
     _voicePlayer.stop();
   }
 
-  void dispose() {
-    _player.dispose();
-    _sfxPlayer.dispose();
-    _voicePlayer.dispose();
-  }
 }

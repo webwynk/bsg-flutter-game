@@ -133,7 +133,6 @@ class Field {
 class Tbl {
   Tbl._();
 
-  static const profiles = 'profiles';
   static const bets     = 'bets';
   static const rounds   = 'rounds';
 }

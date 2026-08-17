@@ -147,20 +147,15 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildCard() {
-    return AnimatedBuilder(
-      animation: const AlwaysStoppedAnimation(0),
-      builder: (context, child) {
-        return TweenAnimationBuilder<double>(
-          tween: Tween(begin: _shaking ? -8 : 0, end: 0),
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.elasticOut,
-          builder: (_, val, child) => Transform.translate(
-            offset: Offset(val, 0),
-            child: child,
-          ),
-          child: _cardContent(),
-        );
-      },
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: _shaking ? -8 : 0, end: 0),
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.elasticOut,
+      builder: (_, val, child) => Transform.translate(
+        offset: Offset(val, 0),
+        child: child,
+      ),
+      child: _cardContent(),
     );
   }
 

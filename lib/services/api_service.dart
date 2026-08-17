@@ -298,23 +298,6 @@ class ApiService {
     }
   }
 
-  /// The player's own profile row. RLS restricts this to their own record.
-  Future<Map<String, dynamic>?> fetchProfile(String userId) async {
-    try {
-      final rows = await _db
-          .from(Tbl.profiles)
-          .select('id, username, coin_balance, ledger_version, is_active')
-          .eq('id', userId)
-          .limit(1);
-      if (rows.isNotEmpty) {
-        return Map<String, dynamic>.from(rows.first as Map);
-      }
-    } catch (e) {
-      debugPrint('ApiService.fetchProfile: $e');
-    }
-    return null;
-  }
-
   /// Changes the player's password after re-verifying the current one.
   Future<bool> changePassword({
     required String username,

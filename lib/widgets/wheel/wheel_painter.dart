@@ -120,7 +120,6 @@ class WheelPainter extends CustomPainter {
       _drawNumber(canvas, _digits[i].toString(), Offset(textX, textY),
         midAngle + pi / 2, numColor,
         fontSize: (innerR - outerR).abs() * 0.46,
-        isGlow: false, // Selected number does not glow
       );
     }
 
@@ -128,21 +127,16 @@ class WheelPainter extends CustomPainter {
   }
 
   void _drawNumber(Canvas canvas, String text, Offset pos,
-      double rotation, Color color, {double fontSize = 14, bool isGlow = false}) {
+      double rotation, Color color, {double fontSize = 14}) {
     final tp = TextPainter(
       text: TextSpan(
         text: text,
         style: TextStyle(
           fontFamily: 'Oswald',
-          fontWeight: isGlow ? FontWeight.w900 : FontWeight.w600,
-          fontSize: (isGlow ? fontSize * 1.15 : fontSize).clamp(7.0, 24.0),
+          fontWeight: FontWeight.w600,
+          fontSize: fontSize.clamp(7.0, 24.0),
           color: color,
           shadows: [
-            if (isGlow)
-              Shadow(
-                color: Colors.white.withValues(alpha: 0.8),
-                blurRadius: 4,
-              ),
             Shadow(
               color: Colors.black87,
               blurRadius: 1.5,
