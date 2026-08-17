@@ -119,7 +119,20 @@ class ApiService {
     try {
       auth = await _db.auth.signInWithPassword(email: emailFor(user), password: pass);
     } on AuthException catch (e) {
-      debugPrint('ApiService.login auth failed: ${e.message}');
+      debugPrint('ApiService.login auth failed: ${e.message} (code: ${e.code})');
+      // Issue #58: an account whose block has already fully taken effect at
+      // the Auth layer (not just profiles.is_active) is rejected right here
+      // by Supabase itself -- attempt_player_login above never gets a
+      // chance to catch it if its own call happened to hit any transport
+      // hiccup. Confirmed live against a disposable test account: GoTrue
+      // returns exactly this code for an already-banned sign-in attempt.
+      if (e.code == AuthErrCode.userBanned) {
+        return const LoginOutcome(
+          success: false,
+          accountBlocked: true,
+          error: 'You are temporarily blocked. Please contact your agent.',
+        );
+      }
       return const LoginOutcome(success: false, error: 'Wrong username or password');
     } catch (e) {
       debugPrint('ApiService.login transport error: $e');
@@ -149,9 +162,18 @@ class ApiService {
         await _db.auth.signOut();
 
         if (reason == ReasonCode.accountBlocked) {
+          // Issue #58: this used to omit accountBlocked:true, so
+          // login_screen.dart fell through to its generic inline-text
+          // branch instead of the dedicated blocked-account popup --
+          // despite session_login having correctly detected the block.
+          // Wording aligned with the other two detectors of the same
+          // condition (attempt_player_login above, and the AuthException
+          // userBanned branch) so the player sees one consistent message
+          // no matter which of the three catches it.
           return const LoginOutcome(
             success: false,
-            error: 'Account is blocked. Please contact your Agent.',
+            accountBlocked: true,
+            error: 'You are temporarily blocked. Please contact your agent.',
           );
         }
         if (reason == ReasonCode.sessionActiveElsewhere) {

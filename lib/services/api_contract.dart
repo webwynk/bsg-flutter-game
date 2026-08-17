@@ -167,6 +167,24 @@ class ReasonCode {
   static const sessionMissing = 'session_missing';
 }
 
+/// Error codes raised by Supabase Auth itself (GoTrue's own `AuthException`),
+/// as opposed to [ErrCode] (our RPCs' Postgres errcodes) or [ReasonCode]
+/// (our RPCs' own `reason` payload field). A completely separate namespace,
+/// one level below either of those -- these describe why the sign-in call
+/// itself failed, before any of our own functions ever ran.
+class AuthErrCode {
+  AuthErrCode._();
+
+  /// Issue #58: a fresh sign-in attempt against an account already banned via
+  /// `ban_duration` (set by the dashboard's block action, alongside
+  /// `profiles.is_active`). Confirmed live against a disposable test account:
+  /// GoTrue rejects the password grant itself with this code -- before
+  /// `session_login` (or even a successful sign-in) ever runs, so relying on
+  /// `session_login`'s own `account_blocked` check alone misses this case
+  /// entirely. Matches gotrue's own `ErrorCode.userBanned`.
+  static const userBanned = 'user_banned';
+}
+
 /// PostgreSQL error codes raised by the v2 functions, mapped to the sentinels
 /// the UI reacts to. See the RAISE statements in the functions migration.
 class ErrCode {
