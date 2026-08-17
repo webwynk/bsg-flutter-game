@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../services/api_contract.dart';
 import '../services/api_service.dart';
-import '../services/auth_service.dart';
 
 /// Owns the signed-in player and their coin balance.
 ///
@@ -149,7 +148,6 @@ class AuthProvider extends ChangeNotifier {
     _forcedLogout = false;
     _forcedLogoutReason = null;
 
-    await AuthService().saveSession(_user!, _sessionStartAt!);
     _startHeartbeat();
 
     _loading = false;
@@ -208,7 +206,6 @@ class AuthProvider extends ChangeNotifier {
     if (_user != null) {
       await ApiService().logout();
     }
-    await AuthService().clearSession();
 
     _user = null;
     _sessionStartAt = null;
