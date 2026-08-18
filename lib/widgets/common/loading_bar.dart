@@ -40,7 +40,7 @@ class _LoadingBar3DState extends State<LoadingBar3D>
       duration: const Duration(milliseconds: 2200),
     );
     _fill = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
-    _ctrl.forward();
+    _ctrl.repeat(reverse: true);
   }
 
   @override

@@ -168,8 +168,6 @@ class _ModeTab extends StatelessWidget {
               child: _VerticalInfoBox(
                 label: 'WIN',
                 value: '$win',
-                active: isActive,
-                highlight: win > 0,
               ),
             ),
             // PLAY box (rounded rectangle, 35% height)
@@ -178,8 +176,6 @@ class _ModeTab extends StatelessWidget {
               child: _VerticalInfoBox(
                 label: 'PLAY',
                 value: '$play',
-                active: isActive,
-                highlight: play > 0,
               ),
             ),
             const SizedBox(height: 8),
@@ -232,14 +228,10 @@ class _ModeTab extends StatelessWidget {
 class _VerticalInfoBox extends StatelessWidget {
   final String label;
   final String value;
-  final bool active;
-  final bool highlight;
 
   const _VerticalInfoBox({
     required this.label,
     required this.value,
-    required this.active,
-    this.highlight = false,
   });
 
   @override

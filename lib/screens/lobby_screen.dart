@@ -21,16 +21,16 @@ class LobbyScreen extends StatefulWidget {
 
 class _LobbyScreenState extends State<LobbyScreen> {
   static const List<_GameInfo> _games = [
-    _GameInfo('Triple Chance', 'assets/images/card_triple_chance.webp', true),
-    _GameInfo('Coming Soon', 'assets/images/card_coming_soon.webp', false),
-    _GameInfo('Coming Soon', 'assets/images/card_coming_soon.webp', false),
-    _GameInfo('Coming Soon', 'assets/images/card_coming_soon.webp', false),
-    _GameInfo('Coming Soon', 'assets/images/card_coming_soon.webp', false),
-    _GameInfo('Coming Soon', 'assets/images/card_coming_soon.webp', false),
-    _GameInfo('Coming Soon', 'assets/images/card_coming_soon.webp', false),
-    _GameInfo('Coming Soon', 'assets/images/card_coming_soon.webp', false),
-    _GameInfo('Coming Soon', 'assets/images/card_coming_soon.webp', false),
-    _GameInfo('Coming Soon', 'assets/images/card_coming_soon.webp', false),
+    _GameInfo('assets/images/card_triple_chance.webp', true),
+    _GameInfo('assets/images/card_coming_soon.webp', false),
+    _GameInfo('assets/images/card_coming_soon.webp', false),
+    _GameInfo('assets/images/card_coming_soon.webp', false),
+    _GameInfo('assets/images/card_coming_soon.webp', false),
+    _GameInfo('assets/images/card_coming_soon.webp', false),
+    _GameInfo('assets/images/card_coming_soon.webp', false),
+    _GameInfo('assets/images/card_coming_soon.webp', false),
+    _GameInfo('assets/images/card_coming_soon.webp', false),
+    _GameInfo('assets/images/card_coming_soon.webp', false),
   ];
 
   @override
@@ -1059,8 +1059,7 @@ class _GameCardState extends State<_GameCard> {
 }
 
 class _GameInfo {
-  final String name;
   final String imagePath;
   final bool isActive;
-  const _GameInfo(this.name, this.imagePath, this.isActive);
+  const _GameInfo(this.imagePath, this.isActive);
 }

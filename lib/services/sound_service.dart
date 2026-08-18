@@ -13,7 +13,6 @@ class SoundService {
   final AudioPlayer _player = AudioPlayer();
   final AudioPlayer _sfxPlayer = AudioPlayer();
   final AudioPlayer _voicePlayer = AudioPlayer();
-  bool isMuted = false;
   bool _isInGameScreen = false;
   int _fadeSessionId = 0; // tracking ID to cancel previous fade loops
 
@@ -25,7 +24,6 @@ class SoundService {
   }
 
   Future<void> _play(String fileName) async {
-    if (isMuted) return;
     try {
       await _player.stop();
       await _player.setVolume(1.0); // Reset volume to max
@@ -36,7 +34,6 @@ class SoundService {
   }
 
   Future<void> _playSfx(String fileName) async {
-    if (isMuted) return;
     try {
       await _sfxPlayer.stop();
       await _sfxPlayer.play(AssetSource('sounds/$fileName'));
@@ -46,7 +43,6 @@ class SoundService {
   }
 
   Future<void> _playVoice(String fileName) async {
-    if (isMuted) return;
     try {
       await _voicePlayer.stop();
       await _voicePlayer.play(AssetSource('sounds/$fileName'));
@@ -92,24 +88,6 @@ class SoundService {
     await _playVoice('no_bets.mp3');
   }
   Future<void> playNotification() async => _playSfx('notification-sound-effect.mp3');
-
-  void toggleMute() {
-    isMuted = !isMuted;
-    if (isMuted) {
-      _player.stop();
-      _sfxPlayer.stop();
-      _voicePlayer.stop();
-    }
-  }
-
-  void mute() {
-    isMuted = true;
-    _player.stop();
-    _sfxPlayer.stop();
-    _voicePlayer.stop();
-  }
-
-  void unmute() => isMuted = false;
 
   /// Stops all playing sounds immediately (e.g. when user exits game mid-spin).
   void stopAll() {

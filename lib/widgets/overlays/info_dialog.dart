@@ -341,7 +341,7 @@ class _CloseButtonState extends State<_CloseButton> {
             child: Text(
               'CLOSE',
               style: GoogleFonts.oswald(
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
                 fontSize: 14,
                 letterSpacing: 2.0,
                 color: Colors.white,
@@ -835,7 +835,7 @@ class _HistoryDetailDialog extends StatelessWidget {
                 child: Text('ROUND #$serialNo',
                     style: GoogleFonts.oswald(
                         fontSize: 12,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                         color: Colors.black)),
               ),
               const Spacer(),
@@ -910,7 +910,7 @@ class _HistoryDetailDialog extends StatelessWidget {
                                 style: const TextStyle(
                                   fontFamily: 'Oswald',
                                   fontSize: 14,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: FontWeight.w700,
                                   color: Color(0xFF44D680),
                                 ),
                               ),
@@ -1222,7 +1222,7 @@ class _PayoutCard extends StatelessWidget {
             Text(payout,
                 style: GoogleFonts.oswald(
                   fontSize: 22,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.goldBright,
                   shadows: [
                     Shadow(

@@ -20,7 +20,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _showPassword = false;
-  bool _shaking = false;
 
   @override
   void initState() {
@@ -45,7 +44,6 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = _passwordCtrl.text.trim();
     if (username.isEmpty || password.isEmpty) {
       auth.setError('Wrong username or password');
-      _shake();
       return;
     }
     final outcome = await auth.login(username, password);
@@ -63,7 +61,6 @@ class _LoginScreenState extends State<LoginScreen> {
     // There's no session to log out of here (login never succeeded), so OK
     // just closes the app rather than calling auth.logout().
     if (outcome.accountBlocked) {
-      _shake();
       showActionDialog(
         context,
         icon: Icons.block_rounded,
@@ -88,15 +85,6 @@ class _LoginScreenState extends State<LoginScreen> {
     // already in auth.error -- AuthProvider.login() sets it from
     // outcome.error before returning, so _errorMessage() below picks it up
     // with no further action needed here.
-
-    _shake();
-  }
-
-  void _shake() {
-    setState(() => _shaking = true);
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) setState(() => _shaking = false);
-    });
   }
 
   @override
@@ -123,7 +111,7 @@ class _LoginScreenState extends State<LoginScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               child: SizedBox(
                 width: 340,
-                child: _buildCard(),
+                child: _cardContent(),
               ),
             ),
           ),
@@ -143,19 +131,6 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildCard() {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: _shaking ? -8 : 0, end: 0),
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.elasticOut,
-      builder: (_, val, child) => Transform.translate(
-        offset: Offset(val, 0),
-        child: child,
-      ),
-      child: _cardContent(),
     );
   }
 

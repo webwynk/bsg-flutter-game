@@ -47,14 +47,12 @@ class RoundSyncService extends ChangeNotifier {
   String? get betRoundId                 => _betRoundId;
   bool get isConnected                   => _isConnected;
   String? get connectionError            => _connectionError;
-  String? get currentRoundId             => _currentRound?.roundId;
 
   // ── Polling & Server Clock Offset ──────────────────────────────────
   int? _deliveredRoundNumber;      // single-delivery lock per round number
   int? _lastRoundNumberForLimits;  // last round number play limits were refreshed for
   int _serverTimeOffset = 0;       // dynamic clock offset between server and device
 
-  int get serverTimeOffset => _serverTimeOffset;
   int get syncedNowSecs => (DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000) + _serverTimeOffset;
 
   void _calibrateServerTimeOffset(GlobalRoundState round) {

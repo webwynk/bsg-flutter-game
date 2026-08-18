@@ -37,11 +37,9 @@ class GlobalRoundState {
     this.black,
   });
 
-  bool get isDrawn => red != null && green != null && black != null;
-  bool get isSettled => phase == 'settled';
-
   /// True while the server will still accept a bet for this round.
-  bool get acceptsBets => !isDrawn && secondsInto < drawAtSecond;
+  bool get acceptsBets =>
+      !(red != null && green != null && black != null) && secondsInto < drawAtSecond;
 
   factory GlobalRoundState.fromJson(Map<String, dynamic> j) => GlobalRoundState(
         roundId: j[Field.roundId] as String,
@@ -127,7 +125,6 @@ class PlayerRoundResult {
 /// A completed round, for the history strip.
 class RecentRound {
   final String roundId;
-  final int roundNumber;
   final int red;
   final int green;
   final int black;
@@ -135,7 +132,6 @@ class RecentRound {
 
   const RecentRound({
     required this.roundId,
-    required this.roundNumber,
     required this.red,
     required this.green,
     required this.black,
@@ -144,7 +140,6 @@ class RecentRound {
 
   factory RecentRound.fromJson(Map<String, dynamic> j) => RecentRound(
         roundId: j[Field.roundId] as String,
-        roundNumber: (j[Field.roundNumber] as num).toInt(),
         red: (j[Field.red] as num).toInt(),
         green: (j[Field.green] as num).toInt(),
         black: (j[Field.black] as num).toInt(),

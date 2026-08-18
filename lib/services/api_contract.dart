@@ -134,7 +134,6 @@ class Tbl {
   Tbl._();
 
   static const bets     = 'bets';
-  static const rounds   = 'rounds';
 }
 
 /// `reason` values returned by [Rpc.sessionLogin] and [Rpc.sessionHeartbeat]

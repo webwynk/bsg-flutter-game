@@ -319,7 +319,7 @@ class _TripleBody extends StatelessWidget {
                         child: Text(
                           (p * 100).toString().padLeft(3, '0'),
                           style: GoogleFonts.oswald(
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                             fontSize: 10, // slightly larger and cleaner in Oswald
                             height: 1.0,
                             color: game.triplePage == p

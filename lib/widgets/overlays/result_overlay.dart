@@ -131,7 +131,7 @@ class _ResultOverlayState extends State<ResultOverlay> {
               style: const TextStyle(
                 fontFamily: 'Oswald',
                 fontSize: 34,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
                 color: Colors.white,
                 letterSpacing: 2.0,
               ),
@@ -173,7 +173,7 @@ class _ResultOverlayState extends State<ResultOverlay> {
             style: const TextStyle(
               fontFamily: 'Oswald',
               fontSize: 13,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               color: Colors.white,
             ),
           ),
