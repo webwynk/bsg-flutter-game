@@ -69,13 +69,6 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Issue #43 fix: was only ever fetched once, in the constructor above, so
-  // a payout-multiplier change made on the dashboard never reached an
-  // already-running app until it was fully closed and relaunched. Public so
-  // RoundSyncService can call it once per round (see _deliverResult), right
-  // when a fresh round -- and its own pinned rate -- has just begun.
-  Future<void> refreshPlayLimits() => _loadPlayLimits();
-
   // ── Mode ─────────────────────────────────────────────────────────
   String _mode = 'single';
   bool _isDrawerOpen = false;

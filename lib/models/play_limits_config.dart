@@ -19,14 +19,12 @@ class BetRejection {
 class PlayLimits {
   final int min;
   final int max;
-  final num multiplier;
 
-  PlayLimits({required this.min, required this.max, required this.multiplier});
+  PlayLimits({required this.min, required this.max});
 
   factory PlayLimits.fromJson(Map<String, dynamic> j) => PlayLimits(
         min: j['min'] as int,
         max: j['max'] as int,
-        multiplier: j['multiplier'] as num,
       );
 }
 
@@ -38,9 +36,9 @@ class PlayLimitsConfig {
   /// Hardcoded safe defaults — identical to the API fallback values.
   /// Used immediately at GameProvider construction so caps are NEVER null.
   factory PlayLimitsConfig.fallback() => PlayLimitsConfig({
-        BoardType.single: PlayLimits(min: 2, max: 10000, multiplier: 9),
-        BoardType.double_: PlayLimits(min: 2, max: 1000, multiplier: 90),
-        BoardType.triple: PlayLimits(min: 2, max: 100, multiplier: 900),
+        BoardType.single: PlayLimits(min: 2, max: 10000),
+        BoardType.double_: PlayLimits(min: 2, max: 1000),
+        BoardType.triple: PlayLimits(min: 2, max: 100),
       });
 
   factory PlayLimitsConfig.fromJson(Map<String, dynamic> j) => PlayLimitsConfig({
