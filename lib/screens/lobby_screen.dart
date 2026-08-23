@@ -913,7 +913,7 @@ class _GameCardState extends State<_GameCard> {
                           end: Alignment.bottomCenter,
                         ).createShader(bounds),
                         child: const Text(
-                          'GAME LOCKED',
+                          'COMING SOON',
                           style: TextStyle(
                             fontFamily: 'DMSans',
                             fontWeight: FontWeight.w900,
@@ -959,7 +959,12 @@ class _GameCardState extends State<_GameCard> {
                       
                       // Message
                       const Text(
-                        'This game is currently locked.\nContact your agent to activate this slot.',
+                        // Housekeeping #38 fix: the previous copy implied a
+                        // per-agent entitlement toggle that doesn't exist --
+                        // these 9 slots are reserved for games not built yet,
+                        // confirmed as the real intent, not a restriction any
+                        // agent can lift.
+                        'This game hasn\'t been released yet.\nMore games are on the way -- stay tuned!',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontFamily: 'DMSans',
