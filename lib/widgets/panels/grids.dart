@@ -23,7 +23,7 @@ class GridSingle extends StatelessWidget {
           builder: (_, c) {
             final cellW = (c.maxWidth - 2) / 2;
             final cellH = (c.maxHeight - 8) / 5;
-            final cs    = cellW < cellH ? cellW : cellH;
+            final cs = cellW < cellH ? cellW : cellH;
             return Center(
               child: SizedBox(
                 width: cs * 2 + 2,
@@ -46,7 +46,8 @@ class GridSingle extends StatelessWidget {
                       isEven: i % 2 == 0,
                       onTap: () => game.activeChip != null
                           ? game.placeBet(BoardType.single, key, auth)
-                          : game.removeChipFromCell(BoardType.single, key, auth),
+                          : game.removeChipFromCell(
+                              BoardType.single, key, auth),
                       fontSize: cs * 0.36,
                     );
                   },
@@ -97,9 +98,9 @@ class _DoubleBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const rowArrowW = 28.0;
-    const chipBtnW  = 36.0;
+    const chipBtnW = 36.0;
     const colArrowH = 26.0;
-    const gap       = 2.0;
+    const gap = 2.0;
 
     // Grid area available after fixed-width strips
     final gridAvailW = availW - rowArrowW - chipBtnW - gap * 2;
@@ -124,15 +125,17 @@ class _DoubleBody extends StatelessWidget {
               SizedBox(
                 width: rowArrowW,
                 child: Column(
-                  children: List.generate(10, (row) => SizedBox(
-                    height: cs,
-                    child: RowArrowButton(
-                      rowIndex: row,
-                      boardType: BoardType.double_,
-                      game: game,
-                      auth: auth,
-                    ),
-                  )),
+                  children: List.generate(
+                      10,
+                      (row) => SizedBox(
+                            height: cs,
+                            child: RowArrowButton(
+                              rowIndex: row,
+                              boardType: BoardType.double_,
+                              game: game,
+                              auth: auth,
+                            ),
+                          )),
                 ),
               ),
               const SizedBox(width: gap),
@@ -168,7 +171,8 @@ class _DoubleBody extends StatelessWidget {
                       isEven: ((i ~/ 10) + (i % 10)) % 2 == 0,
                       onTap: () => game.activeChip != null
                           ? game.placeBet(BoardType.double_, num, auth)
-                          : game.removeChipFromCell(BoardType.double_, num, auth),
+                          : game.removeChipFromCell(
+                              BoardType.double_, num, auth),
                       fontSize: fontSize,
                     );
                   },
@@ -195,15 +199,17 @@ class _DoubleBody extends StatelessWidget {
           child: Row(
             children: [
               const SizedBox(width: rowArrowW + gap),
-              ...List.generate(10, (col) => SizedBox(
-                width: cs,
-                child: ColArrowButton(
-                  colIndex: col,
-                  boardType: BoardType.double_,
-                  game: game,
-                  auth: auth,
-                ),
-              )),
+              ...List.generate(
+                  10,
+                  (col) => SizedBox(
+                        width: cs,
+                        child: ColArrowButton(
+                          colIndex: col,
+                          boardType: BoardType.double_,
+                          game: game,
+                          auth: auth,
+                        ),
+                      )),
             ],
           ),
         ),
@@ -214,15 +220,17 @@ class _DoubleBody extends StatelessWidget {
   static const _doubleRandomCounts = [5, 10, 15, 20, 25, 50, 75];
 
   static List<Widget> _buildRandomBtns(
-    GameProvider game, AuthProvider auth, double gridH) {
-    return _doubleRandomCounts.map((count) => Expanded(
-      child: RandomShortcutButton(
-        count: count,
-        boardType: BoardType.double_,
-        game: game,
-        auth: auth,
-      ),
-    )).toList();
+      GameProvider game, AuthProvider auth, double gridH) {
+    return _doubleRandomCounts
+        .map((count) => Expanded(
+              child: RandomShortcutButton(
+                count: count,
+                boardType: BoardType.double_,
+                game: game,
+                auth: auth,
+              ),
+            ))
+        .toList();
   }
 }
 
@@ -261,20 +269,20 @@ class _TripleBody extends StatelessWidget {
   });
 
   static const _tripleRandomCounts = [5, 10, 15, 20, 25, 50, 100];
-  static const _tabH     = 24.0;
-  static const _rowArrW  = 28.0;
+  static const _tabH = 24.0;
+  static const _rowArrW = 28.0;
   static const _chipBtnW = 36.0;
-  static const _colArrH  = 26.0;
-  static const _gap      = 2.0;
+  static const _colArrH = 26.0;
+  static const _gap = 2.0;
 
   @override
   Widget build(BuildContext context) {
     final gridAvailW = availW - _rowArrW - _chipBtnW - _gap * 2;
     final gridAvailH = availH - _tabH - _colArrH - _gap * 2;
 
-    final cs       = min(gridAvailW / 10, gridAvailH / 10);
-    final gridW    = cs * 10;
-    final gridH    = cs * 10;
+    final cs = min(gridAvailW / 10, gridAvailH / 10);
+    final gridW = cs * 10;
+    final gridH = cs * 10;
     final fontSize = cs * 0.26;
 
     return Column(
@@ -288,9 +296,9 @@ class _TripleBody extends StatelessWidget {
               // Which of the 10 hundred-groups (000-099, 100-199, ...)
               // currently has at least one active stake, regardless of
               // which page is being viewed -- so a bet placed on e.g. "045"
-              // stays visible as a small badge on the "000" tab even after
-              // navigating away to another tab. Computed once per rebuild
-              // (O(active bets)), not per-tab, since it's shared by all 10.
+              // keeps the "000" tab gold-highlighted even after navigating
+              // away to another tab. Computed once per rebuild (O(active
+              // bets)), not per-tab, since it's shared by all 10.
               final groupsWithBets = game.board.triple.keys
                   .map((k) => int.parse(k) ~/ 100)
                   .toSet();
@@ -301,80 +309,65 @@ class _TripleBody extends StatelessWidget {
                 child: Row(
                   children: [
                     const SizedBox(width: _rowArrW + _gap),
-                    ...List.generate(10, (p) => Expanded(
-                      child: GestureDetector(
-                        onTap: () => game.setTriplePage(p, auth),
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
-                              decoration: BoxDecoration(
-                                gradient: game.triplePage == p
+                    ...List.generate(10, (p) {
+                      // Issue #102 (revised): a tab gets the SAME gold
+                      // highlight either because it's the page currently
+                      // being viewed, or because it has an active bet
+                      // somewhere in its range -- no separate badge/dot,
+                      // per explicit request. Both cases render identically.
+                      final isHighlighted =
+                          game.triplePage == p || groupsWithBets.contains(p);
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () => game.setTriplePage(p, auth),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            margin: const EdgeInsets.symmetric(
+                                horizontal: 1, vertical: 1),
+                            decoration: BoxDecoration(
+                              gradient: isHighlighted
                                   ? const LinearGradient(
-                                      colors: [Color(0xFFFFEE66), Color(0xFFCC8800)],
+                                      colors: [
+                                        Color(0xFFFFEE66),
+                                        Color(0xFFCC8800)
+                                      ],
                                       begin: Alignment.topCenter,
                                       end: Alignment.bottomCenter,
                                     )
                                   : const LinearGradient(
-                                      colors: [Color(0xFF440800), Color(0xFF1A0000)],
+                                      colors: [
+                                        Color(0xFF440800),
+                                        Color(0xFF1A0000)
+                                      ],
                                       begin: Alignment.topCenter,
                                       end: Alignment.bottomCenter,
                                     ),
-                                borderRadius: BorderRadius.circular(3),
-                                border: Border.all(
-                                  color: game.triplePage == p
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(
+                                color: isHighlighted
                                     ? AppColors.goldBright
                                     : const Color(0xFF661100),
-                                  width: game.triplePage == p ? 1.5 : 0.8,
-                                ),
+                                width: isHighlighted ? 1.5 : 0.8,
                               ),
-                              child: Center(
-                                child: Text(
-                                  (p * 100).toString().padLeft(3, '0'),
-                                  style: GoogleFonts.oswald(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 10, // slightly larger and cleaner in Oswald
-                                    height: 1.0,
-                                    color: game.triplePage == p
+                            ),
+                            child: Center(
+                              child: Text(
+                                (p * 100).toString().padLeft(3, '0'),
+                                style: GoogleFonts.oswald(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize:
+                                      10, // slightly larger and cleaner in Oswald
+                                  height: 1.0,
+                                  color: isHighlighted
                                       ? const Color(0xFF2A1000)
                                       : Colors.white60,
-                                  ),
                                 ),
                               ),
                             ),
-                            // "Has an active bet somewhere in this group"
-                            // badge -- same deep-red/gold pair NumberCell
-                            // already uses to mean "staked" (grid_cells.dart),
-                            // reused here for visual consistency rather than
-                            // a new color. Independent of, and layered on
-                            // top of, the page-viewed gold highlight above.
-                            if (groupsWithBets.contains(p))
-                              Positioned(
-                                top: 1,
-                                right: 1,
-                                child: Container(
-                                  width: 7,
-                                  height: 7,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: const LinearGradient(
-                                      colors: [Color(0xFFD32F2F), Color(0xFF8E0000)],
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                    ),
-                                    border: Border.all(color: const Color(0xFFFFD700), width: 1),
-                                    boxShadow: const [
-                                      BoxShadow(color: Colors.black45, blurRadius: 1),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                          ],
+                          ),
                         ),
-                      ),
-                    )),
+                      );
+                    }),
                   ],
                 ),
               );
@@ -393,15 +386,17 @@ class _TripleBody extends StatelessWidget {
               SizedBox(
                 width: _rowArrW,
                 child: Column(
-                  children: List.generate(10, (row) => SizedBox(
-                    height: cs,
-                    child: RowArrowButton(
-                      rowIndex: row,
-                      boardType: BoardType.triple,
-                      game: game,
-                      auth: auth,
-                    ),
-                  )),
+                  children: List.generate(
+                      10,
+                      (row) => SizedBox(
+                            height: cs,
+                            child: RowArrowButton(
+                              rowIndex: row,
+                              boardType: BoardType.triple,
+                              game: game,
+                              auth: auth,
+                            ),
+                          )),
                 ),
               ),
               const SizedBox(width: _gap),
@@ -431,14 +426,15 @@ class _TripleBody extends StatelessWidget {
                   itemCount: 100,
                   itemBuilder: (_, i) {
                     final base = game.triplePage * 100;
-                    final num  = (base + i).toString().padLeft(3, '0');
+                    final num = (base + i).toString().padLeft(3, '0');
                     return NumberCell(
                       number: num,
                       stakedAmount: game.board.triple[num],
                       isEven: ((i ~/ 10) + (i % 10)) % 2 == 0,
                       onTap: () => game.activeChip != null
                           ? game.placeBet(BoardType.triple, num, auth)
-                          : game.removeChipFromCell(BoardType.triple, num, auth),
+                          : game.removeChipFromCell(
+                              BoardType.triple, num, auth),
                       fontSize: fontSize,
                     );
                   },
@@ -451,14 +447,16 @@ class _TripleBody extends StatelessWidget {
                 width: _chipBtnW,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: _tripleRandomCounts.map((count) => Expanded(
-                    child: RandomShortcutButton(
-                      count: count,
-                      boardType: BoardType.triple,
-                      game: game,
-                      auth: auth,
-                    ),
-                  )).toList(),
+                  children: _tripleRandomCounts
+                      .map((count) => Expanded(
+                            child: RandomShortcutButton(
+                              count: count,
+                              boardType: BoardType.triple,
+                              game: game,
+                              auth: auth,
+                            ),
+                          ))
+                      .toList(),
                 ),
               ),
             ],
@@ -472,15 +470,17 @@ class _TripleBody extends StatelessWidget {
           child: Row(
             children: [
               const SizedBox(width: _rowArrW + _gap),
-              ...List.generate(10, (col) => SizedBox(
-                width: cs,
-                child: ColArrowButton(
-                  colIndex: col,
-                  boardType: BoardType.triple,
-                  game: game,
-                  auth: auth,
-                ),
-              )),
+              ...List.generate(
+                  10,
+                  (col) => SizedBox(
+                        width: cs,
+                        child: ColArrowButton(
+                          colIndex: col,
+                          boardType: BoardType.triple,
+                          game: game,
+                          auth: auth,
+                        ),
+                      )),
             ],
           ),
         ),
@@ -488,4 +488,3 @@ class _TripleBody extends StatelessWidget {
     );
   }
 }
-
