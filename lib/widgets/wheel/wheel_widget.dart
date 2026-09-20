@@ -342,8 +342,10 @@ class _WheelWidgetState extends State<WheelWidget>
   // ─────────────────────────────────────────────────────────────────────────
   // Hub states
   //  Idle / between spins → gold wheel_hub.webp + idle rings turning
-  //  Spinning             → gold hub + smoke + n_letter (pulsing)
-  //  Done                 → white circle + result number + n_letter
+  //  Spinning             → gold hub + smoke + reveal image (pulsing)
+  //  Done                 → white circle + result number + reveal image
+  //  "Reveal image" is n_letter.webp when this round has no bonus active,
+  //  or 2X/3X/4X.webp when it does -- see _hubImageAsset() below.
   // ─────────────────────────────────────────────────────────────────────────
 
   /// Maps this round's bonus multiplier (1/2/3/4) to the reveal-hub image
