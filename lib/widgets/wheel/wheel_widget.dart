@@ -382,8 +382,16 @@ class _WheelWidgetState extends State<WheelWidget>
           child: LayoutBuilder(
             builder: (_, c) {
               final w = c.maxWidth;
-              final numFontSize = (w * 0.35).clamp(16.0, 40.0);
-              final nImgSize    = (w * 0.20).clamp(8.0, 24.0);
+              // Enlarged (both the ratio and the clamp floor/ceiling) -- the
+              // old 0.35/0.20 ratios left ~35-40% of the hub circle's
+              // available vertical space unused at typical mobile hub sizes,
+              // making the result number and especially the bonus badge
+              // (N/2X/3X/4X) hard to read. Verified the new total content
+              // height (number + gap + badge) still fits inside the circle
+              // with margin across the realistic hub-size range -- nothing
+              // gets clipped by the ClipOval mask above.
+              final numFontSize = (w * 0.48).clamp(18.0, 48.0);
+              final nImgSize    = (w * 0.32).clamp(12.0, 32.0);
               final gap         = w * 0.05;
 
               return Column(
