@@ -54,7 +54,7 @@ class HistoryProvider extends ChangeNotifier {
             'id, round_id, '
             'total_stake, single_payout, double_payout, triple_payout, '
             'total_payout, created_at, '
-            'rounds!inner ( red, green, black )',
+            'rounds!inner ( red, green, black, bonus_multiplier )',
           );
 
       if (since != null) {
@@ -98,6 +98,8 @@ class HistoryProvider extends ChangeNotifier {
             tripleWinAmount: (row[Field.triplePayout] as num?)?.toInt() ?? 0,
             netChange: rowPayout - rowStake,
             createdAt: DateTime.tryParse(row['created_at'] as String? ?? '') ?? DateTime.now(),
+            // Issue #100: this round's own pinned bonus multiplier (1/2/3/4 = N/2X/3X/4X).
+            bonusMultiplier: (round[Field.bonusMultiplier] as num?)?.toInt() ?? 1,
           );
         }));
 

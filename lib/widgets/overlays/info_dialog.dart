@@ -672,16 +672,54 @@ class _HistoryRowState extends State<_HistoryRow> {
                   bold: true,
                   center: true),
               Container(width: 1, color: Colors.white10),
-              _BodyCell(
-                  text: isWin
-                      ? '+${widget.record.winAmount}'
-                      : '0',
-                  flex: 10,
-                  color: isWin
-                      ? const Color(0xFF44D680)
-                      : Colors.white30,
-                  bold: isWin,
-                  center: true),
+              // Issue #100: WIN cell gets a small "2X"/"3X"/"4X" tag under
+              // the amount, only when this round's own pinned bonus was
+              // actually active -- normal (N) rows render identically to
+              // before, single line, via the same _BodyCell every other
+              // column still uses.
+              widget.record.bonusMultiplier == 1
+                  ? _BodyCell(
+                      text: isWin ? '+${widget.record.winAmount}' : '0',
+                      flex: 10,
+                      color: isWin
+                          ? const Color(0xFF44D680)
+                          : Colors.white30,
+                      bold: isWin,
+                      center: true)
+                  : Expanded(
+                      flex: 10,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 7, horizontal: 4),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              isWin ? '+${widget.record.winAmount}' : '0',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.oswald(
+                                fontSize: 11,
+                                fontWeight:
+                                    isWin ? FontWeight.w700 : FontWeight.w400,
+                                color: isWin
+                                    ? const Color(0xFF44D680)
+                                    : Colors.white30,
+                              ),
+                            ),
+                            Text(
+                              '${widget.record.bonusMultiplier}X',
+                              style: GoogleFonts.oswald(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.goldBright,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
             ],
           ),
         ),
@@ -947,6 +985,12 @@ class _HistoryDetailDialog extends StatelessWidget {
             _DetailRow('Result',
                 '${record.red} . ${record.green} . ${record.black}',
                 color: Colors.white70),
+            // Issue #100: this round's own pinned bonus multiplier.
+            _DetailRow('Bonus',
+                record.bonusMultiplier == 1 ? 'N' : '${record.bonusMultiplier}X',
+                color: record.bonusMultiplier == 1
+                    ? Colors.white70
+                    : AppColors.goldBright),
             _DetailRow('Total Bet', '${record.deductedAmount} coins',
                 color: AppColors.goldGlow),
             _DetailRow('Total Win', '${record.winAmount} coins',
