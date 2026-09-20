@@ -403,22 +403,14 @@ class _WheelWidgetState extends State<WheelWidget>
               // shifted by the same 3px so it applies uniformly across the
               // size range, not just at the extremes.
               final numFontSize = ((w * 0.48) - 3.0).clamp(15.0, 45.0);
+              // N/2X/3X/4X assets are all 500x468 (ratio 1.068) -- the user
+              // replaced the badge images so all four now share the same
+              // dimensions. (An earlier version of this code compensated for
+              // a real aspect-ratio mismatch between the old N asset
+              // (886x928) and the old badge assets (278x170); that mismatch
+              // no longer exists, so nImgSize alone is correct for all four
+              // -- no separate bonus-only sizing needed.)
               final nImgSize    = (w * 0.32).clamp(12.0, 32.0);
-              // 2X/3X/4X assets are 278x170 (W/H=1.635, measured) vs N's
-              // near-square n_letter.webp at 886x928 (W/H=0.955). Inside the
-              // same square nImgSize box with BoxFit.contain, N fills ~100%
-              // of the box's height, but the much-wider 2X/3X/4X glyphs are
-              // width-constrained and only fill ~61% of that same height --
-              // same nominal box, visibly smaller glyph. bonusImgSize
-              // compensates by exactly that measured factor (1.635) so
-              // 2X/3X/4X render at the SAME visual height as N; N itself is
-              // untouched (nImgSize, above). Because the compensation targets
-              // matching N's rendered height (not exceeding it), this adds no
-              // new vertical footprint vs. what Issue #101 already verified
-              // fits inside the hub's ClipOval -- only the badge's rendered
-              // width grows, confirmed with margin against the circle's
-              // chord width at both small and large hub sizes.
-              final bonusImgSize = nImgSize * (278 / 170);
               // Gap between number and badge: N keeps its original
               // proportional spacing; 2X/3X/4X gets a small fixed 3px gap
               // (was fully removed to 0, then asked back as "a little gap").
@@ -447,17 +439,10 @@ class _WheelWidgetState extends State<WheelWidget>
                   SizedBox(height: gap),
                   Image.asset(
                     _hubImageAsset(_landedBonusMultiplier),
-                    // Box is sized to the badge's TRUE rendered aspect ratio,
-                    // not a square -- bonusImgSize (width) x nImgSize (height)
-                    // exactly matches the 278x170 asset's real proportions at
-                    // the target nImgSize content-height. A square box here
-                    // (bonusImgSize x bonusImgSize) was the earlier bug: it
-                    // left invisible dead space above/below the glyph inside
-                    // its own box (since BoxFit.contain centers content
-                    // within whatever box it's given), which looked like a
-                    // leftover gap above the badge and extra padding below it
-                    // even after the explicit `gap` SizedBox was set to 0.
-                    width:  _landedBonusMultiplier == 1 ? nImgSize : bonusImgSize,
+                    // Same square nImgSize box for N and 2X/3X/4X alike --
+                    // correct now that all four assets share the same
+                    // dimensions (500x468). No per-badge sizing needed.
+                    width:  nImgSize,
                     height: nImgSize,
                     fit: BoxFit.contain,
                   ),
