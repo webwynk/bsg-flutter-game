@@ -448,8 +448,18 @@ class _WheelWidgetState extends State<WheelWidget>
                   SizedBox(height: gap),
                   Image.asset(
                     _hubImageAsset(_landedBonusMultiplier),
+                    // Box is sized to the badge's TRUE rendered aspect ratio,
+                    // not a square -- bonusImgSize (width) x nImgSize (height)
+                    // exactly matches the 278x170 asset's real proportions at
+                    // the target nImgSize content-height. A square box here
+                    // (bonusImgSize x bonusImgSize) was the earlier bug: it
+                    // left invisible dead space above/below the glyph inside
+                    // its own box (since BoxFit.contain centers content
+                    // within whatever box it's given), which looked like a
+                    // leftover gap above the badge and extra padding below it
+                    // even after the explicit `gap` SizedBox was set to 0.
                     width:  _landedBonusMultiplier == 1 ? nImgSize : bonusImgSize,
-                    height: _landedBonusMultiplier == 1 ? nImgSize : bonusImgSize,
+                    height: nImgSize,
                     fit: BoxFit.contain,
                   ),
                 ],
