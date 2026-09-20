@@ -26,24 +26,29 @@ class WheelPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
 
-    // Rings span 1.00 -> 0.22 (hub edge) evenly: (1.00-0.22)/3 = 0.26 each.
-    // Black innerFrac=0.22 matches hub radius fraction -> zero gap.
+    // Issue #101 follow-up (corrected): all three rings narrowed from
+    // width 0.26 to width 0.24 uniformly (not just Black absorbing the
+    // change) -- each ring gives up 0.02, so the hub edge moves 0.22 -> 0.28
+    // total. Every ring's digit font size shrinks by the same proportion
+    // (~-7.7%) since it's derived from ring width. Hub radius fraction
+    // (wheel_widget.dart's hubSize calc) must match Black's innerFrac
+    // exactly -- zero gap, unchanged principle.
     _drawRing(canvas, center, radius,
-      outerFrac: 1.00, innerFrac: 0.74,   // red - width 0.26
+      outerFrac: 1.00, innerFrac: 0.76,   // red - width 0.24
       colors: [AppColors.redRing1, AppColors.redRing2],
       angle: redAngle,
       textColor: const Color(0xFFffbbbb),
       hasGlow: showRedGlow,
     );
     _drawRing(canvas, center, radius,
-      outerFrac: 0.74, innerFrac: 0.48,   // green - width 0.26
+      outerFrac: 0.76, innerFrac: 0.52,   // green - width 0.24
       colors: [AppColors.greenRing1, AppColors.greenRing2],
       angle: greenAngle,
       textColor: const Color(0xFFaaffcc),
       hasGlow: showGreenGlow,
     );
     _drawRing(canvas, center, radius,
-      outerFrac: 0.48, innerFrac: 0.22,   // black - width 0.26, inner = hub edge
+      outerFrac: 0.52, innerFrac: 0.28,   // black - width 0.24, inner = hub edge
       colors: [AppColors.blackRing1, AppColors.blackRing2],
       angle: blackAngle,
       textColor: Colors.white,
@@ -162,8 +167,9 @@ class WheelPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
-    // Separators match ring boundaries
-    for (double frac in [0.74, 0.48, 0.22]) {
+    // Separators match ring boundaries (all three moved with the width
+    // reduction above: 0.74/0.48/0.22 -> 0.76/0.52/0.28).
+    for (double frac in [0.76, 0.52, 0.28]) {
       canvas.drawCircle(center, radius * frac, paint);
     }
   }

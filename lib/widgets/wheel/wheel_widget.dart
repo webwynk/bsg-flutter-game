@@ -278,7 +278,15 @@ class _WheelWidgetState extends State<WheelWidget>
   Widget _buildWheelStack(double size) {
     final double ringSize = size * 0.74;
     final double offsetY  = size * 0.01636;
-    final double hubSize  = ringSize * 0.22;
+    // Issue #101 follow-up (corrected): all three rings (red/green/black)
+    // narrowed from width 0.26 to 0.24, pushing the hub edge 0.22 -> 0.28
+    // (+62% hub area), so the result number/bonus badge inside it get
+    // bigger still, on top of their own ratio increase. Must stay in sync
+    // with wheel_painter.dart's black-ring innerFrac and separator-ring
+    // position (both also -> 0.28) -- all three define the same boundary;
+    // changing only one would leave a visible gap or overlap between the
+    // hub and the black ring.
+    final double hubSize  = ringSize * 0.28;
 
     return Stack(
       alignment: Alignment.center,
