@@ -398,9 +398,13 @@ class _WheelWidgetState extends State<WheelWidget>
               // height (number + gap + badge) still fits inside the circle
               // with margin across the realistic hub-size range -- nothing
               // gets clipped by the ClipOval mask above.
-              // Result number: -2px flat, via a matching clamp-bound shift
-              // so the reduction applies uniformly across the size range.
-              final numFontSize = ((w * 0.48) - 2.0).clamp(16.0, 46.0);
+              // Result number: -2px flat, but 2X/3X/4X rounds only -- N is
+              // left on its original formula, unchanged (N's sizing was
+              // confirmed already correct; the -2px request was scoped to
+              // bonus rounds, same as the badge size and gap above).
+              final numFontSize = _landedBonusMultiplier == 1
+                  ? (w * 0.48).clamp(18.0, 48.0)
+                  : ((w * 0.48) - 2.0).clamp(16.0, 46.0);
               final nImgSize    = (w * 0.32).clamp(12.0, 32.0);
               // 2X/3X/4X assets are 278x170 (W/H=1.635, measured) vs N's
               // near-square n_letter.webp at 886x928 (W/H=0.955). Inside the
@@ -417,7 +421,9 @@ class _WheelWidgetState extends State<WheelWidget>
               // width grows, confirmed with margin against the circle's
               // chord width at both small and large hub sizes.
               final bonusImgSize = nImgSize * (278 / 170);
-              final gap         = w * 0.05;
+              // Gap between number and badge removed for 2X/3X/4X only, per
+              // explicit request -- N's spacing is unchanged.
+              final gap = _landedBonusMultiplier == 1 ? (w * 0.05) : 0.0;
 
               return Column(
                 mainAxisAlignment: MainAxisAlignment.center,
