@@ -283,56 +283,102 @@ class _TripleBody extends StatelessWidget {
         // ── Page tabs ──────────────────────────────────────────────────
         Align(
           alignment: Alignment.centerLeft,
-          child: SizedBox(
-            width: _rowArrW + _gap + gridW,
-            height: _tabH,
-            child: Row(
-              children: [
-                const SizedBox(width: _rowArrW + _gap),
-                ...List.generate(10, (p) => Expanded(
-                  child: GestureDetector(
-                    onTap: () => game.setTriplePage(p, auth),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
-                      decoration: BoxDecoration(
-                        gradient: game.triplePage == p
-                          ? const LinearGradient(
-                              colors: [Color(0xFFFFEE66), Color(0xFFCC8800)],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            )
-                          : const LinearGradient(
-                              colors: [Color(0xFF440800), Color(0xFF1A0000)],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
+          child: Builder(
+            builder: (_) {
+              // Which of the 10 hundred-groups (000-099, 100-199, ...)
+              // currently has at least one active stake, regardless of
+              // which page is being viewed -- so a bet placed on e.g. "045"
+              // stays visible as a small badge on the "000" tab even after
+              // navigating away to another tab. Computed once per rebuild
+              // (O(active bets)), not per-tab, since it's shared by all 10.
+              final groupsWithBets = game.board.triple.keys
+                  .map((k) => int.parse(k) ~/ 100)
+                  .toSet();
+
+              return SizedBox(
+                width: _rowArrW + _gap + gridW,
+                height: _tabH,
+                child: Row(
+                  children: [
+                    const SizedBox(width: _rowArrW + _gap),
+                    ...List.generate(10, (p) => Expanded(
+                      child: GestureDetector(
+                        onTap: () => game.setTriplePage(p, auth),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
+                              decoration: BoxDecoration(
+                                gradient: game.triplePage == p
+                                  ? const LinearGradient(
+                                      colors: [Color(0xFFFFEE66), Color(0xFFCC8800)],
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                    )
+                                  : const LinearGradient(
+                                      colors: [Color(0xFF440800), Color(0xFF1A0000)],
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                    ),
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(
+                                  color: game.triplePage == p
+                                    ? AppColors.goldBright
+                                    : const Color(0xFF661100),
+                                  width: game.triplePage == p ? 1.5 : 0.8,
+                                ),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  (p * 100).toString().padLeft(3, '0'),
+                                  style: GoogleFonts.oswald(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 10, // slightly larger and cleaner in Oswald
+                                    height: 1.0,
+                                    color: game.triplePage == p
+                                      ? const Color(0xFF2A1000)
+                                      : Colors.white60,
+                                  ),
+                                ),
+                              ),
                             ),
-                        borderRadius: BorderRadius.circular(3),
-                        border: Border.all(
-                          color: game.triplePage == p
-                            ? AppColors.goldBright
-                            : const Color(0xFF661100),
-                          width: game.triplePage == p ? 1.5 : 0.8,
+                            // "Has an active bet somewhere in this group"
+                            // badge -- same deep-red/gold pair NumberCell
+                            // already uses to mean "staked" (grid_cells.dart),
+                            // reused here for visual consistency rather than
+                            // a new color. Independent of, and layered on
+                            // top of, the page-viewed gold highlight above.
+                            if (groupsWithBets.contains(p))
+                              Positioned(
+                                top: 1,
+                                right: 1,
+                                child: Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFFD32F2F), Color(0xFF8E0000)],
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                    ),
+                                    border: Border.all(color: const Color(0xFFFFD700), width: 1),
+                                    boxShadow: const [
+                                      BoxShadow(color: Colors.black45, blurRadius: 1),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
-                      child: Center(
-                        child: Text(
-                          (p * 100).toString().padLeft(3, '0'),
-                          style: GoogleFonts.oswald(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 10, // slightly larger and cleaner in Oswald
-                            height: 1.0,
-                            color: game.triplePage == p
-                              ? const Color(0xFF2A1000)
-                              : Colors.white60,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                )),
-              ],
-            ),
+                    )),
+                  ],
+                ),
+              );
+            },
           ),
         ),
         const SizedBox(height: _gap),
