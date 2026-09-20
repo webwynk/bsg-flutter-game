@@ -122,9 +122,11 @@ class WheelPainter extends CustomPainter {
       final textX = center.dx + midR * cos(midAngle);
       final textY = center.dy + midR * sin(midAngle);
 
+      // +1px flat on the ring digits, via a matching clamp-bound shift in
+      // _drawNumber() so it applies uniformly across the size range.
       _drawNumber(canvas, _digits[i].toString(), Offset(textX, textY),
         midAngle + pi / 2, numColor,
-        fontSize: (innerR - outerR).abs() * 0.46,
+        fontSize: (innerR - outerR).abs() * 0.46 + 1.0,
       );
     }
 
@@ -139,7 +141,7 @@ class WheelPainter extends CustomPainter {
         style: TextStyle(
           fontFamily: 'Oswald',
           fontWeight: FontWeight.w600,
-          fontSize: fontSize.clamp(7.0, 24.0),
+          fontSize: fontSize.clamp(8.0, 25.0),
           color: color,
           shadows: [
             Shadow(

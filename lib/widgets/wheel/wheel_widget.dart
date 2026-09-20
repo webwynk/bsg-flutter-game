@@ -398,8 +398,25 @@ class _WheelWidgetState extends State<WheelWidget>
               // height (number + gap + badge) still fits inside the circle
               // with margin across the realistic hub-size range -- nothing
               // gets clipped by the ClipOval mask above.
-              final numFontSize = (w * 0.48).clamp(18.0, 48.0);
+              // Result number: -2px flat, via a matching clamp-bound shift
+              // so the reduction applies uniformly across the size range.
+              final numFontSize = ((w * 0.48) - 2.0).clamp(16.0, 46.0);
               final nImgSize    = (w * 0.32).clamp(12.0, 32.0);
+              // 2X/3X/4X assets are 278x170 (W/H=1.635, measured) vs N's
+              // near-square n_letter.webp at 886x928 (W/H=0.955). Inside the
+              // same square nImgSize box with BoxFit.contain, N fills ~100%
+              // of the box's height, but the much-wider 2X/3X/4X glyphs are
+              // width-constrained and only fill ~61% of that same height --
+              // same nominal box, visibly smaller glyph. bonusImgSize
+              // compensates by exactly that measured factor (1.635) so
+              // 2X/3X/4X render at the SAME visual height as N; N itself is
+              // untouched (nImgSize, above). Because the compensation targets
+              // matching N's rendered height (not exceeding it), this adds no
+              // new vertical footprint vs. what Issue #101 already verified
+              // fits inside the hub's ClipOval -- only the badge's rendered
+              // width grows, confirmed with margin against the circle's
+              // chord width at both small and large hub sizes.
+              final bonusImgSize = nImgSize * (278 / 170);
               final gap         = w * 0.05;
 
               return Column(
@@ -425,8 +442,8 @@ class _WheelWidgetState extends State<WheelWidget>
                   SizedBox(height: gap),
                   Image.asset(
                     _hubImageAsset(_landedBonusMultiplier),
-                    width:  nImgSize,
-                    height: nImgSize,
+                    width:  _landedBonusMultiplier == 1 ? nImgSize : bonusImgSize,
+                    height: _landedBonusMultiplier == 1 ? nImgSize : bonusImgSize,
                     fit: BoxFit.contain,
                   ),
                 ],
