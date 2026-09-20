@@ -24,6 +24,12 @@ class GlobalRoundState {
   final int? green;
   final int? black;
 
+  /// This round's own pinned bonus multiplier (1/2/3/4 = N/2X/3X/4X). Null
+  /// until the draw, exactly like [red]/[green]/[black] -- delivered in the
+  /// same response as the winning digits, so the reveal image can never be
+  /// known before the outcome itself is.
+  final int? bonusMultiplier;
+
   const GlobalRoundState({
     required this.roundId,
     required this.roundNumber,
@@ -35,6 +41,7 @@ class GlobalRoundState {
     this.red,
     this.green,
     this.black,
+    this.bonusMultiplier,
   });
 
   /// True while the server will still accept a bet for this round.
@@ -52,6 +59,7 @@ class GlobalRoundState {
         red: (j[Field.red] as num?)?.toInt(),
         green: (j[Field.green] as num?)?.toInt(),
         black: (j[Field.black] as num?)?.toInt(),
+        bonusMultiplier: (j[Field.bonusMultiplier] as num?)?.toInt(),
       );
 }
 

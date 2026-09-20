@@ -50,6 +50,7 @@ class _WheelWidgetState extends State<WheelWidget>
   int? _landedRed;
   int? _landedGreen;
   int? _landedBlack;
+  int  _landedBonusMultiplier = 1;
 
   GameProvider? _gameProvider;
 
@@ -125,6 +126,7 @@ class _WheelWidgetState extends State<WheelWidget>
             _landedRed   = last.red;
             _landedGreen = last.green;
             _landedBlack = last.black;
+            _landedBonusMultiplier = last.bonusMultiplier;
             _showRedGlow = true;
             _showGreenGlow = true;
             _showBlackGlow = true;
@@ -151,6 +153,7 @@ class _WheelWidgetState extends State<WheelWidget>
         _landedRed   = last.red;
         _landedGreen = last.green;
         _landedBlack = last.black;
+        _landedBonusMultiplier = last.bonusMultiplier;
         _showRedGlow = true;
         _showGreenGlow = true;
         _showBlackGlow = true;
@@ -204,6 +207,7 @@ class _WheelWidgetState extends State<WheelWidget>
     _landedRed   = result.red;
     _landedGreen = result.green;
     _landedBlack = result.black;
+    _landedBonusMultiplier = result.bonusMultiplier;
 
 
     setState(() {
@@ -341,6 +345,21 @@ class _WheelWidgetState extends State<WheelWidget>
   //  Spinning             → gold hub + smoke + n_letter (pulsing)
   //  Done                 → white circle + result number + n_letter
   // ─────────────────────────────────────────────────────────────────────────
+
+  /// Maps this round's bonus multiplier (1/2/3/4) to the reveal-hub image
+  /// asset. 1 ("N", no bonus active) is today's exact default behavior;
+  /// 2/3/4 render the matching promotional image with the identical
+  /// pulse-during-spin / static-after-landing treatment -- only the asset
+  /// path changes, nothing about animation timing or choreography.
+  String _hubImageAsset(int bonusMultiplier) {
+    switch (bonusMultiplier) {
+      case 2: return 'assets/images/2X.webp';
+      case 3: return 'assets/images/3X.webp';
+      case 4: return 'assets/images/4X.webp';
+      default: return 'assets/images/n_letter.webp';
+    }
+  }
+
   Widget _buildHub(double size) {
 
     // ── Final result ── white circle ────────────────────────────────────────
@@ -387,7 +406,7 @@ class _WheelWidgetState extends State<WheelWidget>
                   ),
                   SizedBox(height: gap),
                   Image.asset(
-                    'assets/images/n_letter.webp',
+                    _hubImageAsset(_landedBonusMultiplier),
                     width:  nImgSize,
                     height: nImgSize,
                     fit: BoxFit.contain,
@@ -437,7 +456,7 @@ class _WheelWidgetState extends State<WheelWidget>
                   return Transform.scale(
                     scale: _nPulseAnim.value,
                     child: Image.asset(
-                      'assets/images/n_letter.webp',
+                      _hubImageAsset(_landedBonusMultiplier),
                       width:  imgSize,
                       height: imgSize,
                       fit: BoxFit.contain,

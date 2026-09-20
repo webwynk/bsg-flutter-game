@@ -921,6 +921,7 @@ class GameProvider extends ChangeNotifier {
       tripleWinAmount: 0,
       netChange:       0,
       createdAt:       serverResult.createdAt,
+      bonusMultiplier: serverResult.bonusMultiplier,
     );
 
     // Trigger wheel animation. The completer is created and assigned before
@@ -1131,6 +1132,7 @@ class GameProvider extends ChangeNotifier {
             tripleWinAmount: myResult.triplePayout,
             netChange:       myResult.totalPayout - pending.deductedAmount,
             createdAt:       pending.createdAt,
+            bonusMultiplier: pending.bonusMultiplier,
           );
         }
         // Bet exists but not settled yet -- large round still draining

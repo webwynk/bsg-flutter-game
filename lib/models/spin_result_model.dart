@@ -15,6 +15,12 @@ class SpinResult {
   final int tripleWinAmount;
   final int netChange;
   final DateTime createdAt;
+  // This round's bonus multiplier (1/2/3/4 = N/2X/3X/4X). Defaults to 1 so
+  // existing construction sites keep compiling, but any site building a
+  // SpinResult from a real drawn round must pass the actual value -- relying
+  // on this default there would silently always show "N" during an active
+  // bonus round, which is a real bug, not a safe fallback.
+  final int bonusMultiplier;
 
   const SpinResult({
     required this.id,
@@ -32,6 +38,7 @@ class SpinResult {
     this.tripleWinAmount = 0,
     required this.netChange,
     required this.createdAt,
+    this.bonusMultiplier = 1,
   });
 
   String get resultString => '$red$green$black';

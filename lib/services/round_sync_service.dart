@@ -394,6 +394,7 @@ class RoundSyncService extends ChangeNotifier {
       tripleWinAmount: 0,
       netChange:       0,
       createdAt:       round.scheduledAt,
+      bonusMultiplier: round.bonusMultiplier ?? 1,
     );
 
     // Issue: this used to also call game.loadGlobalHistory() here, racing

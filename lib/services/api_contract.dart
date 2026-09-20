@@ -118,6 +118,7 @@ class Field {
   static const red              = 'red';
   static const green            = 'green';
   static const black            = 'black';
+  static const bonusMultiplier  = 'bonus_multiplier';
 
   // Bet
   static const placedBet = 'placed_bet';
