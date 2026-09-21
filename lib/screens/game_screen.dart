@@ -14,6 +14,7 @@ import '../widgets/wheel/wheel_widget.dart';
 import '../widgets/panels/left_tab_strip.dart';
 import '../widgets/controls/right_panel.dart';
 import '../widgets/overlays/result_overlay.dart';
+import '../widgets/overlays/big_win_fx_overlay.dart';
 import '../models/play_limits_config.dart';
 
 class GameScreen extends StatefulWidget {
@@ -942,6 +943,14 @@ class _GameScreenState extends State<GameScreen> {
                 ],
               ),
   
+              // ── Big-win coin FX (>=900 coins, always gone before the popup opens) ──
+              Consumer<GameProvider>(
+                builder: (_, game, __) =>
+                  game.showBigWinFx
+                    ? const BigWinFxOverlay()
+                    : const SizedBox.shrink(),
+              ),
+
               // ── Result overlay ───────────────────────────────────────
               Consumer<GameProvider>(
                 builder: (_, game, __) =>
