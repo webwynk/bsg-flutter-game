@@ -79,7 +79,6 @@ class SoundService {
     }
   }
   Future<void> playWin()          async => _play('win.mp3');
-  Future<void> playBigWin()       async => _playSfx('big_win.mp3');
   Future<void> playChipClick()    async => _playSfx('button_click.mp3');
   Future<void> playButtonClick()  async => _playSfx('button_click.mp3');
   Future<void> playNumberSelect() async => _playSfx('number-select.mp3');

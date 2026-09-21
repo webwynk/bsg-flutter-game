@@ -94,11 +94,6 @@ class GameProvider extends ChangeNotifier {
   SpinResult? _lastWinBoxResult;
   SpinResult? _pendingResult;
 
-  // True only during the pre-popup coin-burst FX for a >=900-coin win --
-  // always false again by the moment _lastResult is set (the FX and the win
-  // popup are never shown at the same time). See onGlobalResult().
-  bool _showBigWinFx = false;
-
   // Balance data _fetchConfirmedResult() has learned from the server but not
   // yet applied. It only ever records these -- it must never call
   // auth.syncAuthoritativeBalance() itself, or the balance can update the
@@ -156,7 +151,6 @@ class GameProvider extends ChangeNotifier {
   BetBoardState get board    => _board;
   bool get isSpinning        => _isSpinning;
   SpinResult? get lastResult => _lastResult;
-  bool get showBigWinFx      => _showBigWinFx;
   SpinResult? get lastWinBoxResult => _lastWinBoxResult;
   SpinResult? get pendingResult => _pendingResult;
   int get countdown          => _countdown;
@@ -839,7 +833,6 @@ class GameProvider extends ChangeNotifier {
     // Cleared unconditionally so a stale win from an already-finished round
     // can't still be showing the next time the player opens the game.
     _lastWinBoxResult = null;
-    _showBigWinFx = false; // same reasoning: don't let a stale big-win FX linger past this abort
 
     // The board is always cleared here, regardless of submission status --
     // onGlobalResult()'s own cleanup can't be relied on to do it, since
@@ -889,7 +882,6 @@ class GameProvider extends ChangeNotifier {
     _isSpinning = true;
     _spinAborted = false;
     _lastResult = null;
-    _showBigWinFx = false; // defensive: discard any unconsumed FX state from a prior aborted spin
     _pendingResult = null;
     _pendingSyncBalance = null; // defensive: discard any unconsumed data from a prior aborted spin
     _pendingSyncLedgerVersion = null;
@@ -1015,25 +1007,11 @@ class GameProvider extends ChangeNotifier {
       // slow server response can never make this wait a negative duration.
       final elapsedSinceWheelStop = DateTime.now().difference(wheelStoppedAt);
       final remainingToPopup = const Duration(milliseconds: 1000) - elapsedSinceWheelStop;
-
-      // Big-win coin FX (>=900 coins): fills whatever's left of the budget
-      // above -- never adds extra wait time of its own -- and is always torn
-      // down in the same notifyListeners() call that opens the popup below,
-      // so the FX and the popup can never be visible at once. Skipped
-      // entirely if a slow server response already ate the whole budget.
-      final showBigWinFx = resolvedResult.winAmount >= 900 && remainingToPopup > Duration.zero;
-      if (showBigWinFx) {
-        _showBigWinFx = true;
-        SoundService().playBigWin();
-        notifyListeners();
-      }
-
       if (remainingToPopup > Duration.zero) {
         await Future.delayed(remainingToPopup);
       }
       if (_spinAborted) return;
 
-      _showBigWinFx = false;
       _lastResult = resolvedResult;
       SoundService().playWin();
       notifyListeners();
