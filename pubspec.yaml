@@ -1,6 +1,6 @@
 name: best_smart_game
 description: BSG - Best Smart Game Casino App
-version: 2.0.8+102
+version: 2.0.8+103
 publish_to: none
 
 environment:
@@ -14,7 +14,6 @@ dependencies:
   google_fonts: ^6.1.0
   wakelock_plus: ^1.2.0
   audioplayers: ^6.0.0
-  confetti: ^0.7.0
   flutter_animate: ^4.3.0
 
 dev_dependencies:
