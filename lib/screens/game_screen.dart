@@ -13,6 +13,7 @@ import '../widgets/dialogs/action_dialog.dart';
 import '../widgets/wheel/wheel_widget.dart';
 import '../widgets/panels/left_tab_strip.dart';
 import '../widgets/controls/right_panel.dart';
+import '../widgets/overlays/coin_fountain.dart';
 import '../widgets/overlays/result_overlay.dart';
 import '../models/play_limits_config.dart';
 
@@ -74,6 +75,19 @@ class _GameScreenState extends State<GameScreen> {
     final auth = context.read<AuthProvider>();
 
     if (game.isSpinning || game.board.isEmpty) return;
+
+    // Issue #110 (defence in depth): never auto-submit a board whose bet was
+    // already submitted for a DIFFERENT round. submitBets()'s own idempotency
+    // check only recognises "already submitted for THIS round", so chips left
+    // over from a round that ended -- most plausibly one that failed to
+    // resolve -- would sail through as a brand-new bet and be charged again.
+    // The failed-delivery branch in _handleSpin() clears the board at the
+    // source; this is the second lock at the one place money actually moves.
+    // Discards without a refund: that stake was genuinely taken.
+    if (game.isBoardFromOlderRound(RoundSyncService().currentRound?.roundId)) {
+      game.discardUnresolvedBoard();
+      return;
+    }
 
     game.closeDrawer();
     game.markBetsSubmitted();
@@ -194,7 +208,15 @@ class _GameScreenState extends State<GameScreen> {
     // sync, with no explanation. Just tell the player the truth instead:
     // the round is unresolved, their real balance will catch up
     // automatically via the normal sync path once it's ready.
+    //
+    // Issue #110: but the BOARD must still be cleared. onGlobalResult() never
+    // ran, so its end-of-round cleanup never did either -- and a board left
+    // holding an already-submitted bet gets auto-submitted into the NEXT
+    // round at countdown 05, charging the player a second time. Still no
+    // refund (same reasoning as above); and REBET is untouched, see
+    // discardUnresolvedBoard()'s doc.
     if (!delivered && mounted) {
+      game.discardUnresolvedBoard();
       _showServerErrorDialog(context);
     }
   }
@@ -940,6 +962,35 @@ class _GameScreenState extends State<GameScreen> {
                     child: RightControlPanel(onSpin: _handleSpin),
                   ),
                 ],
+              ),
+
+              // ── Big-win coin fountain (Issue #106) ───────────────────
+              // Sits above the wheel and both control panels but BELOW the
+              // result overlay, so if the two ever did overlap the popup
+              // covers the coins rather than the other way round.
+              //
+              // Mounted only while showCoinFx is true (wheel-stop +0.300s to
+              // +1.800s, wins of 900+ only), and autoPlays on mount — the
+              // provider has no widget key to call play() through, and the
+              // widget only exists while it should be running. Unmounting is
+              // the teardown: dispose() stops the ticker, so leaving the
+              // screen mid-animation needs no extra handling.
+              //
+              // originFraction is computed rather than the widget's default
+              // (0.5, 0.5): this is a landscape layout with a fixed 158px
+              // left panel and a 28%-width right panel, so the wheel's centre
+              // sits left of the screen's by up to ~100px on wide devices.
+              // dx = (158 + 0.72W) / 2 / W, simplified to 79/W + 0.36.
+              Consumer<GameProvider>(
+                builder: (_, game, __) {
+                  if (!game.showCoinFx) return const SizedBox.shrink();
+                  final w = MediaQuery.of(context).size.width;
+                  return CoinFountain(
+                    autoPlay: true,
+                    coinsPerSecond: 60,
+                    originFraction: Offset(79 / w + 0.36, 0.5),
+                  );
+                },
               ),
 
               // ── Result overlay ───────────────────────────────────────

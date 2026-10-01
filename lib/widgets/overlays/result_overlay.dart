@@ -1,45 +1,36 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:confetti/confetti.dart';
 import 'package:provider/provider.dart';
+import '../../models/spin_result_model.dart';
 import '../../providers/game_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_decorations.dart';
 
-class ResultOverlay extends StatefulWidget {
+/// The win popup: a blurred, dimmed backdrop with the result card on top.
+///
+/// Mounted by `game_screen.dart` only when `GameProvider.lastResult` is a
+/// win, and unmounted when the provider clears it — so this widget's whole
+/// lifetime is the popup's on-screen duration. It holds no state of its own:
+/// everything it draws comes from the provider, and its entrance animation is
+/// driven by `flutter_animate`, not by a controller this class owns.
+///
+/// Issue #104: was a `StatefulWidget` purely to own a `ConfettiController`
+/// (created in `initState`, played from a post-frame callback, disposed in
+/// `dispose`). With the confetti removed, that controller was the only thing
+/// the `State` existed for, so the `State` went with it.
+class ResultOverlay extends StatelessWidget {
   const ResultOverlay({super.key});
-
-  @override
-  State<ResultOverlay> createState() => _ResultOverlayState();
-}
-
-class _ResultOverlayState extends State<ResultOverlay> {
-  late ConfettiController _confetti;
-
-  @override
-  void initState() {
-    super.initState();
-    _confetti = ConfettiController(duration: const Duration(seconds: 3));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final result = context.read<GameProvider>().lastResult;
-      if (result?.won == true) {
-        _confetti.play();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _confetti.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<GameProvider>(
       builder: (_, game, __) {
         final result = game.lastResult;
+        // Defensive, not dead: this widget and its mount site in
+        // game_screen.dart each have their own Consumer, so this one can
+        // rebuild with a null result in the frame where the provider clears
+        // it, before the parent has unmounted us.
         if (result == null) return const SizedBox.shrink();
 
         return Stack(
@@ -51,24 +42,6 @@ class _ResultOverlayState extends State<ResultOverlay> {
               child: Container(color: Colors.black.withValues(alpha: 0.80)),
             ),
 
-            // Confetti
-            if (result.won)
-              Align(
-                alignment: Alignment.topCenter,
-                child: ConfettiWidget(
-                  confettiController: _confetti,
-                  blastDirectionality: BlastDirectionality.explosive,
-                  particleDrag: 0.05,
-                  emissionFrequency: 0.08,
-                  numberOfParticles: 20,
-                  gravity: 0.3,
-                  colors: const [
-                    AppColors.goldBright, Colors.white, AppColors.casinoRed,
-                    AppColors.successGreen, Colors.blue, Colors.purple,
-                  ],
-                ),
-              ),
-
             // Result card — constrained to screen height so button never clips
             LayoutBuilder(
               builder: (_, constraints) => Center(
@@ -77,7 +50,7 @@ class _ResultOverlayState extends State<ResultOverlay> {
                     maxWidth: 420,
                     maxHeight: constraints.maxHeight * 0.96,
                   ),
-                  child: _buildCard(result).animate()
+                  child: _buildCard(context, result).animate()
                     .scale(begin: const Offset(0.5, 0.5),
                       curve: Curves.easeOutCubic, duration: 400.ms)
                     .fadeIn(duration: 300.ms),
@@ -90,7 +63,17 @@ class _ResultOverlayState extends State<ResultOverlay> {
     );
   }
 
-  Widget _buildCard(result) {
+  /// Builds the popup card itself. Takes [context] explicitly because this is
+  /// now a StatelessWidget — there is no `State.context` to reach for, and
+  /// `MediaQuery` below needs one. The context passed is `build`'s own, which
+  /// is the same element context the old `State` used.
+  ///
+  /// Issue #116: [result] is typed. It used to be an implicit `dynamic`, so a
+  /// misspelt field (`result.winAmont`) would have compiled and then thrown
+  /// `NoSuchMethodError` on screen, in the one widget whose job is to show the
+  /// player what they just won. It is always `GameProvider.lastResult`, a
+  /// `SpinResult`, by the time this is reached (the caller null-checks it).
+  Widget _buildCard(BuildContext context, SpinResult result) {
     return Container(
       decoration: AppDecorations.resultCard.copyWith(
         image: const DecorationImage(

@@ -47,12 +47,6 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void resetBetSubmissionStatus() {
-    _betStatus = BetSubmissionStatus.idle;
-    _submittedRoundId = null;
-    notifyListeners();
-  }
-
   BetRejection _lastRejection = BetRejection.ok;
   BetRejection get lastRejection => _lastRejection;
 
@@ -89,10 +83,56 @@ class GameProvider extends ChangeNotifier {
 
   // ── Spin state ────────────────────────────────────────────────────
   bool _isSpinning = false;
-  bool _spinAborted = false; // set true when user exits mid-spin
+  // Issue #113: bumped by abortSpin() when the user leaves mid-sequence. Each
+  // onGlobalResult() captures the value when it starts and treats itself as
+  // aborted the moment the counter differs. This replaced a shared
+  // `_spinAborted` boolean, which a LATER sequence reset to false -- silently
+  // reviving an earlier, already-aborted one that was still suspended on a
+  // timer (it woke, saw "not aborted", and ran its end-of-round cleanup
+  // concurrently with the live sequence). A counter can only move forward,
+  // so nothing can un-abort anything.
+  int _spinEpoch = 0;
   SpinResult? _lastResult;
   SpinResult? _lastWinBoxResult;
   SpinResult? _pendingResult;
+
+  // Issue #107: the shortest the win popup may ever be visible for. Acts as a
+  // floor under the absolute W+4.300 hide target, so that a late reveal can
+  // never squeeze the popup to nothing. Sized to cover the popup's own 400ms
+  // scale/fade entrance plus enough fully-rendered time to read the amount.
+  static const Duration _minPopupVisible = Duration(milliseconds: 1200);
+
+  // Issue #109: when the win popup opens, in ms after the wheel lands. One
+  // constant shared by the popup's own deadline and by the coin fountain's
+  // "is there room?" check below, so the two cannot drift apart.
+  static const int _popupOpensAtMs = 1800;
+
+  // Issue #109: the least time that must remain before the popup opens for the
+  // coin fountain (and its sound) to be worth starting. On a late reveal the
+  // popup is already due, and the flag would flip on and straight back off
+  // before a single frame was drawn -- invisible coins, but with the coin
+  // sound already started and then replaced by the win sound. Below ~0.5s
+  // the fountain could not be seen anyway, so it is skipped entirely.
+  static const Duration _minCoinFxSlot = Duration(milliseconds: 500);
+
+  // Issue #106: minimum server-confirmed win, in coins, that earns the coin
+  // fountain. Deliberately a compile-time constant rather than live server
+  // config: unlike play_limits or the payout multipliers, this gates a purely
+  // visual effect with no financial consequence, so it does not warrant the
+  // extra RPC surface (and cannot repeat Issue #71's drift problem, which was
+  // only serious because that threshold gated money).
+  static const int _bigWinFxThreshold = 900;
+
+  // Issue #106: drives the big-win coin fountain overlay. True only between
+  // the balance reveal (wheel-stop + 0.300s) and the win popup opening
+  // (wheel-stop + 1.800s), and only for wins of 900+ coins -- the 1.5s slot
+  // Issue #105 opened. Issue #109: and only when at least _minCoinFxSlot of
+  // that slot is still left at the reveal -- a late reveal skips it entirely
+  // rather than flipping it on and off inside a single frame.
+  // game_screen.dart mounts the CoinFountain while this is
+  // true and unmounts it when it goes false, so flipping it back to false is
+  // what stops the animation; there is no separate teardown call.
+  bool _showCoinFx = false;
 
   // Balance data _fetchConfirmedResult() has learned from the server but not
   // yet applied. It only ever records these -- it must never call
@@ -152,6 +192,7 @@ class GameProvider extends ChangeNotifier {
   bool get isSpinning        => _isSpinning;
   SpinResult? get lastResult => _lastResult;
   SpinResult? get lastWinBoxResult => _lastWinBoxResult;
+  bool get showCoinFx                => _showCoinFx;
   SpinResult? get pendingResult => _pendingResult;
   int get countdown          => _countdown;
 
@@ -622,11 +663,6 @@ class GameProvider extends ChangeNotifier {
     }
   }
 
-  void clearLastResult() {
-    _lastResult = null;
-    notifyListeners();
-  }
-
   // ── REBET ─────────────────────────────────────────────────────────────
   /// Restores the previous round's bets onto the current board.
   void rebet(AuthProvider auth) {
@@ -714,6 +750,44 @@ class GameProvider extends ChangeNotifier {
     return 0;
   }
 
+  /// Issue #111: whether a countdown tick is the one on which the "NO MORE
+  /// PLAY" mark (5s) was reached or passed -- the moment the player's board
+  /// must be sent to the server.
+  ///
+  /// This used to be an exact-equality test (`_countdown == 5`), but the
+  /// countdown is re-derived from the synced wall clock on every tick rather
+  /// than counted down, so two ticks more than one second apart skip a value.
+  /// A stalled tick (Timer.periodic does not queue missed ticks) or a +/-1s
+  /// clock re-sync from RoundSyncService._poll() both do that. If the skipped
+  /// value was 5 the submission never ran, the chips sat locked and unsent,
+  /// and the only remaining attempt -- at countdown 00 -- was always rejected
+  /// (the server stops taking bets at second 88): the player lost the round
+  /// and was told they were too slow, when the server would still have
+  /// accepted the bet at countdown 4 and 3.
+  ///
+  /// True once per approach from above: the previous tick must have been
+  /// ABOVE 5 and this one at or below it, so 6->5 (normal), 7->4 and 6->3 all
+  /// fire, while 5->4 never does -- nor does a clock re-sync moving 4->5,
+  /// which the old equality form wrongly counted a second time. A re-sync
+  /// that pushes the countdown back ABOVE 5 and then down again is a fresh
+  /// approach and fires again (as the old form also did); that is harmless,
+  /// because submitBets() ignores a repeat for a round already submitted.
+  ///
+  /// `currentCountdown > 0`: a tick that jumps clean through the draw second
+  /// leaves nothing to submit to, so it is left to the result path, which
+  /// already reconciles unsent chips silently (placed_bet = false).
+  ///
+  /// There is deliberately no lower floor at 3 to dodge the closed seconds
+  /// (2 and 1): that would hard-code the server's bet_cutoff_second into the
+  /// client, which Issue #71's closed decision rules out. A late attempt just
+  /// gets the same rejection-and-refund the countdown-00 fallback produces.
+  @visibleForTesting
+  static bool crossedNoMoreBetsMark({
+    required int previousCountdown,
+    required int currentCountdown,
+  }) =>
+      currentCountdown <= 5 && currentCountdown > 0 && previousCountdown > 5;
+
   /// Called when the app resumes after being backgrounded long enough that
   /// the countdown timer may have been frozen by the OS straight through its
   /// own 5-second submission trigger (Timer.periodic does not queue up
@@ -758,11 +832,16 @@ class GameProvider extends ChangeNotifier {
         
         _countdown = _cycleToCountdown(currentCycle);
 
-        if (_countdown == 5 && previous >= 14) {
+        // Issue #111: "reached or passed 5", not "landed exactly on 5" -- see
+        // crossedNoMoreBetsMark(). Fires once, on the first tick at or below 5.
+        if (crossedNoMoreBetsMark(
+          previousCountdown: _cycleToCountdown(previous),
+          currentCountdown: _countdown,
+        )) {
           SoundService().playNoBets();
           _lastWinBoxResult = null;
           if (_isDrawerOpen) closeDrawer();
-          _onNoBets?.call(); // Triggers early bet submission at NO MORE PLAY (countdown 5)
+          _onNoBets?.call(); // Triggers early bet submission at NO MORE PLAY (countdown 5, or the first tick after it)
         }
 
         // Did we cross the betting boundary? (previous 14 -> current 13, which is 00s / draw second)
@@ -815,7 +894,7 @@ class GameProvider extends ChangeNotifier {
   /// down) -- only the refund step (never the board-clear itself) is
   /// skipped in that case.
   void abortSpin(AuthProvider? auth) {
-    _spinAborted = true;
+    _spinEpoch++; // Issue #113: invalidates every onGlobalResult() already running
     _isSpinning = false;
     _onTimerExpire = null;
     stopCountdown();
@@ -833,6 +912,24 @@ class GameProvider extends ChangeNotifier {
     // Cleared unconditionally so a stale win from an already-finished round
     // can't still be showing the next time the player opens the game.
     _lastWinBoxResult = null;
+
+    // Issue #106: same reasoning for the coin fountain. Leaving the game
+    // screen mid-animation unmounts the overlay anyway, but this flag must
+    // not still be true when the player comes back, or the fountain would be
+    // remounted (and restarted, since it autoPlays) for a round that is over.
+    _showCoinFx = false;
+
+    // Issue #108: and the same again for the win popup itself. This provider
+    // is app-wide, so it outlives GameScreen and remembers _lastResult after
+    // the screen is gone. onGlobalResult() -- suspended mid-popup -- will
+    // resume, find its epoch stale and return before reaching either line that
+    // would have cleared it, so nothing else ever does. Left set, the player
+    // returns to the OLD win popup: it has no dismiss control and its backdrop
+    // blocks every tap, until the next round's result arrives (up to ~90s).
+    // A plain field write, like the resets above: abortSpin() already calls
+    // stopCountdown(), which notifies, and no screen shows the popup once
+    // it has been left.
+    _lastResult = null;
 
     // The board is always cleared here, regardless of submission status --
     // onGlobalResult()'s own cleanup can't be relied on to do it, since
@@ -877,12 +974,27 @@ class GameProvider extends ChangeNotifier {
     // M-5: the old holdHeartbeatBalance() lock that used to open this method is
     // gone. Balance ordering is now handled by ledger_version, so the six early
     // returns below can no longer leak a lock and freeze the balance.
-    if (_isSpinning && _pendingResult != null) return; // guard against double-call during active spin
+    // Guards a repeat call only while the wheel is still turning
+    // (_pendingResult is cleared at wheel-stop, while _isSpinning stays true
+    // for the rest of the sequence). That narrow scope is deliberate and
+    // enough, per Issue #113: a repeat later in the sequence is blocked by
+    // RoundSyncService's per-round delivery lock, and a repeat after the
+    // player left and came back is handled by the epoch below -- which is what
+    // keeps the OLD sequence from resuming. Tightening this to `_isSpinning`
+    // alone was considered and rejected: abortSpin() clears that flag, so it
+    // would not stop the reachable case, and it would turn an uncaught
+    // exception mid-sequence into a permanent freeze of every later result.
+    if (_isSpinning && _pendingResult != null) return;
 
     _isSpinning = true;
-    _spinAborted = false;
+    // Issue #113: this sequence's identity. It is stale the instant
+    // abortSpin() moves the counter, and nothing can ever move it back.
+    final epoch = _spinEpoch;
+    bool stale() => epoch != _spinEpoch;
     _lastResult = null;
     _pendingResult = null;
+    _showCoinFx = false; // Issue #106: defensive -- a stale fountain from a
+                         // previous round must never leak into this one.
     _pendingSyncBalance = null; // defensive: discard any unconsumed data from a prior aborted spin
     _pendingSyncLedgerVersion = null;
     _balanceSyncFailed = false; // FIX #3A: Clear any stale banner from previous round BEFORE spin starts
@@ -946,7 +1058,7 @@ class GameProvider extends ChangeNotifier {
     } on TimeoutException {
       debugPrint('onGlobalResult: wheel did not report completion within 9s; revealing anyway.');
     }
-    if (_spinAborted) return;
+    if (stale()) return;
     final wheelStoppedAt = DateTime.now();
 
     // Ask the server for the real, confirmed result. Sequential and
@@ -968,12 +1080,12 @@ class GameProvider extends ChangeNotifier {
       final betRoundId = RoundSyncService().betRoundId;
       final cleanRoundId = (betRoundId ?? serverResult.id).replaceFirst('round_', '');
       final results = await Future.wait([
-        _fetchConfirmedResult(cleanRoundId, pendingSpin),
+        _fetchConfirmedResult(cleanRoundId, pendingSpin, epoch),
         Future.delayed(const Duration(milliseconds: 300)),
       ]);
       resolvedResult = results[0] as SpinResult;
     }
-    if (_spinAborted) return;
+    if (stale()) return;
 
     // ⚡ Push result to top history grid. Guarded against the round already
     // being there -- a defense-in-depth safety net for the narrow case where
@@ -998,40 +1110,133 @@ class GameProvider extends ChangeNotifier {
     }
     _lastWinBoxResult = resolvedResult;
     _pendingResult = null;
+
+    // Issue #106: the big-win coin fountain starts on this exact beat -- the
+    // same notifyListeners() that makes the balance jump and the "WIN: X"
+    // badge appear -- so the coins erupt as the number changes, not after it.
+    // Gated on the server-confirmed amount, so a spectator (winAmount 0) and
+    // any sub-threshold win never trigger it. Cleared again at the popup
+    // below, giving the fountain at most the 1.5s slot and no more.
+    //
+    // Issue #109: and only started if there is actually room left. A normal
+    // reveal (W+0.300) has 1.5s before the popup; a late one -- the server was
+    // slow confirming a large round -- may have none, in which case the flag
+    // would flip on and straight back off inside one frame. Nothing would be
+    // drawn, yet playCoin() would already have started the coin sound for
+    // playWin() to replace microtasks later. Skipping both is honest: no
+    // pretending to show an effect that cannot be seen.
+    final untilPopup = Duration(milliseconds: _popupOpensAtMs) -
+        DateTime.now().difference(wheelStoppedAt);
+    if (resolvedResult.winAmount >= _bigWinFxThreshold &&
+        untilPopup >= _minCoinFxSlot) {
+      _showCoinFx = true;
+      SoundService().playCoin();
+    }
     notifyListeners();
 
-    // Wait 5s result display window (exact 13s total sequence: 7s spin + 1s gap + 5s display)
-    if (resolvedResult.won) {
-      // 1. Popup opens at wheel-stop + 1.0s exactly -- wait out whatever's
-      // left of that budget after the balance reveal above. Clamped so a
-      // slow server response can never make this wait a negative duration.
-      final elapsedSinceWheelStop = DateTime.now().difference(wheelStoppedAt);
-      final remainingToPopup = const Duration(milliseconds: 1000) - elapsedSinceWheelStop;
-      if (remainingToPopup > Duration.zero) {
-        await Future.delayed(remainingToPopup);
-      }
-      if (_spinAborted) return;
+    // ── Post-wheel display sequence (Issue #105) ──────────────────────
+    //
+    // Every deadline below is an ABSOLUTE offset from wheelStoppedAt, never a
+    // chain of relative delays. That distinction is the whole fix:
+    //
+    //  * Defect B (win/lose length mismatch): the win branch used to be
+    //    anchored while the lose branch waited a flat 5000ms from wherever the
+    //    reveal happened to land -- W+0.300 for a bettor, W+0.000 for a
+    //    spectator, who skips the 300ms floor because it lives inside the
+    //    `totalDeducted > 0` block above. That produced three different
+    //    sequence lengths (13.0 / 12.3 / 12.0s) where the comments claimed
+    //    one. No single flat value can fix it: the two lose paths start
+    //    300ms apart, so they would still finish 300ms apart. Anchoring is
+    //    the only arithmetic that makes all four coincide.
+    //
+    //  * Defect A (round-boundary overrun): the old sequence was 13.0s inside
+    //    a 13.0s window (`103 - 90`), i.e. zero slack -- but it can never
+    //    start at `into 90.000`. This client only learns the result by asking
+    //    the server, so the wheel starts at 90 + d, where d is at least one
+    //    network round-trip (and more if the round has not been drawn yet:
+    //    the draw is performed by whichever happens first at/after second 90
+    //    -- any player's get_current_round() poll, the dashboard's 5s poll, or
+    //    the 10s tick_rounds cron -- so the digits may already exist when this
+    //    client asks, but never before second 90 plus its own round-trip). The
+    //    old sequence therefore always ended past the boundary, blocking bet
+    //    placement into the next round. Ending at W+5.000 instead of W+6.000
+    //    makes the sequence 12.0s, leaving 1.0s of slack for d.
+    //
+    // Timeline, all four outcome paths:
+    //   W+0.300  reveal (above)          -- spectator: W+0.000, no stake
+    //   W+1.800  popup opens             -- win only
+    //   W+4.300  popup hides             -- win only (2.5s on screen)
+    //   W+5.000  sequence ends           -- ALL paths, 12.0s total
+    //
+    // The W+0.300 -> W+1.800 gap is a deliberate 1.5s slot. Issue #106 fills
+    // it with the big-win coin fountain; until then it is a quiet pause.
 
+    /// Waits until exactly [msAfterWheelStop] past the wheel's landing, then
+    /// reports whether THIS sequence is still live. Returns false if the
+    /// player left mid-sequence (this sequence's epoch went stale) -- callers
+    /// return immediately on false, exactly as they do after every other
+    /// await in this method. Clamped at zero, so a slow server response can
+    /// never produce a negative wait.
+    Future<bool> holdUntil(int msAfterWheelStop) async {
+      final remaining = Duration(milliseconds: msAfterWheelStop) -
+          DateTime.now().difference(wheelStoppedAt);
+      if (remaining > Duration.zero) {
+        await Future.delayed(remaining);
+      }
+      return !stale();
+    }
+
+    if (resolvedResult.won) {
+      // Popup opens at W+1.800 and plays its win sound. Issue #106: the coin
+      // fountain is cleared in this same notifyListeners(), so the two can
+      // never be on screen together. The cut is invisible because the popup's
+      // backdrop -- a BackdropFilter blur plus an 80% black scrim -- is NOT
+      // animated (only the card inside it is), so it covers the screen at
+      // full strength on this very frame. playWin() also stops coin.mp3 here,
+      // since both share _player.
+      if (!await holdUntil(_popupOpensAtMs)) return;
       _lastResult = resolvedResult;
+      _showCoinFx = false;
       SoundService().playWin();
       notifyListeners();
+      final popupOpenedAt = DateTime.now();
 
-      // 2. Show Win Popup for 2.5 seconds (2,500ms)
-      await Future.delayed(const Duration(milliseconds: 2500));
-      if (_spinAborted) return;
+      // Popup hides at W+4.300 -- 2.5s on screen in the normal case.
+      if (!await holdUntil(4300)) return;
 
-      // 3. Hide Win Popup after 2.5 seconds
+      // Issue #107: ...but never before it has actually been visible for
+      // _minPopupVisible. Both targets above are absolute offsets from the
+      // wheel landing, which is what keeps every outcome path ending together
+      // (Issue #105) -- but it means a LATE reveal is absorbed by the popup's
+      // own screen time rather than by the sequence running long. The reveal
+      // waits on _fetchConfirmedResult, which retries at 0/200ms/500ms/1s/2s/2s,
+      // so on a large round still draining batches (Issue #42) it can arrive
+      // at W+3.700 or W+5.700. Without this floor, W+3.700 left the popup up
+      // for 0.6s, and W+5.700 pushed BOTH targets past due -- _lastResult was
+      // set and cleared inside one frame and the winning player never saw the
+      // popup at all, with no error anywhere to explain it (the connection is
+      // healthy in this scenario, so no connection dialog fires either).
+      //
+      // Costs nothing on a normal round, and nothing on a moderately slow one
+      // either -- a W+3.700 reveal is absorbed by the 0.7s tail and still ends
+      // at W+5.000. Only a genuinely late reveal runs past the endpoint, and
+      // then by a bounded ~0.9s rather than the ~4.7s the pre-Issue-#105 code
+      // would have overrun by in the same situation.
+      final shownFor = DateTime.now().difference(popupOpenedAt);
+      final shortfall = _minPopupVisible - shownFor;
+      if (shortfall > Duration.zero) {
+        await Future.delayed(shortfall);
+        if (stale()) return;
+      }
+
       _lastResult = null;
       notifyListeners();
-
-      // 4. Wait remaining 2.5 seconds (2,500ms) to complete exact 5.0-second display window
-      await Future.delayed(const Duration(milliseconds: 2500));
-      if (_spinAborted) return;
-    } else {
-      // Loss: Wait full 5.0 seconds (5,000ms)
-      await Future.delayed(const Duration(milliseconds: 5000));
-      if (_spinAborted) return;
     }
+
+    // Shared endpoint. A win arrives here at W+4.300 and waits out the 0.7s
+    // tail; a loss or spectator arrives right after the reveal and waits out
+    // the whole display window. Either way the sequence ends at W+5.000.
+    if (!await holdUntil(5000)) return;
 
     // Cleanup and auto-resume UTC timer for next round cleanly at 90s
     _lastResult = null;
@@ -1076,9 +1281,16 @@ class GameProvider extends ChangeNotifier {
   /// instant the server answers (often mid-spin, since the server usually
   /// finishes settling before the wheel even stops), bypassing
   /// onGlobalResult()'s staged reveal timing entirely.
+  ///
+  /// Issue #113: [epoch] is the calling onGlobalResult()'s identity. Every
+  /// abort check here compares against it rather than a shared flag, so a
+  /// fetch belonging to an aborted sequence stops -- and, crucially, never
+  /// writes its late reply (balance fields, the "not settled" banner) into a
+  /// newer sequence that started in the meantime.
   Future<SpinResult> _fetchConfirmedResult(
     String roundId,
     SpinResult pending,
+    int epoch,
   ) async {
     const delays = [
       Duration.zero,
@@ -1093,10 +1305,12 @@ class GameProvider extends ChangeNotifier {
       if (delays[attempt] > Duration.zero) {
         await Future.delayed(delays[attempt]);
       }
-      if (_spinAborted) return pending;
+      if (epoch != _spinEpoch) return pending;
 
       try {
         final myResult = await RoundApiService().getMyRoundResult(roundId);
+        // Issue #113: the request can outlive the sequence that made it.
+        if (epoch != _spinEpoch) return pending;
         if (myResult == null) continue;
 
         if (!myResult.placedBet) {
@@ -1148,6 +1362,7 @@ class GameProvider extends ChangeNotifier {
     // unresolved-for-now rather than a fabricated number. The player's real
     // balance will catch up via the next round's own confirmation or the
     // periodic heartbeat.
+    if (epoch != _spinEpoch) return pending; // Issue #113: not a stale sequence's banner to raise
     _balanceSyncFailed = true;
     notifyListeners();
     debugPrint('_fetchConfirmedResult: still not settled after full retry budget, preserving local state');
@@ -1204,6 +1419,62 @@ class GameProvider extends ChangeNotifier {
     _checkAndRestoreActiveChip();
     notifyListeners();
   }
+
+  /// Issue #110: clears a board whose bet is ALREADY on the server for a round
+  /// that ended without ever delivering a result (the round's draw failed --
+  /// see Issue #14). Called from game_screen.dart's failed-delivery branch,
+  /// and from the stale-board guard in _handleEarlyBetSubmission().
+  ///
+  /// The normal end-of-round cleanup lives only at the tail of
+  /// onGlobalResult(), which never runs for a round that never resolved. Left
+  /// alone, the chips stayed on the board with _betStatus == submitted and
+  /// _submittedRoundId pointing at the dead round; at the next round's "5
+  /// seconds" mark the auto-submit saw a non-empty board, and submitBets()'s
+  /// idempotency check -- which compares round ids -- let it through as a
+  /// "new" bet. The player was charged a second time for a bet they never
+  /// placed this round, and again every round after that until one resolved.
+  ///
+  /// Deliberately does NOT refund: unlike refundRejectedBets(), the stake here
+  /// was genuinely taken -- the server will settle that round on its own.
+  ///
+  /// Deliberately does NOT touch _lastBetSnapshot. That is REBET's source and
+  /// is only ever written at the end of a round that COMPLETED, so it belongs
+  /// to the previous completed round, not this one (abortSpin() documents the
+  /// same rule). _rebetUsed IS reset, exactly as the normal cleanup does, so
+  /// the REBET/DOUBLE button is in the same state it is after any other
+  /// round end -- empty board, REBET offered if a saved bet exists.
+  ///
+  /// Does nothing mid-spin: while onGlobalResult() is running it owns the
+  /// board and the REBET snapshot, and clearing under it would lose both.
+  void discardUnresolvedBoard() {
+    if (_isSpinning) return;
+    _board.clearAll();
+    _history.clear();
+    _rebetUsed = false;
+    _submittedBets = false;
+    _betStatus = BetSubmissionStatus.idle;
+    _submittedRoundId = null;
+    _checkAndRestoreActiveChip();
+    notifyListeners();
+  }
+
+  /// Issue #110: true when the board's bet was submitted for a DIFFERENT round
+  /// than [currentRoundId] -- i.e. its chips are left over from a round that
+  /// has ended. Used as a second, independent lock at the one place money
+  /// actually moves (the auto-submit at countdown 05), so a submitted board
+  /// that somehow outlives its round can never be re-bet, whatever left it
+  /// behind.
+  ///
+  /// Conservative by construction: every unknown (no submitted round recorded,
+  /// or the current round not yet known) means "not stale", so this can only
+  /// ever stop a bet that is provably for the wrong round, never a legitimate
+  /// one. A board the player has touched since is also correctly "not stale":
+  /// placing any chip resets _betStatus to idle and clears _submittedRoundId.
+  bool isBoardFromOlderRound(String? currentRoundId) =>
+      _betStatus == BetSubmissionStatus.submitted &&
+      _submittedRoundId != null &&
+      currentRoundId != null &&
+      _submittedRoundId != currentRoundId;
 
   // ── Triple page ────────────────────────────────────────────────────
   /// Switching triple page no longer clears bets — they persist by key.
