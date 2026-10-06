@@ -9,6 +9,7 @@ import '../theme/app_text_styles.dart';
 import '../services/sound_service.dart';
 import '../utils/app_exit.dart';
 import '../utils/device_type.dart';
+import 'lucky_card_screen.dart';
 
 import 'package:flutter/services.dart';
 
@@ -22,7 +23,7 @@ class LobbyScreen extends StatefulWidget {
 class _LobbyScreenState extends State<LobbyScreen> {
   static const List<_GameInfo> _games = [
     _GameInfo('assets/images/card_triple_chance.webp', true),
-    _GameInfo('assets/images/card_coming_soon.webp', false),
+    _GameInfo('assets/lucky_card/images/lucky-card-game-card.webp', true, luckyCard: true),
     _GameInfo('assets/images/card_coming_soon.webp', false),
     _GameInfo('assets/images/card_coming_soon.webp', false),
     _GameInfo('assets/images/card_coming_soon.webp', false),
@@ -1044,7 +1045,12 @@ class _GameCardState extends State<_GameCard> {
       onTap: () {
         SoundService().playButtonClick();
         if (widget.game.isActive) {
-          Navigator.pushNamed(context, '/game');
+          if (widget.game.luckyCard) {
+            // Lucky Card has no named route (main.dart is not touched): its screen is opened directly.
+            Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const LuckyCardScreen()));
+          } else {
+            Navigator.pushNamed(context, '/game');
+          }
         } else {
           _showLockedDialog(context);
         }
@@ -1066,5 +1072,8 @@ class _GameCardState extends State<_GameCard> {
 class _GameInfo {
   final String imagePath;
   final bool isActive;
-  const _GameInfo(this.imagePath, this.isActive);
+
+  /// True for the Lucky Card poster: its tap opens the Lucky Card screen instead of '/game'.
+  final bool luckyCard;
+  const _GameInfo(this.imagePath, this.isActive, {this.luckyCard = false});
 }

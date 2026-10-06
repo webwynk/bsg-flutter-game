@@ -1,0 +1,12 @@
+{
+  "phase": "settled",
+  "round_id": "35c8d03a-af57-4175-a654-2bde1431fe59",
+  "round_number": 17390546,
+  "scheduled_at": "2026-10-05T18:52:21+00:00",
+  "seconds_into": 48,
+  "winning_rank": "Q",
+  "winning_suit": "clubs",
+  "draw_at_second": 89,
+  "bonus_multiplier": 3,
+  "seconds_remaining": 55
+}

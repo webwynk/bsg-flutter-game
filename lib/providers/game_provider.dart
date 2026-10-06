@@ -860,14 +860,14 @@ class GameProvider extends ChangeNotifier {
     _countdownTimer = null;
   }
 
-  void stopCountdown() {
+  void stopCountdown({bool silent = false}) {
     _countdownTimer?.cancel();
     _countdownTimer = null;
     // F-11: recompute from the wall clock rather than hard-coding a value.
     // v1 reset to 60 in a 90-second model, so the UI briefly showed a
     // countdown that had never been correct.
     _countdown = _cycleToCountdown(_computeUtcRemainingCycle());
-    notifyListeners();
+    if (!silent) notifyListeners();
   }
 
   /// Called when user exits the game screen.
@@ -897,7 +897,7 @@ class GameProvider extends ChangeNotifier {
     _spinEpoch++; // Issue #113: invalidates every onGlobalResult() already running
     _isSpinning = false;
     _onTimerExpire = null;
-    stopCountdown();
+    stopCountdown(silent: true);
     SoundService().stopAll();
     // Unblock onGlobalResult() immediately if it's mid-wait for the wheel --
     // otherwise it would sit idle until the safety timeout, for no reason,

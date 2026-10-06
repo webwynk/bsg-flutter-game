@@ -1,0 +1,26 @@
+[
+  {
+    "round_id": "ef4213b2-2655-4626-985d-1ab55ce48edd",
+    "round_number": 17391548,
+    "scheduled_at": "2026-10-06T23:32:27+00:00",
+    "winning_rank": "K",
+    "winning_suit": "clubs",
+    "bonus_multiplier": 10
+  },
+  {
+    "round_id": "73d52235-b1f1-404a-bf6e-628a0e40e994",
+    "round_number": 17391547,
+    "scheduled_at": "2026-10-06T23:30:44+00:00",
+    "winning_rank": "Q",
+    "winning_suit": "diamonds",
+    "bonus_multiplier": 3
+  },
+  {
+    "round_id": "7807699b-0569-4751-9ba3-72785f7184ea",
+    "round_number": 17391546,
+    "scheduled_at": "2026-10-06T23:29:01+00:00",
+    "winning_rank": "J",
+    "winning_suit": "spades",
+    "bonus_multiplier": 1
+  }
+]

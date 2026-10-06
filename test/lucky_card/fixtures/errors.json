@@ -1,0 +1,62 @@
+[
+  {
+    "scenario": "not signed in",
+    "sqlstate": "P0100",
+    "message": "Unauthenticated"
+  },
+  {
+    "scenario": "agent tries to bet",
+    "sqlstate": "P0114",
+    "message": "Only players may place bets"
+  },
+  {
+    "scenario": "blocked account",
+    "sqlstate": "P0113",
+    "message": "ACCOUNT_BLOCKED"
+  },
+  {
+    "scenario": "unknown round",
+    "sqlstate": "P0120",
+    "message": "ROUND_NOT_FOUND"
+  },
+  {
+    "scenario": "round already drawn",
+    "sqlstate": "P0121",
+    "message": "ROUND_CLOSED"
+  },
+  {
+    "scenario": "not the current round",
+    "sqlstate": "P0121",
+    "message": "ROUND_CLOSED"
+  },
+  {
+    "scenario": "below the minimum",
+    "sqlstate": "P0123",
+    "message": "BELOW_MIN"
+  },
+  {
+    "scenario": "above the maximum",
+    "sqlstate": "P0124",
+    "message": "EXCEEDS_MAX"
+  },
+  {
+    "scenario": "empty bet",
+    "sqlstate": "P0125",
+    "message": "EMPTY_BET"
+  },
+  {
+    "scenario": "unknown card key",
+    "sqlstate": "P0126",
+    "message": "BAD_BET:x_hearts"
+  },
+  {
+    "scenario": "amount is text",
+    "sqlstate": "P0126",
+    "message": "BAD_BET:j_hearts"
+  },
+  {
+    "scenario": "not enough coins",
+    "sqlstate": "P0112",
+    "message": "INSUFFICIENT_COINS"
+  }
+]

@@ -40,6 +40,7 @@ flutter:
     - assets/images/
     - assets/sounds/
     - assets/fonts/
+    - assets/lucky_card/images/
 
   fonts:
     - family: DMSans
