@@ -50,9 +50,11 @@ class LuckyCardBoardBinding extends StatefulWidget {
   /// Told when any tap on the board was refused, and why.
   final LuckyCardBoardRefused? onRefused;
 
-  /// Told of every tap on a card, a suit bar or a rank selector, with what the board did
-  /// (the chip click and the light haptic of App Step 8b are made when it changed anything).
-  final void Function(LuckyCardBoardResult result)? onTapped;
+  /// Told of every tap on a card, a suit bar or a rank selector: what was tapped
+  /// ([LuckyCardCardTarget], [LuckyCardSuitTarget] or [LuckyCardRankTarget]) and what the board
+  /// did. The screen makes the tap's sound and the light haptic when it changed anything: the
+  /// number-select sound for a single card, the chip click for a bar.
+  final void Function(LuckyCardBoardTarget target, LuckyCardBoardResult result)? onTapped;
 
   @override
   State<LuckyCardBoardBinding> createState() => _LuckyCardBoardBindingState();
@@ -84,8 +86,8 @@ class _LuckyCardBoardBindingState extends State<LuckyCardBoardBinding> {
     super.dispose();
   }
 
-  LuckyCardBoardResult _told(LuckyCardBoardResult result) {
-    widget.onTapped?.call(result);
+  LuckyCardBoardResult _told(LuckyCardBoardTarget target, LuckyCardBoardResult result) {
+    widget.onTapped?.call(target, result);
     return result;
   }
 
@@ -102,9 +104,9 @@ class _LuckyCardBoardBindingState extends State<LuckyCardBoardBinding> {
       LuckyCardBoardZones(
         art: widget.art,
         snapshot: _snapshot,
-        onTapCard: (card) => _told(provider.tapCard(card)),
-        onTapSuit: (suit) => _told(provider.tapSuit(suit)),
-        onTapRank: (rank) => _told(provider.tapRank(rank)),
+        onTapCard: (card) => _told(LuckyCardCardTarget(card), provider.tapCard(card)),
+        onTapSuit: (suit) => _told(LuckyCardSuitTarget(suit), provider.tapSuit(suit)),
+        onTapRank: (rank) => _told(LuckyCardRankTarget(rank), provider.tapRank(rank)),
         onRefused: widget.onRefused,
       ),
     );

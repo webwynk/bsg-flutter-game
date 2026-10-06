@@ -345,10 +345,16 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
         provider: provider,
         art: art,
         onRefused: (target, issues) => _refusal(issues),
-        onTapped: (result) {
-          // The chip click and the light haptic of Triple Chance, when the tap changed the board.
+        onTapped: (target, result) {
+          // When the tap changed the board: a single card makes Triple Chance's number-select
+          // sound (as a number of its grid does), a bar makes the chip click; both with the
+          // light haptic of Triple Chance.
           if (result.changedAnything) {
-            _sound.chipClick();
+            if (target is LuckyCardCardTarget) {
+              _sound.numberSelect();
+            } else {
+              _sound.chipClick();
+            }
             _lightClick();
           }
         },
@@ -369,15 +375,18 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
             reveal: (context) => LuckyCardWheelBinding(
               provider: provider,
               layout: layout,
-              // The first ding, for the rank rim. The spin sound is the user's own file, not supplied
-              // yet: its hook is `onSpinStart`, left unconnected on purpose (spec §17AE).
+              // The first ding, for the rank rim, and the owner's own wheel sound from the start of
+              // the spin (the second ding, for the suit rim, comes from the sound director).
+              onSpinStart: _sound.wheelSpin,
               onRankLanded: _sound.ding,
             ),
           ),
           rankColumn: (context, layout) => LuckyCardRegionSwap(
             provider: provider,
             betting: (context) => zones.rankColumn(context, layout),
-            reveal: (context) => LuckyCardRevealColumn(provider: provider, layout: layout, art: art, onFlip: _sound.numberSelect),
+            // The card flip has no sound (owner's decision 2026-10-07): the wheel's own sound and
+            // the two dings are what is heard.
+            reveal: (context) => LuckyCardRevealColumn(provider: provider, layout: layout, art: art),
           ),
           status: (context, layout) => LuckyCardStatusBinding(provider: provider, layout: layout, notice: _notice),
           side: (context, layout) => LuckyCardSideColumn(

@@ -24,6 +24,8 @@ class FakeOutput implements LuckyCardSoundOutput {
   @override
   void ding() => events.add('ding');
   @override
+  void wheelSpin() => events.add('wheelSpin');
+  @override
   void notification() => events.add('notification');
   @override
   void win() => events.add('win');
@@ -49,11 +51,12 @@ void main() {
         ..chipClick()
         ..numberSelect()
         ..ding()
+        ..wheelSpin()
         ..notification()
         ..win()
         ..coin()
         ..noMoreBets();
-      expect(out.events, ['buttonClick', 'chipClick', 'numberSelect', 'ding', 'notification', 'win', 'coin', 'noMoreBets']);
+      expect(out.events, ['buttonClick', 'chipClick', 'numberSelect', 'ding', 'wheelSpin', 'notification', 'win', 'coin', 'noMoreBets']);
     });
 
     test('muting stops whatever is playing and silences every sound', () {
@@ -68,6 +71,7 @@ void main() {
         ..chipClick()
         ..numberSelect()
         ..ding()
+        ..wheelSpin()
         ..notification()
         ..win()
         ..coin()

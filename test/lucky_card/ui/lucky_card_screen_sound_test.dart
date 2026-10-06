@@ -142,7 +142,7 @@ void main() {
   });
 
   group('the taps', () {
-    testWidgets('a chip and each button: the button click; a chip on the board: the chip click', (tester) async {
+    testWidgets('a chip and each button: the button click; a bar: the chip click; a single card: the number-select sound', (tester) async {
       final rig = BetRig(tester);
       final out = FakeOutput();
       await openGame(tester, rig, out);
@@ -158,7 +158,8 @@ void main() {
       await tester.pump();
       await tester.tap(key('j_hearts'));
       await tester.pump();
-      expect(count(out, 'chipClick'), 3);
+      expect(out.events, ['buttonClick', 'chipClick', 'chipClick', 'numberSelect'],
+          reason: 'the suit bar and the rank bar click; the single card makes the number-select sound');
 
       out.events.clear();
       await tester.tap(key('button-doubleBet'));
@@ -188,6 +189,35 @@ void main() {
       await tester.tap(key('suit-diamonds'));
       await tester.pump();
       expect(out.events, ['chipClick'], reason: 'nothing on diamonds to take back: no click');
+      await rig.finish();
+    });
+
+    testWidgets('a single card: the number-select sound when it changes, also taking a chip back; silent when it changes nothing', (tester) async {
+      final rig = BetRig(tester);
+      final out = FakeOutput();
+      await openGame(tester, rig, out);
+      out.events.clear();
+
+      await tester.tap(key('chip-10'));
+      await tester.pump();
+      out.events.clear();
+      await tester.tap(key('k_clubs'));
+      await tester.pump();
+      expect(out.events, ['numberSelect'], reason: 'a chip placed on one card');
+      await tester.tap(key('k_clubs'));
+      await tester.pump();
+      expect(out.events, ['numberSelect', 'numberSelect'], reason: 'a second chip on the same card');
+
+      await tester.tap(key('button-remove'));
+      await tester.pump();
+      out.events.clear();
+      await tester.tap(key('k_clubs'));
+      await tester.pump();
+      expect(out.events, ['numberSelect'], reason: 'a chip taken back from one card');
+      await tester.tap(key('q_spades'));
+      await tester.pump();
+      expect(out.events, ['numberSelect'], reason: 'nothing on that card to take back: silent');
+      expect(count(out, 'chipClick'), 0, reason: 'a single card never makes the bar click');
       await rig.finish();
     });
 
@@ -222,7 +252,7 @@ void main() {
   });
 
   group('a round', () {
-    testWidgets('a winner hears the lock voice, the flips, two dings, the coins and the win, in that order', (tester) async {
+    testWidgets('a winner hears the lock voice, the wheel, two dings, the coins and the win, in that order; the card flip is silent', (tester) async {
       final rig = BetRig(tester);
       final out = FakeOutput();
       await openGame(tester, rig, out);
@@ -236,19 +266,20 @@ void main() {
       expect(seq.first, 'noMoreBets');
       expect(count(out, 'noMoreBets'), 1);
       expect(count(out, 'ding'), 2, reason: 'one for the rank rim, one for the suit rim');
-      expect(count(out, 'numberSelect'), inInclusiveRange(8, 14), reason: 'a tick for each flip of the shuffle');
+      expect(count(out, 'numberSelect'), 0, reason: 'the card flip makes no sound (owner, 2026-10-07)');
+      expect(count(out, 'wheelSpin'), 1, reason: 'the wheel\'s own sound, once, when the spin starts');
       expect(count(out, 'coin'), 1);
       expect(count(out, 'win'), 1);
-      expect(seq.indexOf('noMoreBets'), lessThan(seq.indexOf('numberSelect')));
+      expect(seq.indexOf('noMoreBets'), lessThan(seq.indexOf('wheelSpin')));
       expect(seq.indexOf('ding'), lessThan(seq.lastIndexOf('ding')));
-      expect(seq.indexOf('numberSelect'), lessThan(seq.indexOf('ding')), reason: 'the shuffle starts before the first ding');
+      expect(seq.indexOf('wheelSpin'), lessThan(seq.indexOf('ding')), reason: 'the wheel starts before the first ding');
       expect(seq.lastIndexOf('ding'), lessThan(seq.indexOf('coin')), reason: 'the coins follow the suit rim');
       expect(seq.indexOf('coin'), lessThan(seq.indexOf('win')), reason: 'then the popup');
       expect(seq.where((e) => ['buttonClick', 'chipClick', 'notification'].contains(e)), isEmpty, reason: 'nothing else');
       await rig.finish();
     });
 
-    testWidgets('a spectator hears the voice, the flips and the dings, but no coins and no win', (tester) async {
+    testWidgets('a spectator hears the voice, the wheel and the dings, but no coins and no win', (tester) async {
       final rig = BetRig(tester);
       final out = FakeOutput();
       await openGame(tester, rig, out);
@@ -256,6 +287,8 @@ void main() {
       await rig.world.runUntil(99.5);
       await settle(tester);
       expect(count(out, 'noMoreBets'), 1);
+      expect(count(out, 'wheelSpin'), 1);
+      expect(count(out, 'numberSelect'), 0);
       expect(count(out, 'ding'), 2);
       expect(count(out, 'coin'), 0);
       expect(count(out, 'win'), 0);

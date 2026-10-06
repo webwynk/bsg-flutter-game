@@ -16,9 +16,15 @@
 //
 // Belongs to Lucky Card only.
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 
 import 'sound_service.dart';
+
+/// The wheel's own spin sound: the owner's file, packed with Lucky Card's assets
+/// (`assets/lucky_card/sounds/`, added to `pubspec.yaml` with the owner's permission).
+/// The path is relative to `assets/`, as `AssetSource` wants it.
+const String kLuckyCardWheelSpinSound = 'lucky_card/sounds/lucky-card-wheel-spin-sound.mp3';
 
 /// The sounds the Lucky Card screen can ask for.
 abstract class LuckyCardSoundOutput {
@@ -26,6 +32,7 @@ abstract class LuckyCardSoundOutput {
   void chipClick();
   void numberSelect();
   void ding();
+  void wheelSpin();
   void notification();
   void win();
   void coin();
@@ -50,6 +57,32 @@ class AppSoundOutput implements LuckyCardSoundOutput {
   @override
   void ding() => SoundService().playRimSelect();
 
+  /// Lucky Card's own player: the wheel's sound is not one of Triple Chance's files, so it does
+  /// not go through `SoundService` (which plays only `assets/sounds/`). Created on first use;
+  /// it shares the app-wide audio setup `SoundService` makes (mix with other sounds).
+  static AudioPlayer? _spinPlayer;
+
+  @override
+  void wheelSpin() {
+    _playSpin();
+  }
+
+  static Future<void> _playSpin() async {
+    try {
+      final player = _spinPlayer ??= AudioPlayer();
+      await player.stop();
+      await player.play(AssetSource(kLuckyCardWheelSpinSound));
+    } catch (_) {
+      // A sound that cannot play must never break the game.
+    }
+  }
+
+  static Future<void> _stopSpin() async {
+    try {
+      await _spinPlayer?.stop();
+    } catch (_) {}
+  }
+
   @override
   void notification() => SoundService().playNotification();
 
@@ -66,7 +99,10 @@ class AppSoundOutput implements LuckyCardSoundOutput {
   void setInGame(bool inGame) => SoundService().setInGameScreen(inGame);
 
   @override
-  void stopAll() => SoundService().stopAll();
+  void stopAll() {
+    SoundService().stopAll();
+    _stopSpin();
+  }
 }
 
 /// The gate: plays a sound unless it is muted.
@@ -98,6 +134,7 @@ class LuckyCardSound {
   void chipClick() => _gate(_output.chipClick);
   void numberSelect() => _gate(_output.numberSelect);
   void ding() => _gate(_output.ding);
+  void wheelSpin() => _gate(_output.wheelSpin);
   void notification() => _gate(_output.notification);
   void win() => _gate(_output.win);
   void coin() => _gate(_output.coin);

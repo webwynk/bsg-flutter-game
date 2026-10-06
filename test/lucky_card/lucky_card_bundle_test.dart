@@ -2,6 +2,7 @@
 // ask for is in the app's own asset bundle, so a real build can show it. Flutter's test bundle is
 // made from the pubspec, so a picture that is not listed there cannot be loaded here either.
 
+import 'package:best_smart_game/services/lucky_card_sound.dart' show kLuckyCardWheelSpinSound;
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_art.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +26,15 @@ void main() {
   test('so is the lobby poster', () async {
     final data = await rootBundle.load('assets/lucky_card/images/lucky-card-game-card.webp');
     expect(data.lengthInBytes, greaterThan(100000));
+  });
+
+  test('the wheel\'s own sound is in the asset bundle, at the path the sound service plays', () async {
+    // AssetSource paths are relative to assets/; the bundle's own are not.
+    final data = await rootBundle.load('assets/$kLuckyCardWheelSpinSound');
+    expect(data.lengthInBytes, greaterThan(100000));
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    final sounds = manifest.listAssets().where((a) => a.startsWith('assets/lucky_card/sounds/')).toList();
+    expect(sounds, ['assets/lucky_card/sounds/lucky-card-wheel-spin-sound.mp3'], reason: 'the folder holds only the wheel sound');
   });
 
   test('the fonts the screen uses are declared', () async {
