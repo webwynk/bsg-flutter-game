@@ -16,14 +16,6 @@ class AppColors {
   static const Color blackRim     = Color(0xFF1E0400);
   static const Color deepRed      = Color(0xFF8B0000);
 
-  // Wheel ring colors
-  static const Color redRing1     = Color(0xFF6B0000);
-  static const Color redRing2     = Color(0xFFAA2020);
-  static const Color greenRing1   = Color(0xFF0A3D1F);
-  static const Color greenRing2   = Color(0xFF176930);
-  static const Color blackRing1   = Color(0xFF0d0d0d);
-  static const Color blackRing2   = Color(0xFF2a2a2a);
-
   // UI
   static const Color textGoldLight = Color(0xFFF5E6C4);
   static const Color historyStart  = Color(0xFF1A0500);

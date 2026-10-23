@@ -13,6 +13,7 @@ import '../widgets/dialogs/action_dialog.dart';
 import '../widgets/wheel/wheel_widget.dart';
 import '../widgets/panels/left_tab_strip.dart';
 import '../widgets/controls/right_panel.dart';
+import '../widgets/controls/exit_corner_button.dart';
 import '../widgets/overlays/coin_fountain.dart';
 import '../widgets/overlays/result_overlay.dart';
 import '../models/play_limits_config.dart';
@@ -943,6 +944,18 @@ class _GameScreenState extends State<GameScreen> {
                         );
                       },
                     ),
+                  ),
+
+                  // Exit (X) button in the wheel area's top-right corner (it
+                  // used to be in the right panel's header; same exit call).
+                  // Drawn UNDER the left accordion panel on purpose: a wide
+                  // open Double/Triple grid covers it, so it can never sit on
+                  // top of a betting control. The back button/gesture still
+                  // opens the same exit confirmation then.
+                  Positioned(
+                    top: 5,
+                    right: MediaQuery.of(context).size.width * 0.28 + 5,
+                    child: const ExitCornerButton(),
                   ),
 
                   // Left accordion panel (expands ON TOP of the wheel)

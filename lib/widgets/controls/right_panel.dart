@@ -94,19 +94,10 @@ class _PanelHeaderState extends State<_PanelHeader> with SingleTickerProviderSta
               );
             },
           ),
+          // The exit (X) button no longer lives in this header; it moved to
+          // the top-right corner of the wheel area (see ExitCornerButton in
+          // exit_corner_button.dart, placed by game_screen.dart).
           const Spacer(),
-          GestureDetector(
-            onTap: () => Navigator.maybePop(context),
-            child: Container(
-              width: 20, height: 20,
-              decoration: BoxDecoration(
-                color: AppColors.casinoRed,
-                border: Border.all(color: AppColors.goldPrimary, width: 1.0),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Icon(Icons.close, color: Colors.white, size: 12),
-            ),
-          ),
         ],
       ),
     );
@@ -326,7 +317,7 @@ class _ControlArea extends StatelessWidget {
           children: [
             // Left Column: Chips
             _VerticalChips(),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             // Right Column: Action Buttons & Countdown
             Expanded(
               child: _ActionColumn(onSpin: onSpin),
@@ -338,8 +329,23 @@ class _ControlArea extends StatelessWidget {
   }
 }
 
+/// The column of chips (2, 5, 10, 50, 100) left of the action buttons.
+/// Tapping a chip calls `game.selectChip(chip)`; the column ignores touches
+/// while betting is locked (`countdown <= 5` or spinning).
+///
+/// Chip size: each chip is as big as the column's height allows, between
+/// [_minChipSize] (the size it always was, so it is never smaller than before)
+/// and [_maxChipSize]. The selected chip is [_selectedExtra] bigger. The column
+/// is only as wide as the selected chip needs, so the buttons and countdown box
+/// beside it get the rest of the panel width.
 class _VerticalChips extends StatelessWidget {
   static const List<ChipValue> _chips = ChipValue.values;
+
+  static const double _minChipSize = 36.0;
+  static const double _maxChipSize = 42.0;
+  static const double _selectedExtra = 8.0;
+  // Height kept free for the gaps between chips and the selected chip's glow.
+  static const double _verticalReserve = 18.0;
 
   @override
   Widget build(BuildContext context) {
@@ -350,47 +356,57 @@ class _VerticalChips extends StatelessWidget {
           opacity: 1.0,
           child: IgnorePointer(
             ignoring: isLocked,
-            child: SizedBox(
-              width: 44,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: _chips.map((chip) {
-                  final isSelected = game.activeChip == chip;
-                  final amount = chip.amount;
-                  return GestureDetector(
-                    onTap: () => game.selectChip(chip),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      width: isSelected ? 44 : 36,
-                      height: isSelected ? 44 : 36,
-                      decoration: isSelected
-                        ? BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.goldBright, width: 1.5),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: AppColors.goldBright,
-                                blurRadius: 12,
-                                spreadRadius: 2,
+            child: LayoutBuilder(
+              builder: (_, constraints) {
+                // Biggest chip size at which all chips plus the selected
+                // chip's extra size and the reserve still fit the height.
+                final chipSize = ((constraints.maxHeight - _selectedExtra - _verticalReserve) /
+                        _chips.length)
+                    .clamp(_minChipSize, _maxChipSize);
+                final selectedSize = chipSize + _selectedExtra;
+                return SizedBox(
+                  width: selectedSize + 2,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: _chips.map((chip) {
+                      final isSelected = game.activeChip == chip;
+                      final amount = chip.amount;
+                      return GestureDetector(
+                        onTap: () => game.selectChip(chip),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          width: isSelected ? selectedSize : chipSize,
+                          height: isSelected ? selectedSize : chipSize,
+                          decoration: isSelected
+                            ? BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: AppColors.goldBright, width: 1.5),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: AppColors.goldBright,
+                                    blurRadius: 12,
+                                    spreadRadius: 2,
+                                  ),
+                                  BoxShadow(
+                                    color: Colors.white,
+                                    blurRadius: 4,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              )
+                            : const BoxDecoration(
+                                shape: BoxShape.circle,
                               ),
-                              BoxShadow(
-                                color: Colors.white,
-                                blurRadius: 4,
-                                spreadRadius: 1,
-                              ),
-                            ],
-                          )
-                        : const BoxDecoration(
-                            shape: BoxShape.circle,
+                          child: Image.asset(
+                            'assets/images/chip_$amount.webp',
+                            fit: BoxFit.contain,
                           ),
-                      child: Image.asset(
-                        'assets/images/chip_$amount.webp',
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                );
+              },
             ),
           ),
         );
@@ -474,6 +490,17 @@ class _ActionColumn extends StatelessWidget {
   }
 }
 
+/// One of the right-panel action buttons (INFO, DOUBLE / REBET, CLEAR, REMOVE).
+///
+/// [data] is (label, [topColor, bottomColor], textColor, borderColor).
+/// Behaviour: a tap plays the click sound and calls [onTap], but only while
+/// [isEnabled] (otherwise the tap is ignored). A disabled button fades to 40%
+/// opacity unless [dimWhenDisabled] is false.
+///
+/// 3D redesign, Phase 1: only how the button is painted. It has a glossy raised
+/// face (lighter top, darker bottom, a shine band), a solid edge under it plus a
+/// soft drop shadow, a press-down effect, and a 13pt label that shrinks to fit
+/// instead of overflowing on a narrow panel.
 class _ActionBtn extends StatelessWidget {
   final (String, List<Color>, Color, Color) data;
   final VoidCallback onTap;
@@ -483,7 +510,16 @@ class _ActionBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Disabled = same color but faded to 40% opacity. Taps blocked via IgnorePointer.
+    final top = data.$2.first;
+    final bottom = data.$2.last;
+    final highlight = _depthShade(top, lightnessDelta: 0.20, saturationScale: 0.8);
+    final middle = Color.lerp(top, bottom, 0.35)!;
+    final edge = _depthShade(bottom, lightnessDelta: -0.15);
+    // Light label colors get a dark shadow; dark label colors (the gold DOUBLE
+    // button) get a light one, so the text stays readable on either face.
+    final lightLabel = data.$3.computeLuminance() > 0.5;
+
+    // Disabled = same color but faded to 40% opacity. The tap is ignored (onTap is null).
     return Expanded(
       child: Opacity(
         opacity: isEnabled ? 1.0 : (dimWhenDisabled ? 0.40 : 1.0),
@@ -496,48 +532,162 @@ class _ActionBtn extends StatelessWidget {
                     onTap();
                   }
                 : null,
-            child: Container(
-              decoration: AppDecorations.actionButton(data.$2).copyWith(
-                border: Border.all(color: data.$4, width: 1.0),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
+            child: _PressDepth(
+              enabled: isEnabled,
+              builder: (pressed) => Container(
+                decoration: AppDecorations.actionButton(data.$2).copyWith(
+                  gradient: LinearGradient(
+                    colors: [highlight, top, middle, bottom],
+                    stops: const [0.0, 0.46, 0.54, 1.0],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
                   ),
-                ],
-              ),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Positioned(
-                    top: 1, left: 1, right: 1,
-                    height: 10,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.white.withValues(alpha: 0.35),
-                            Colors.transparent,
-                          ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
+                  border: Border.all(color: data.$4, width: 1.0),
+                  boxShadow: [
+                    BoxShadow(
+                      color: edge,
+                      offset: Offset(0, pressed ? 1 : 3),
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      blurRadius: pressed ? 3 : 7,
+                      offset: Offset(0, pressed ? 2 : 5),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(7),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Shine band across the upper part of the face.
+                      Positioned.fill(
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: FractionallySizedBox(
+                              heightFactor: 0.38,
+                              widthFactor: 0.92,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(6),
+                                    bottom: Radius.circular(10),
+                                  ),
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.white.withValues(alpha: 0.5),
+                                      Colors.white.withValues(alpha: 0.06),
+                                    ],
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      // Thin bright line along the top edge (light catching the bevel).
+                      Positioned(
+                        top: 0, left: 0, right: 0,
+                        height: 1,
+                        child: ColoredBox(color: Colors.white.withValues(alpha: 0.6)),
+                      ),
+                      // Soft dark band along the bottom (the face curving away).
+                      Positioned(
+                        bottom: 0, left: 0, right: 0,
+                        height: 7,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.transparent,
+                                Colors.black.withValues(alpha: 0.32),
+                              ],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              data.$1,
+                              style: AppTextStyles.button(size: 13, color: data.$3).copyWith(
+                                letterSpacing: 1.5,
+                                shadows: [
+                                  Shadow(
+                                    color: lightLabel
+                                        ? Colors.black.withValues(alpha: 0.5)
+                                        : Colors.white.withValues(alpha: 0.45),
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  Center(
-                    child: Text(
-                      data.$1,
-                      style: AppTextStyles.button(size: 10, color: data.$3),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Returns [c] with its lightness moved by [lightnessDelta] and its saturation
+/// multiplied by [saturationScale] (both results clamped to 0..1). Used only to
+/// derive the lighter highlight and darker edge shades of the 3D action buttons
+/// from each button's own two colors.
+Color _depthShade(Color c, {double lightnessDelta = 0, double saturationScale = 1}) {
+  final hsl = HSLColor.fromColor(c);
+  return hsl
+      .withLightness((hsl.lightness + lightnessDelta).clamp(0.0, 1.0))
+      .withSaturation((hsl.saturation * saturationScale).clamp(0.0, 1.0))
+      .toColor();
+}
+
+/// Tells its [builder] whether a finger is currently pressing down on it, so the
+/// 3D button can sink 2px while held. It only watches raw pointer events (a
+/// [Listener] does not take part in the tap gesture), so the button's own tap
+/// handling is not affected. Does nothing when [enabled] is false.
+class _PressDepth extends StatefulWidget {
+  final bool enabled;
+  final Widget Function(bool pressed) builder;
+  const _PressDepth({required this.enabled, required this.builder});
+
+  @override
+  State<_PressDepth> createState() => _PressDepthState();
+}
+
+class _PressDepthState extends State<_PressDepth> {
+  bool _pressed = false;
+
+  void _set(bool value) {
+    if (!widget.enabled && value) return;
+    if (_pressed != value) setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (_) => _set(true),
+      onPointerUp: (_) => _set(false),
+      onPointerCancel: (_) => _set(false),
+      child: Transform.translate(
+        offset: Offset(0, _pressed ? 2 : 0),
+        child: widget.builder(_pressed),
       ),
     );
   }
@@ -578,59 +728,186 @@ class _CountdownBoxState extends State<_CountdownBox> with SingleTickerProviderS
     return Consumer<GameProvider>(
       builder: (_, game, __) {
         final isLow = game.countdown <= 8;
+        // Glow and lower-edge colors for the digits: gold normally, red once
+        // the countdown is low (the same isLow rule that already picks the
+        // digit color below).
+        final glow = isLow ? const Color(0xFFFF4632) : AppColors.goldBright;
+        final digitEdge = isLow ? const Color(0xFF7A1208) : const Color(0xFF7A5A00);
+        // 3D redesign, Phase 2: only how the box is painted. A raised plate
+        // (glossy gold-edged frame, solid edge underneath, soft drop shadow)
+        // holding a pressed-in window for the number, with glowing, embossed
+        // digits. What the box shows (the digits, the 00 while spinning, the
+        // red color and pulse when low) is unchanged.
         return Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 4),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF2E0800), Color(0xFF150200)],
+              colors: [Color(0xFF6A2A0C), Color(0xFF3A1206), Color(0xFF1C0603), Color(0xFF0D0302)],
+              stops: [0.0, 0.48, 0.52, 1.0],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: AppColors.goldPrimary,
+              color: const Color(0xFFFFE27A),
               width: 1.5,
             ),
             boxShadow: [
+              const BoxShadow(color: Color(0xFF120000), offset: Offset(0, 4)),
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.4),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
+                color: Colors.black.withValues(alpha: 0.65),
+                blurRadius: 9,
+                offset: const Offset(0, 7),
               ),
             ],
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedBuilder(
-                animation: _pulseAnim,
-                builder: (_, child) => Transform.scale(
-                  scale: (isLow && game.board.total > 0) ? _pulseAnim.value : 1.0,
-                  child: child,
-                ),
-                child: Text(
-                  game.isSpinning ? '00' : game.countdown.toString().padLeft(2, '0'),
-                  style: GoogleFonts.oswald(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    height: 1.1,
-                    color: isLow ? AppColors.dangerRed : AppColors.goldBright,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(6.5),
+            child: Stack(
+              children: [
+                // Soft dark band along the bottom (the plate curving away).
+                Positioned(
+                  bottom: 0, left: 0, right: 0,
+                  height: 8,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.transparent, Colors.black.withValues(alpha: 0.4)],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-              const Text(
-                'SECONDS LEFT',
-                style: TextStyle(
-                  fontFamily: 'DMSans',
-                  fontWeight: FontWeight.w700,
-                  fontSize: 8.0,
-                  height: 1.0,
-                  color: AppColors.textGold,
-                  letterSpacing: 1.5,
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, bottom: 6),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // The pressed-in number window.
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 7),
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF050100), Color(0xFF1F0803)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                          borderRadius: BorderRadius.circular(7),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: 0.22),
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            // Shadow falling across the top of the window (it sits below the frame).
+                            Positioned.fill(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(7),
+                                child: Align(
+                                  alignment: Alignment.topCenter,
+                                  child: SizedBox(
+                                    height: 9,
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            Colors.black.withValues(alpha: 0.85),
+                                            Colors.transparent,
+                                          ],
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Center(
+                              child: AnimatedBuilder(
+                                animation: _pulseAnim,
+                                builder: (_, child) => Transform.scale(
+                                  scale: (isLow && game.board.total > 0) ? _pulseAnim.value : 1.0,
+                                  child: child,
+                                ),
+                                child: Text(
+                                  game.isSpinning ? '00' : game.countdown.toString().padLeft(2, '0'),
+                                  style: GoogleFonts.oswald(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.1,
+                                    color: isLow ? AppColors.dangerRed : AppColors.goldBright,
+                                    shadows: [
+                                      Shadow(color: glow.withValues(alpha: 0.7), blurRadius: 9),
+                                      Shadow(color: digitEdge, offset: const Offset(0, 2)),
+                                      Shadow(
+                                        color: Colors.black.withValues(alpha: 0.8),
+                                        blurRadius: 3,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'SECONDS LEFT',
+                        style: TextStyle(
+                          fontFamily: 'DMSans',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 8.0,
+                          height: 1.0,
+                          color: AppColors.textGold,
+                          letterSpacing: 1.5,
+                          shadows: [
+                            Shadow(color: Colors.black.withValues(alpha: 0.9), offset: const Offset(0, -1)),
+                            Shadow(color: Colors.white.withValues(alpha: 0.25), offset: const Offset(0, 1)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                // Light catching the top of the plate (shine band + thin bright line).
+                Positioned(
+                  top: 0, left: 0, right: 0,
+                  height: 1,
+                  child: ColoredBox(color: Colors.white.withValues(alpha: 0.45)),
+                ),
+                Positioned(
+                  top: 2, left: 5, right: 5,
+                  height: 6,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(6),
+                          bottom: Radius.circular(10),
+                        ),
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.white.withValues(alpha: 0.3),
+                            Colors.white.withValues(alpha: 0.0),
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },

@@ -110,6 +110,13 @@ class LeftAccordionPanel extends StatelessWidget {
   }
 }
 
+/// One vertical mode tab (SINGLE, DOUBLE or TRIPLE): its WIN and PLAY boxes,
+/// an arrow showing whether its number grid is open, and the mode name.
+/// Tapping it calls `game.openDrawerWithMode(tabMode, auth)`. The open tab is
+/// the one with `game.mode == tabMode && game.isDrawerOpen`.
+///
+/// 3D redesign, Phase 3 changed only how it is painted (a raised, glossy tab
+/// with pressed-in WIN / PLAY boxes, a raised arrow, and a 14pt label).
 class _ModeTab extends StatelessWidget {
   final String tabMode;
   final String label;
@@ -150,74 +157,151 @@ class _ModeTab extends StatelessWidget {
             color: isActive ? AppColors.goldBright : const Color(0xFF6A0404),
             width: isActive ? 2.2 : 1.5,
           ),
+          // 3D redesign, Phase 3: a raised tab. A solid edge under it plus a
+          // soft drop shadow give it height; the open tab keeps its gold glow.
           boxShadow: isActive
             ? const [
+                BoxShadow(color: Color(0xFF120000), offset: Offset(0, 4)),
                 BoxShadow(color: Color(0x77D4AF37), blurRadius: 6, spreadRadius: 1),
-                BoxShadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 2)),
+                BoxShadow(color: Color(0xA6000000), blurRadius: 9, offset: Offset(0, 7)),
               ]
             : const [
-                BoxShadow(color: Colors.black54, blurRadius: 3, offset: Offset(0, 1)),
+                BoxShadow(color: Color(0xFF120000), offset: Offset(0, 4)),
+                BoxShadow(color: Color(0xA6000000), blurRadius: 9, offset: Offset(0, 7)),
               ],
         ),
-        child: Column(
-          children: [
-            const SizedBox(height: 6),
-            // WIN box (rounded rectangle, 35% height)
-            Expanded(
-              flex: 35,
-              child: _VerticalInfoBox(
-                label: 'WIN',
-                value: '$win',
-              ),
-            ),
-            // PLAY box (rounded rectangle, 35% height)
-            Expanded(
-              flex: 35,
-              child: _VerticalInfoBox(
-                label: 'PLAY',
-                value: '$play',
-              ),
-            ),
-            const SizedBox(height: 8),
-            // Solid green triangle pointing down (open/active) or up (closed/inactive)
-            SizedBox(
-              height: 24,
-              child: Center(
-                child: Icon(
-                  isActive ? Icons.arrow_drop_down_sharp : Icons.arrow_drop_up_sharp,
-                  color: const Color(0xFF32CD32), // Pure Lime Green
-                  size: 32,
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            // Mode label (vertical text, bottom 20% height with 10px bottom padding)
-            Expanded(
-              flex: 20,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Center(
-                  child: RotatedBox(
-                    quarterTurns: 3,
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        fontFamily: 'DMSans',
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12,
-                        color: Colors.white,
-                        letterSpacing: 1.0,
-                        shadows: [
-                          Shadow(color: Colors.black87, blurRadius: 2, offset: Offset(1, 1)),
-                        ],
-                      ),
-                      maxLines: 1,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Soft dark band along the bottom (the tab curving away).
+              Positioned(
+                bottom: 0, left: 0, right: 0,
+                height: 24,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.transparent, Colors.black.withValues(alpha: 0.45)],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+              // Side bevel: light on the left edge, shade on the right edge.
+              Positioned(
+                top: 0, bottom: 0, left: 0,
+                width: 2,
+                child: ColoredBox(color: Colors.white.withValues(alpha: 0.12)),
+              ),
+              Positioned(
+                top: 0, bottom: 0, right: 0,
+                width: 2,
+                child: ColoredBox(color: Colors.black.withValues(alpha: 0.3)),
+              ),
+              Column(
+                children: [
+                  const SizedBox(height: 6),
+                  // WIN box (rounded rectangle, 35% height)
+                  Expanded(
+                    flex: 35,
+                    child: _VerticalInfoBox(
+                      label: 'WIN',
+                      value: '$win',
+                    ),
+                  ),
+                  // PLAY box (rounded rectangle, 35% height)
+                  Expanded(
+                    flex: 35,
+                    child: _VerticalInfoBox(
+                      label: 'PLAY',
+                      value: '$play',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Solid green triangle pointing down (open/active) or up (closed/inactive)
+                  SizedBox(
+                    height: 24,
+                    child: Center(
+                      child: Icon(
+                        isActive ? Icons.arrow_drop_down_sharp : Icons.arrow_drop_up_sharp,
+                        color: const Color(0xFF32CD32), // Pure Lime Green
+                        size: 32,
+                        shadows: [
+                          const Shadow(color: Color(0xFF0B5A0B), offset: Offset(0, 1.5)),
+                          Shadow(
+                            color: Colors.black.withValues(alpha: 0.6),
+                            blurRadius: 2,
+                            offset: const Offset(0, 2.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  // Mode label (vertical text, bottom 20% height with 10px bottom padding).
+                  // 14pt, scaled down only if the word would not fit the space.
+                  Expanded(
+                    flex: 20,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Center(
+                        child: RotatedBox(
+                          quarterTurns: 3,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                fontFamily: 'DMSans',
+                                fontWeight: FontWeight.w900,
+                                fontSize: 14,
+                                color: Colors.white,
+                                letterSpacing: 1.0,
+                                shadows: [
+                                  Shadow(color: Colors.black.withValues(alpha: 0.9), offset: const Offset(0, -1)),
+                                  Shadow(color: Colors.white.withValues(alpha: 0.28), offset: const Offset(0, 1)),
+                                  const Shadow(color: Colors.black87, blurRadius: 2, offset: Offset(1, 1)),
+                                ],
+                              ),
+                              maxLines: 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              // Light catching the top of the tab (thin bright line + shine band).
+              Positioned(
+                top: 0, left: 0, right: 0,
+                height: 1.5,
+                child: ColoredBox(color: Colors.white.withValues(alpha: 0.38)),
+              ),
+              Positioned(
+                top: 2, left: 3, right: 3,
+                height: 9,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(5),
+                      bottom: Radius.circular(10),
+                    ),
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.white.withValues(alpha: 0.3),
+                        Colors.white.withValues(alpha: 0.0),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -257,45 +341,72 @@ class _VerticalInfoBox extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 2.5, vertical: 3),
       width: double.infinity,
+      // 3D redesign, Phase 3: the box now looks pressed into the tab (a thin
+      // light lip along its lower edge, shade falling across its top). The
+      // colors and the text are unchanged.
       decoration: BoxDecoration(
         color: boxBg,
         border: Border.all(color: borderColor, width: 1.2),
         borderRadius: BorderRadius.circular(4),
-        boxShadow: const [
-          BoxShadow(color: Colors.black38, blurRadius: 2, offset: Offset(0, 1)),
+        boxShadow: [
+          BoxShadow(color: Colors.white.withValues(alpha: 0.14), offset: const Offset(0, 1)),
         ],
       ),
-      child: Center(
-        child: RotatedBox(
-          quarterTurns: 3,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text.rich(
-              TextSpan(
-                text: '$label : ',
-                style: const TextStyle(
-                  fontFamily: 'DMSans',
-                  fontWeight: FontWeight.w900,
-                  fontSize: 10,
-                  color: Colors.white,
-                  letterSpacing: 0.5,
-                ),
-                children: [
-                  TextSpan(
-                    text: value,
-                    style: const TextStyle(
-                      fontFamily: 'Oswald',
-                      fontWeight: FontWeight.bold,
-                      fontSize: 10,
-                      color: Colors.white,
-                    ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            top: 0, left: 0, right: 0,
+            height: 9,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.black.withValues(alpha: hasValue ? 0.3 : 0.6),
+                      Colors.transparent,
+                    ],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
                   ),
-                ],
+                ),
               ),
-              maxLines: 1,
             ),
           ),
-        ),
+          Center(
+            child: RotatedBox(
+              quarterTurns: 3,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text.rich(
+                  TextSpan(
+                    text: '$label : ',
+                    style: const TextStyle(
+                      fontFamily: 'DMSans',
+                      fontWeight: FontWeight.w900,
+                      fontSize: 10,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: value,
+                        style: const TextStyle(
+                          fontFamily: 'Oswald',
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  maxLines: 1,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

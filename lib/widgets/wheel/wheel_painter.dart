@@ -1,7 +1,22 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 
+/// The two shades that make one 3D segment tone: [edge] is the darker shade at
+/// the segment's inner and outer rim, [mid] the lighter shade across its
+/// middle, so each ring reads as a domed band.
+class _RingShade {
+  final Color edge;
+  final Color mid;
+  const _RingShade(this.edge, this.mid);
+}
+
+/// Paints the three digit rings (red, green, black), each turned by its own
+/// angle, with a 3D look: domed, glossy segments lit from the top left, a
+/// bevelled gold divider between rings, and one fixed shine over the whole
+/// wheel. The spin logic, timing and result hub live in wheel_widget.dart;
+/// this class only draws what it is given.
 class WheelPainter extends CustomPainter {
   final double redAngle;
   final double greenAngle;
@@ -21,6 +36,24 @@ class WheelPainter extends CustomPainter {
 
   static const List<int> _digits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
+  // Segment tones per ring (ruby, emerald, onyx). Index 0 is used for even
+  // digits (the darker tone) and index 1 for odd digits (the brighter tone),
+  // the same alternation the flat rings always had.
+  static const List<_RingShade> _redShades = [
+    _RingShade(Color(0xFF3A0208), Color(0xFF9A1424)),
+    _RingShade(Color(0xFF5A050E), Color(0xFFC8283A)),
+  ];
+  static const List<_RingShade> _greenShades = [
+    _RingShade(Color(0xFF03301A), Color(0xFF0F7A3A)),
+    _RingShade(Color(0xFF064424), Color(0xFF1A9B4C)),
+  ];
+  static const List<_RingShade> _blackShades = [
+    _RingShade(Color(0xFF040405), Color(0xFF1E1E24)),
+    _RingShade(Color(0xFF09090C), Color(0xFF30303A)),
+  ];
+  // Lighter middle of the landed (blue) segment; its darker edge is AppColors.blueLens.
+  static const Color _winMid = Color(0xFF3E7BEA);
+
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
@@ -35,28 +68,32 @@ class WheelPainter extends CustomPainter {
     // exactly -- zero gap, unchanged principle.
     _drawRing(canvas, center, radius,
       outerFrac: 1.00, innerFrac: 0.76,   // red - width 0.24
-      colors: [AppColors.redRing1, AppColors.redRing2],
+      shades: _redShades,
       angle: redAngle,
       textColor: const Color(0xFFffbbbb),
       hasGlow: showRedGlow,
     );
     _drawRing(canvas, center, radius,
       outerFrac: 0.76, innerFrac: 0.52,   // green - width 0.24
-      colors: [AppColors.greenRing1, AppColors.greenRing2],
+      shades: _greenShades,
       angle: greenAngle,
       textColor: const Color(0xFFaaffcc),
       hasGlow: showGreenGlow,
     );
     _drawRing(canvas, center, radius,
       outerFrac: 0.52, innerFrac: 0.28,   // black - width 0.24, inner = hub edge
-      colors: [AppColors.blackRing1, AppColors.blackRing2],
+      shades: _blackShades,
       angle: blackAngle,
       textColor: Colors.white,
       hasGlow: showBlackGlow,
     );
 
-    // Single gold separator at each ring boundary
+    // Fixed layers, drawn after the rings so they never turn with them: shade
+    // at the wheel's outer edge and around the hub, then the gold dividers,
+    // then one shine over everything.
+    _drawDepthShade(canvas, center, radius);
     _drawSeparators(canvas, center, radius);
+    _drawGloss(canvas, center, radius);
   }
 
   void _drawRing(
@@ -65,7 +102,7 @@ class WheelPainter extends CustomPainter {
     double radius, {
     required double outerFrac,
     required double innerFrac,
-    required List<Color> colors,
+    required List<_RingShade> shades,
     required double angle,
     required Color textColor,
     required bool hasGlow,
@@ -80,6 +117,21 @@ class WheelPainter extends CustomPainter {
     const double segAngle = 2 * pi / 10;
     const double startOffset = -pi / 2 - segAngle / 2;
 
+    // Domed shading: a radial gradient centred on the wheel's middle (the
+    // point the ring turns around), dark at the segment's inner and outer rim
+    // and light across its middle. Because it is centred on the turning point
+    // it looks the same at every angle, so the lighting does not spin with
+    // the ring. One shader per tone is shared by that tone's five segments.
+    ui.Shader domed(Color edge, Color mid) => ui.Gradient.radial(
+      center,
+      outerR,
+      [edge, mid, edge],
+      [innerR / outerR, (innerR / outerR + 1) / 2, 1.0],
+    );
+    final shaderEven = domed(shades[0].edge, shades[0].mid);
+    final shaderOdd = domed(shades[1].edge, shades[1].mid);
+    final shaderWin = domed(AppColors.blueLens, _winMid);
+
     for (int i = 0; i < 10; i++) {
       final double startAngle = startOffset + i * segAngle;
 
@@ -91,11 +143,11 @@ class WheelPainter extends CustomPainter {
 
       final bool isAtTop = diff < (segAngle / 2);
       // Landed segment: blue ONLY when locked-in (hasGlow).
-      final Color segColor = (isAtTop && hasGlow) ? AppColors.blueLens : colors[i % 2];
-      final Color numColor = (isAtTop && hasGlow) ? Colors.white : textColor;
+      final bool isLanded = isAtTop && hasGlow;
+      final Color numColor = isLanded ? Colors.white : textColor;
 
       final paint = Paint()
-        ..color = segColor
+        ..shader = isLanded ? shaderWin : (i % 2 == 0 ? shaderEven : shaderOdd)
         ..style = PaintingStyle.fill
         ..isAntiAlias = true
         ..filterQuality = FilterQuality.high;
@@ -110,12 +162,22 @@ class WheelPainter extends CustomPainter {
       canvas.drawPath(path, paint);
 
       final borderPaint = Paint()
-        ..color = Colors.black.withValues(alpha: 0.3)
+        ..color = Colors.black.withValues(alpha: 0.45)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 0.8
         ..isAntiAlias = true
         ..filterQuality = FilterQuality.high;
       canvas.drawPath(path, borderPaint);
+
+      // The landed segment also gets a light rim so it looks lit from within.
+      if (isLanded) {
+        final rimPaint = Paint()
+          ..color = Colors.white.withValues(alpha: 0.55)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..isAntiAlias = true;
+        canvas.drawPath(path, rimPaint);
+      }
 
       final midAngle = startAngle + segAngle / 2;
       final midR = (outerR + innerR) / 2;
@@ -163,17 +225,71 @@ class WheelPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _drawSeparators(Canvas canvas, Offset center, double radius) {
+  /// Shade that deepens the wheel at its outer edge (as if tucked under the
+  /// rim) and around the hub. Fixed: it does not turn with the rings.
+  void _drawDepthShade(Canvas canvas, Offset center, double radius) {
     final paint = Paint()
-      ..color = AppColors.goldPrimary
+      ..shader = ui.Gradient.radial(
+        center,
+        radius,
+        [
+          Colors.black.withValues(alpha: 0.5),
+          Colors.black.withValues(alpha: 0.0),
+          Colors.black.withValues(alpha: 0.0),
+          Colors.black.withValues(alpha: 0.55),
+        ],
+        const [0.27, 0.36, 0.9, 1.0],
+      );
+    canvas.drawCircle(center, radius, paint);
+  }
+
+  /// Gold divider at each ring boundary, bevelled: a dark line underneath, the
+  /// gold line (a lighter-to-darker gold sweep across the wheel), and a thin
+  /// bright line along its outer side.
+  void _drawSeparators(Canvas canvas, Offset center, double radius) {
+    final under = Paint()
+      ..color = const Color(0xFF2A1500)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.2;
+    final gold = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(center.dx - radius * 0.9, center.dy - radius * 0.9),
+        Offset(center.dx + radius * 0.9, center.dy + radius * 0.9),
+        const [Color(0xFFFFF0A8), AppColors.goldPrimary, AppColors.goldDark, AppColors.goldPrimary],
+        const [0.0, 0.3, 0.6, 1.0],
+      )
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
+    final light = Paint()
+      ..color = const Color(0xFFFFF6C0).withValues(alpha: 0.45)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.5;
 
     // Separators match ring boundaries (all three moved with the width
     // reduction above: 0.74/0.48/0.22 -> 0.76/0.52/0.28).
     for (double frac in [0.76, 0.52, 0.28]) {
-      canvas.drawCircle(center, radius * frac, paint);
+      canvas.drawCircle(center, radius * frac, under);
+      canvas.drawCircle(center, radius * frac, gold);
+      canvas.drawCircle(center, radius * frac + 0.6, light);
     }
+  }
+
+  /// One fixed shine over the whole wheel: light from the top left fading to
+  /// shade at the bottom right (a glassy dome). Fixed: it does not turn with
+  /// the rings.
+  void _drawGloss(Canvas canvas, Offset center, double radius) {
+    final gloss = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(center.dx - radius * 0.6, center.dy - radius),
+        Offset(center.dx + radius * 0.6, center.dy + radius),
+        [
+          Colors.white.withValues(alpha: 0.16),
+          Colors.white.withValues(alpha: 0.0),
+          Colors.black.withValues(alpha: 0.28),
+        ],
+        const [0.0, 0.45, 1.0],
+      );
+    canvas.drawCircle(center, radius, gloss);
   }
 
   @override
