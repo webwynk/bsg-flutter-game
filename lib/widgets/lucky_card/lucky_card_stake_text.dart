@@ -73,6 +73,7 @@ class LuckyCardStakeText extends StatelessWidget {
     this.weight = FontWeight.w500,
     this.shadowOffset = const Offset(0, 1),
     this.shadowBlur = 1.5,
+    this.fontFamily,
   });
 
   final String text;
@@ -91,6 +92,7 @@ class LuckyCardStakeText extends StatelessWidget {
   final FontWeight weight;
   final Offset shadowOffset;
   final double shadowBlur;
+  final String? fontFamily;
 
   static const TextStyle _base = TextStyle(
     fontFamily: 'Oswald',
@@ -103,9 +105,10 @@ class LuckyCardStakeText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (text.isEmpty) return const SizedBox.shrink();
+    final baseStyle = fontFamily == null ? _base : _base.copyWith(fontFamily: fontFamily);
     final size = fitLuckyCardFontSize(
       text: text,
-      style: _base.copyWith(fontWeight: weight),
+      style: baseStyle.copyWith(fontWeight: weight),
       maxWidth: maxWidth,
       preferred: preferredSize,
     );
@@ -121,7 +124,7 @@ class LuckyCardStakeText extends StatelessWidget {
           softWrap: false,
           overflow: TextOverflow.visible,
           textScaler: TextScaler.noScaling,
-          style: _base.copyWith(
+          style: baseStyle.copyWith(
             fontSize: size,
             fontWeight: weight,
             color: color,

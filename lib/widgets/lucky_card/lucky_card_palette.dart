@@ -104,24 +104,23 @@ const List<Color> kDesignWinFill = [Color(0xFF4FDC7A), Color(0xFF1FA34A), Color(
 const Color kDesignWinLabel = Color(0xFFDDFFE7);
 const Color kDesignWinUnder = Color(0xFF0A5424);
 
-/// The sunken box holding the results, then its cards. The newest round is a white card (the face,
-/// the hard shadow under it, the rank letter, a bonus in amber, "N" for none in a muted purple); the
-/// nine before it are dark purple cards with a thin light edge and light writing. (The design draws
-/// no bonus; the amber and the muted purple are this app's own, chosen to read on each card.)
+/// The sunken box holding the results, then its cards.
+/// The newest round is green (recent box: green background, white letter and bonus).
+/// The nine rounds before it are white cards with dark letters and amber/purple bonus.
 const List<Color> kDesignResultsFill = [Color(0xFF1A0630), Color(0xFF2A0D4A)];
 
-const List<Color> kDesignTileFill = [Color(0xFFFFFFFF), Color(0xFFFFFFFF)];
-const Color kDesignTileUnder = Color(0xFF7A5AA8);
-const Color kDesignTileLetter = Color(0xFF24093F);
-const Color kDesignTileBonus = Color(0xFFB45F00);
-const Color kDesignTileNoBonus = Color(0xFF8A7AA8);
+const List<Color> kDesignTileFill = [Color(0xFF4FDC7A), Color(0xFF1FA34A)];
+const Color kDesignTileUnder = Color(0xFF0A5424);
+const Color kDesignTileLetter = Color(0xFFFFFFFF);
+const Color kDesignTileBonus = Color(0xFFFFFFFF);
+const Color kDesignTileNoBonus = Color(0xFFDDFFE7);
 
-const List<Color> kDesignOldTileFill = [Color(0xFF4D2784), Color(0xFF391664)];
-const Color kDesignOldTileEdge = Color(0x40FFFFFF);
-const Color kDesignOldTileUnder = Color(0xFF12041F);
-const Color kDesignOldTileLetter = Color(0xFFFFFFFF);
-const Color kDesignOldTileBonus = Color(0xFFFFD34D);
-const Color kDesignOldTileNoBonus = Color(0xFFB9A3E0);
+const List<Color> kDesignOldTileFill = [Color(0xFFFFFFFF), Color(0xFFFFFFFF)];
+const Color kDesignOldTileEdge = Color(0xFFD6CBE6);
+const Color kDesignOldTileUnder = Color(0xFF7A5AA8);
+const Color kDesignOldTileLetter = Color(0xFF24093F);
+const Color kDesignOldTileBonus = Color(0xFFB45F00);
+const Color kDesignOldTileNoBonus = Color(0xFF8A7AA8);
 
 // ── The action buttons (bottom of bet panel) ────────────────────────────
 

@@ -139,9 +139,8 @@ class _LuckyCardTopButtonState extends State<LuckyCardTopButton> {
         boxShadow: _pressed ? null : [BoxShadow(color: widget.under, offset: Offset(0, drop))],
       ),
       child: Center(
-        // Never under 14 dp (the same icon floor used everywhere else in Lucky Card), even
-        // where the design's own 0.4 share would dip just under it on the smallest phone.
-        child: Icon(widget.icon, size: math.max(widget.size * 0.4, 14), color: const Color(0xFFFFFFFF)),
+        // Icon size increased per user instruction (not the icon box).
+        child: Icon(widget.icon, size: math.max(widget.size * 0.58, 20), color: const Color(0xFFFFFFFF)),
       ),
     );
     return Semantics(
@@ -479,7 +478,7 @@ class LuckyCardTopBar extends StatelessWidget {
           rect: bar,
           child: Container(
             key: const ValueKey('top-bar'),
-            padding: EdgeInsets.symmetric(horizontal: layout.designHeaderPad),
+            padding: const EdgeInsets.only(left: 30, right: 30),
             child: Row(
               children: [
                 ball('top-exit', Icons.logout_rounded, 'Exit the game', kDesignExitFill, kDesignExitUnder, onExit),

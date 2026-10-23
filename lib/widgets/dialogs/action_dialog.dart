@@ -167,3 +167,144 @@ void showActionDialog(
     },
   );
 }
+
+/// Dedicated dialog shown when a player tries to place a bet or action without
+/// sufficient coins. Shows the BSG coin, 'INSUFFICIENT COINS' title, guidance,
+/// and auto-dismisses after 5 seconds or on tap.
+void showInsufficientCoinsDialog(BuildContext context) {
+  bool isClosed = false;
+  SoundService().playNotification();
+  showGeneralDialog(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'InsufficientCoins',
+    barrierColor: Colors.black.withValues(alpha: 0.75),
+    transitionDuration: const Duration(milliseconds: 280),
+    pageBuilder: (ctx, anim1, anim2) {
+      Future.delayed(const Duration(seconds: 5), () {
+        if (ctx.mounted && !isClosed && Navigator.of(ctx).canPop()) {
+          isClosed = true;
+          Navigator.of(ctx).pop();
+        }
+      });
+
+      return Center(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: Container(
+              width: 320,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF220500), Color(0xFF0C0200)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppColors.goldPrimary.withValues(alpha: 0.45),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.goldPrimary.withValues(alpha: 0.12),
+                    blurRadius: 20,
+                    spreadRadius: 1,
+                  ),
+                  const BoxShadow(
+                    color: Colors.black87,
+                    blurRadius: 25,
+                    offset: Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      'assets/images/bsg_coin.webp',
+                      width: 64,
+                      height: 64,
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'INSUFFICIENT COINS',
+                      style: TextStyle(
+                        fontFamily: 'DMSans',
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                        color: Color(0xFFFFD54F),
+                        letterSpacing: 1.2,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'You do not have enough coins to place this bet. Please top up your balance or choose a lower chip amount.',
+                      style: TextStyle(
+                        fontFamily: 'DMSans',
+                        fontSize: 12,
+                        color: Colors.white70,
+                        height: 1.4,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    GestureDetector(
+                      onTap: () {
+                        if (!isClosed) {
+                          isClosed = true;
+                          SoundService().playButtonClick();
+                          Navigator.of(ctx).pop();
+                        }
+                      },
+                      child: Container(
+                        height: 38,
+                        width: 140,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF55FF55), Color(0xFF00AA00), Color(0xFF005500)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFF99FF99), width: 1.2),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(0, 2)),
+                          ],
+                        ),
+                        alignment: Alignment.center,
+                        child: const Text(
+                          'OK',
+                          style: TextStyle(
+                            fontFamily: 'DMSans',
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+    transitionBuilder: (ctx, anim, _, child) {
+      final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
+      return ScaleTransition(
+        scale: Tween<double>(begin: 0.85, end: 1.0).animate(curved),
+        child: FadeTransition(opacity: anim, child: child),
+      );
+    },
+  );
+}
+

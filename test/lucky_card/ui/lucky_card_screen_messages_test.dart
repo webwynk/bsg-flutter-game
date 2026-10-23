@@ -131,6 +131,10 @@ void main() {
       await tester.tap(key('chip-5'));
       await tester.tap(key('suit-hearts'));
       await tester.pump(const Duration(milliseconds: 1500));
+      if (find.text('OK').evaluate().isNotEmpty) {
+        await tester.tap(find.text('OK'));
+        await tester.pump();
+      }
       await tester.tap(key('suit-spades'));
       await tester.pump(const Duration(milliseconds: 1500));
       expect(stripText(tester), 'NOT ENOUGH COINS', reason: 'the second tap gave it a fresh 2 seconds');

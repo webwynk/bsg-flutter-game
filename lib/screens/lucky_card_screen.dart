@@ -38,6 +38,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
 import '../models/lucky_card_board.dart';
+import '../models/lucky_card_models.dart';
 import '../providers/lucky_card_history_provider.dart';
 import '../providers/lucky_card_provider.dart';
 import '../services/lucky_card_api_service.dart';
@@ -296,8 +297,11 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
   // ── What goes wrong (App Step 8c, spec §17AG) ───────────────────────────
 
   /// A refused tap: a card at its largest stake gets Triple Chance's kind of snackbar at the bottom
-  /// (the user's decision of 2026-10-23); anything else a short line in the header, or nothing.
+  /// (the user's decision of 2026-10-23); insufficient coins pops up the modal dialog; anything else a short line in the header, or nothing.
   void _refusal(Set<LuckyCardBoardIssue> issues) {
+    if (issues.contains(LuckyCardBoardIssue.notEnoughCoins)) {
+      showInsufficientCoinsDialog(context);
+    }
     if (luckyCardRefusalIsLimit(issues)) {
       final messenger = ScaffoldMessenger.of(context);
       messenger
@@ -313,6 +317,10 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
   /// or a connection that could not be kept.
   void _onProblem(LuckyCardProblem problem) {
     if (!mounted || _stopped) return;
+    if (problem.reason == LuckyCardError.insufficientCoins) {
+      showInsufficientCoinsDialog(context);
+      return;
+    }
     final dialog = luckyCardProblemDialog(problem);
     if (dialog.endsSession) {
       _showSessionEnding(dialog);
@@ -401,6 +409,8 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
     // that is about to consume them.
     final insets = MediaQuery.paddingOf(context);
     final canvas = SafeArea(
+      left: false,
+      right: false,
       child: LuckyCardBoardBinding(
         provider: provider,
         art: art,
@@ -425,8 +435,8 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
             provider: provider,
             layout: layout,
             art: art,
-            // The bar is painted edge to edge, under a notch or camera cut-out too.
-            bleed: insets,
+            // The canvas is edge-to-edge horizontally; bleed upward under any status bar/notch.
+            bleed: EdgeInsets.only(top: insets.top),
             soundOn: !_sound.muted,
             onExit: _requestExit,
             onToggleSound: _toggleSound,

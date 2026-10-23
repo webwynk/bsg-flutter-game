@@ -590,13 +590,13 @@ void main() {
       expect(find.descendant(of: find.byKey(const ValueKey('results')), matching: find.byType(Image)), findsNWidgets(3));
     });
 
-    testWidgets('an empty slot is a faint blank box, the newest card white and the older ones dark purple', (tester) async {
+    testWidgets('an empty slot is a faint blank box, the newest card green and the older ones white', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene(history: ten.sublist(0, 3)));
       BoxDecoration decoration(String k) =>
           tester.widget<DecoratedBox>(find.descendant(of: find.byKey(ValueKey(k)), matching: find.byType(DecoratedBox)).first).decoration as BoxDecoration;
-      expect(decoration('result-latest').gradient!.colors, kDesignTileFill, reason: 'the newest is white');
-      expect(decoration('result-latest').gradient!.colors.every((c) => c == const Color(0xFFFFFFFF)), isTrue);
-      expect(decoration('result-0').gradient!.colors, kDesignOldTileFill, reason: 'older ones are dark purple');
+      expect(decoration('result-latest').gradient!.colors, kDesignTileFill, reason: 'the newest is green');
+      expect(decoration('result-0').gradient!.colors, kDesignOldTileFill, reason: 'older ones are white');
+      expect(decoration('result-0').gradient!.colors.every((c) => c == const Color(0xFFFFFFFF)), isTrue);
       expect(decoration('result-1').gradient!.colors, kDesignOldTileFill);
       for (var i = 2; i < 9; i++) {
         expect(decoration('result-$i').gradient, isNull, reason: 'slot $i');

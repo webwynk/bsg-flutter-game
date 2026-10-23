@@ -351,8 +351,8 @@ class LuckyCardLayout {
 
   /// The text and picture in a result card: the rank letter and the suit picture side by side,
   /// then the bonus under them.
-  static const double designTileLetterFont = 14;
-  static const double designTileIcon = 14;
+  static const double designTileLetterFont = 15.5;
+  static const double designTileIcon = 15.5;
   static const double designTileBonusFont = 12;
 
   Rect get resultsPanel => Rect.fromLTWH(

@@ -627,7 +627,7 @@ void main() {
       await rig.finish();
     });
 
-    testWidgets('the game stays inside the safe area of a phone with a notch', (tester) async {
+    testWidgets('the game ignores notch insets horizontally and uses 30px margin from screen edges', (tester) async {
       final rig = BetRig(tester);
       await pumpAtSize(tester, phone, lobby(rig.provider));
       // The notch, as the phone itself reports it (the shared test setup puts it back).
@@ -641,8 +641,10 @@ void main() {
       await settle(tester);
       final exit = tester.getRect(key('top-exit'));
       final info = tester.getRect(key('top-info'));
-      expect(exit.left, greaterThanOrEqualTo(44), reason: 'clear of the notch at the left');
-      expect(info.right, lessThanOrEqualTo(phone.width - 44), reason: 'and at the right');
+      // Exit button has 30px margin from the left edge of the screen, regardless of notch.
+      expect(exit.left, closeTo(30, 1.0), reason: '30px from screen left edge');
+      // Info button has 30px margin from the right edge of the screen, regardless of notch.
+      expect(info.right, closeTo(phone.width - 30, 1.0), reason: '30px from screen right edge');
       // The stage is the screen's own: it fills everything, the notch areas too.
       expect(tester.getRect(find.byType(LuckyCardBackground)), Offset.zero & phone);
       await rig.finish();
