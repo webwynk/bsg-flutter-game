@@ -55,8 +55,9 @@ Widget scene(
 }) =>
     LuckyCardCanvas(
       grid: (context, layout) => LuckyCardWheelBinding(provider: provider, layout: layout),
-      topBar: withTopBar ? (context, layout) => LuckyCardTopBarBinding(provider: provider, layout: layout, soundOn: true) : null,
-      status: withTopBar ? (context, layout) => LuckyCardStatusBinding(provider: provider, layout: layout) : null,
+      // The header now carries the round's status itself (the reference design has no
+      // separate strip under the board); LuckyCardTopBarBinding alone is enough.
+      topBar: withTopBar ? (context, layout) => LuckyCardTopBarBinding(provider: provider, layout: layout, art: const FileLuckyCardArt(), soundOn: true) : null,
       side: (context, layout) => LuckyCardSideColumn(
         provider: provider,
         layout: layout,
@@ -72,10 +73,10 @@ Finder chip(LuckyCardChip c) => key('chip-${c.amount}');
 Finder button(LuckyCardControl c) => key('button-${c.name}');
 
 double faceShare(WidgetTester tester, LuckyCardChip c, Size screen) =>
-    tester.getSize(key('chip-face-${c.amount}')).width / LuckyCardLayout.of(screen).chip(c.index).width;
+    tester.getSize(key('chip-face-${c.amount}')).width / LuckyCardLayout.of(screen).designChipSize;
 
 bool isInHand(WidgetTester tester, LuckyCardChip c, Size screen) =>
-    (faceShare(tester, c, screen) - LuckyCardChipRail.selectedShare).abs() < 0.01;
+    (faceShare(tester, c, screen) - 1.0).abs() < 0.01;
 
 double opacityOf(WidgetTester tester, Finder within) {
   final found = find.descendant(of: within, matching: find.byType(Opacity));
@@ -444,7 +445,7 @@ void main() {
       final rig = BetRig(tester);
       await pumpAtSize(tester, phone, scene(rig.provider));
       await rig.open();
-      for (final k in ['play', 'win', 'limits', 'result-latest', 'result-8']) {
+      for (final k in ['total-bet', 'win', 'result-latest', 'result-8']) {
         expect(key(k), findsOneWidget, reason: k);
       }
       expect(find.byType(LuckyCardChipRail), findsOneWidget);
@@ -461,10 +462,10 @@ void main() {
       await tester.pump();
       rig.provider.tapCard(hearts);
       await tester.pump();
-      expect(tester.widget<Text>(find.descendant(of: key('play'), matching: find.text('50'))).data, '50');
+      expect(tester.widget<Text>(find.descendant(of: key('total-bet'), matching: find.text('50'))).data, '50');
       await tester.tap(button(LuckyCardControl.doubleBet));
       await tester.pump();
-      expect(find.descendant(of: key('play'), matching: find.text('100')), findsOneWidget);
+      expect(find.descendant(of: key('total-bet'), matching: find.text('100')), findsOneWidget);
       await rig.finish();
     });
 
@@ -624,8 +625,10 @@ void main() {
         }
         for (final c in LuckyCardChip.values) {
           final r = tester.getRect(chip(c));
-          expect(r.width, greaterThanOrEqualTo(48));
-          expect(r.height, greaterThanOrEqualTo(48));
+          // 48 dp tall, a fifth of the row wide: 43 dp on the smallest phone (the written exception of
+          // 2026-10-23), 48 dp or more on the others.
+          expect(r.width, greaterThanOrEqualTo(42.8));
+          expect(r.height, greaterThanOrEqualTo(47.99));
         }
         for (final c in [LuckyCardControl.clear, LuckyCardControl.remove]) {
           final r = tester.getRect(button(c));

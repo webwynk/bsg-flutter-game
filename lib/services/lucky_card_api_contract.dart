@@ -34,6 +34,18 @@ class LuckyCardRpc {
   static const getRecentRounds = 'lucky_card_get_recent_rounds';
 }
 
+/// The two tables the app reads directly, for the player's own session history
+/// (not through a function, exactly as Triple Chance's history reads `bets`).
+/// Checked against the LIVE database on 2026-10-22. Row-level security shows a
+/// player only their own bets and only rounds that are `settled`, so a join to
+/// the rounds table leaves out a round that is still running.
+class LuckyCardTable {
+  LuckyCardTable._();
+
+  static const bets = 'lucky_card_bets';
+  static const rounds = 'lucky_card_rounds';
+}
+
 /// Parameter names of the functions above.
 class LuckyCardRpcParam {
   LuckyCardRpcParam._();
@@ -72,6 +84,10 @@ class LuckyCardField {
   static const ledgerVersion = 'ledger_version';
   static const placedBet = 'placed_bet';
   static const isSettled = 'is_settled';
+
+  /// When the bet was placed (`lucky_card_bets.created_at`), used to list only
+  /// the bets made since the player logged in.
+  static const createdAt = 'created_at';
 }
 
 /// SQLSTATE codes the database raises, as seen in `PostgrestException.code`.

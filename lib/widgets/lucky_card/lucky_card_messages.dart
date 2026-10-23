@@ -1,8 +1,11 @@
 // The words the Lucky Card screen says when something goes wrong (App Step 8c, spec §17AG).
 //
 //   * [luckyCardRefusalLine]: the short line for a refused tap, shown for 2 seconds in the
-//     status strip (not enough coins, a card at its limit, no chip in hand, nothing to take
-//     back). Anything else is silent: a closed table already dims the controls.
+//     header (not enough coins, no chip in hand, nothing to take back). Anything else is
+//     silent: a closed table already dims the controls.
+//   * [luckyCardLimitSnackBar]: a card already at its largest stake (50,000) is answered by a
+//     snackbar at the bottom, as Triple Chance answers its PLAY LIMIT REACHED (the user's
+//     decision of 2026-10-23), not by a header line.
 //   * [luckyCardProblemDialog]: what Triple Chance's shared dialog says for each kind of
 //     problem the provider reports, in Triple Chance's own words (the bet was rejected, the
 //     round never resolved, the connection was lost, the account is blocked).
@@ -19,6 +22,7 @@ import 'package:flutter/material.dart';
 import '../../models/lucky_card_board.dart';
 import '../../models/lucky_card_models.dart';
 import '../../providers/lucky_card_provider.dart';
+import '../../theme/app_colors.dart';
 import 'lucky_card_panel.dart';
 
 /// How long a refusal line stays.
@@ -30,11 +34,68 @@ const Duration kLuckyCardBalanceLineTime = Duration(seconds: 6);
 /// What the status strip says when a round's balance could not be confirmed.
 const String kLuckyCardBalanceLine = 'BALANCE NOT CONFIRMED - IT WILL UPDATE NEXT ROUND';
 
+/// True when the tap was refused because a card is already at its largest stake (and not
+/// because the coins ran out, which is the more useful thing to say): the screen answers with
+/// [luckyCardLimitSnackBar], not with a header line.
+bool luckyCardRefusalIsLimit(Set<LuckyCardBoardIssue> issues) =>
+    issues.contains(LuckyCardBoardIssue.cardAtMaximum) && !issues.contains(LuckyCardBoardIssue.notEnoughCoins);
+
+/// How long the limit snackbar stays (Triple Chance's own is 3 seconds).
+const Duration kLuckyCardLimitSnackBarTime = Duration(seconds: 3);
+
+/// The snackbar for a card at its largest stake: a full-width bar at the bottom in Triple
+/// Chance's own look (deep red to black, gold line on top, a warning icon, gold words and the
+/// maximum in white), reading CARD PLAY LIMIT REACHED and "Max 50,000 / card".
+SnackBar luckyCardLimitSnackBar() => SnackBar(
+      key: const ValueKey('limit-snackbar'),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      behavior: SnackBarBehavior.fixed,
+      padding: EdgeInsets.zero,
+      duration: kLuckyCardLimitSnackBarTime,
+      content: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [AppColors.deepRed, AppColors.bgBase],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          border: const Border(top: BorderSide(color: AppColors.goldPrimary, width: 2.0)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.casinoRed.withValues(alpha: 0.4),
+              blurRadius: 10,
+              spreadRadius: 1,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppColors.goldBright, size: 20),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'CARD PLAY LIMIT REACHED',
+                style: TextStyle(color: AppColors.goldBright, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.2),
+              ),
+            ),
+            Text(
+              'Max ${luckyCardGrouped(kLuckyCardMaxStake)} / card',
+              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
+    );
+
 /// The line for a refused tap, or null when nothing should be said. When several reasons
-/// came together the most useful one wins.
+/// came together the most useful one wins. (A card at its largest stake has no line: see
+/// [luckyCardRefusalIsLimit].)
 String? luckyCardRefusalLine(Set<LuckyCardBoardIssue> issues) {
   if (issues.contains(LuckyCardBoardIssue.notEnoughCoins)) return 'NOT ENOUGH COINS';
-  if (issues.contains(LuckyCardBoardIssue.cardAtMaximum)) return 'CARD AT ${luckyCardGrouped(kLuckyCardMaxStake)} LIMIT';
   if (issues.contains(LuckyCardBoardIssue.noChipSelected)) return 'PICK A CHIP FIRST';
   if (issues.contains(LuckyCardBoardIssue.nothingToRemove)) return 'NOTHING TO TAKE BACK';
   return null;

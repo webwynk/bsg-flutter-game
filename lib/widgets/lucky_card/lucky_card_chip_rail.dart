@@ -1,12 +1,13 @@
-// The chip rail: the five chips (5, 10, 50, 100, 500) one above the other at the left
-// of the side column, as in Triple Chance's right panel.
+// The chip row: the five chips (5, 10, 50, 100, 500) side by side in the bet panel, under the
+// results, as the reference design has them.
 //
 // Given the chip in hand and whether betting is closed, nothing else: no provider
 // (lucky_card_controls_binding.dart connects it).
 //
-//   * Every chip has a tap area of at least 48 dp (a 134-unit square) and is drawn
-//     inside it: the chip in hand full size with a gold glow, the others smaller, so
-//     the chosen chip is easy to tell at a glance. Tapping the chip already in hand
+//   * Every chip has a tap area 48 dp tall and a fifth of the row wide (about 44 dp on the
+//     smallest phone, the written exception of 2026-10-23) and is drawn inside it: the chip
+//     in hand full size with a gold glow, the others smaller, so the chosen chip is easy to
+//     tell at a glance. Tapping the chip already in hand
 //     keeps it in hand, as in Triple Chance.
 //   * While betting is closed the chips are dimmed like the rest of the board and
 //     ignore taps.
@@ -20,6 +21,7 @@ import 'package:flutter/widgets.dart';
 import '../../models/lucky_card_board.dart';
 import 'lucky_card_art.dart';
 import 'lucky_card_layout.dart';
+import 'lucky_card_palette.dart';
 import 'lucky_card_panel.dart';
 import 'lucky_card_tap_target.dart';
 
@@ -67,19 +69,22 @@ class LuckyCardChipRail extends StatelessWidget {
               onTap: () => onSelect(chip),
               content: (context, tinted) {
                 final selected = chip == activeChip;
-                final side = layout.chip(chip.index).width * (selected ? selectedShare : restingShare);
+                final side = layout.designChipSize * (selected ? 1.0 : restingShare / selectedShare);
                 return Center(
                   child: AnimatedContainer(
                     key: ValueKey('chip-face-${chip.amount}'),
                     duration: const Duration(milliseconds: 150),
+                    transform: Matrix4.translationValues(0, selected ? -layout.dp(3) : 0, 0),
                     width: side,
                     height: side,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       boxShadow: selected
                           ? [
-                              BoxShadow(color: kLuckyCardGoldBright, blurRadius: layout.dp(30), spreadRadius: layout.dp(5)),
-                              BoxShadow(color: const Color(0xFFFFFFFF), blurRadius: layout.dp(10), spreadRadius: layout.dp(2)),
+                              BoxShadow(color: kDesignChipUnder, offset: Offset(0, layout.dp(3))),
+                              BoxShadow(color: kDesignChipInnerRing, spreadRadius: layout.dp(3)),
+                              BoxShadow(color: kDesignChipGoldRing, spreadRadius: layout.dp(5)),
+                              BoxShadow(color: kDesignChipGoldGlow, spreadRadius: layout.dp(5), blurRadius: layout.dp(14)),
                             ]
                           : const [],
                     ),

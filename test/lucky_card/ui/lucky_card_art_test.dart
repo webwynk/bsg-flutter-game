@@ -15,10 +15,10 @@ import 'ui_harness.dart';
 
 void main() {
   group('the keys', () {
-    test('there are 31 pictures, all different', () {
+    test('there are 32 pictures, all different', () {
       final all = LuckyCardArtKey.all;
-      expect(all.length, 31, reason: '12 cards, 4 bars, 4 symbols, 3 selectors, 5 chips, 2 win-popup pictures, the background');
-      expect(all.toSet().length, 31);
+      expect(all.length, 32, reason: '12 cards, 4 bars, 4 symbols, 3 selectors, 5 chips, 2 win-popup pictures, the coin, the background');
+      expect(all.toSet().length, 32);
       expect(all, contains(LuckyCardArtKey.background));
     });
 
@@ -101,10 +101,10 @@ void main() {
           return w * (w * dim.$2 / dim.$1).ceil() * 4;
         }
 
-        final used = 12 * bytes(l.cardSide, dims['card']!) +
+        final used = 12 * bytes(l.cardSize.width, dims['card']!) +
             4 * bytes(l.suitHeader(0).width, dims['bar']!) +
             3 * bytes(l.rankColumn.width, dims['selector']!) +
-            4 * bytes(l.cardSide / 4, dims['icon']!);
+            4 * bytes(l.cardSize.width / 4, dims['icon']!);
         expect(used / full, lessThan(0.25), reason: '$d at ${dpr}x takes ${(used / 1e6).toStringAsFixed(1)} MB');
         expect(used / 1e6, lessThan(10), reason: '$d');
       }

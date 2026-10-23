@@ -20,6 +20,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../models/lucky_card_board.dart';
 import 'lucky_card_layout.dart';
+import 'lucky_card_palette.dart';
 import 'lucky_card_stake_text.dart';
 
 /// The four things a button can do.
@@ -44,26 +45,77 @@ String luckyCardControlSemantics(LuckyCardControl control) => switch (control) {
       LuckyCardControl.remove => 'Remove: put the chip down, then tap chips to take them back',
     };
 
-/// A button's colours: the face (top, bottom), the label, the rim.
+/// A button's colours: the gradient fill, stops, border, shadow under, outer glow, and text shadow.
 class LuckyCardButtonLook {
-  const LuckyCardButtonLook(this.top, this.bottom, this.text, this.rim);
+  const LuckyCardButtonLook({
+    required this.fill,
+    this.stops,
+    required this.border,
+    required this.shadow,
+    required this.glow,
+    required this.textShadow,
+    this.textColor = const Color(0xFFFFFFFF),
+  });
 
-  final Color top;
-  final Color bottom;
-  final Color text;
-  final Color rim;
+  final List<Color> fill;
+  final List<double>? stops;
+  final Color border;
+  final Color shadow;
+  final Color glow;
+  final Color textShadow;
+  final Color textColor;
 
-  static const LuckyCardButtonLook gold =
-      LuckyCardButtonLook(Color(0xFFFFD700), Color(0xFF8B6914), Color(0xFF350000), Color(0xFFFFD700));
-  static const LuckyCardButtonLook purple =
-      LuckyCardButtonLook(Color(0xFF6A0DAD), Color(0xFF3A0060), Color(0xFFFFFFFF), Color(0xFFCC88FF));
-  static const LuckyCardButtonLook red =
-      LuckyCardButtonLook(Color(0xFF8B0000), Color(0xFF3E0000), Color(0xFFFFFFFF), Color(0xFFFF6666));
+  Color get top => fill.first;
+  Color get bottom => fill.last;
+  Color get text => textColor;
+  Color get rim => border;
+
+  static const LuckyCardButtonLook doubleLook = LuckyCardButtonLook(
+    fill: kDesignDoubleFill,
+    stops: kDesignDoubleStops,
+    border: kDesignDoubleBorder,
+    shadow: kDesignDoubleUnder,
+    glow: kDesignDoubleGlow,
+    textShadow: kDesignDoubleTextShadow,
+  );
+
+  static const LuckyCardButtonLook rebetLook = LuckyCardButtonLook(
+    fill: kDesignRebetFill,
+    stops: kDesignRebetStops,
+    border: kDesignRebetBorder,
+    shadow: kDesignRebetUnder,
+    glow: kDesignRebetGlow,
+    textShadow: kDesignRebetTextShadow,
+  );
+
+  static const LuckyCardButtonLook clearLook = LuckyCardButtonLook(
+    fill: kDesignClearFill,
+    stops: kDesignClearStops,
+    border: kDesignClearBorder,
+    shadow: kDesignClearUnder,
+    glow: kDesignClearGlow,
+    textShadow: kDesignClearTextShadow,
+  );
+
+  static const LuckyCardButtonLook removeLook = LuckyCardButtonLook(
+    fill: kDesignRemoveFill,
+    stops: kDesignRemoveStops,
+    border: kDesignRemoveBorder,
+    shadow: kDesignRemoveUnder,
+    glow: kDesignRemoveGlow,
+    textShadow: kDesignRemoveTextShadow,
+  );
+
+  // Aliases for compatibility
+  static const LuckyCardButtonLook gold = doubleLook;
+  static const LuckyCardButtonLook purple = rebetLook;
+  static const LuckyCardButtonLook red = clearLook;
 
   static LuckyCardButtonLook of(LuckyCardControl control) => switch (control) {
-        LuckyCardControl.doubleBet => gold,
-        LuckyCardControl.rebet => purple,
-        LuckyCardControl.clear || LuckyCardControl.remove => red,
+        LuckyCardControl.doubleBet => doubleLook,
+        LuckyCardControl.rebet => rebetLook,
+        LuckyCardControl.clear => clearLook,
+        LuckyCardControl.remove => removeLook,
       };
 }
 
@@ -143,33 +195,43 @@ class _LuckyCardActionButtonState extends State<LuckyCardActionButton> with Sing
     final layout = widget.layout;
     final look = LuckyCardButtonLook.of(widget.control);
     final label = luckyCardControlLabel(widget.control);
-    final rim = layout.dp(5).clamp(1.2, 3.0).toDouble();
-    final radius = BorderRadius.circular(layout.dp(18));
+    const rim = 2.0;
+    final radius = BorderRadius.circular(14);
 
     final face = DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: radius,
-        gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [look.top, look.bottom]),
-        border: Border.all(color: look.rim, width: rim),
-        boxShadow: const [BoxShadow(color: Color(0x80000000), blurRadius: 3, offset: Offset(0, 2))],
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: look.fill,
+          stops: look.stops,
+        ),
+        border: Border.all(color: look.border, width: rim),
+        boxShadow: [
+          BoxShadow(color: look.shadow, offset: const Offset(0, 4)),
+          BoxShadow(color: look.glow, offset: const Offset(0, 6), blurRadius: 14),
+          const BoxShadow(color: Color(0x2E000000), offset: Offset(0, -3)),
+        ],
       ),
       child: ClipRRect(
         borderRadius: radius,
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // The gloss along the top edge.
+            // The gloss along the top half (from the reference design).
             Positioned(
               top: 0,
               left: 0,
               right: 0,
-              height: widget.size.height * 0.3,
+              height: widget.size.height * 0.47,
               child: const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0x59FFFFFF), Color(0x00FFFFFF)],
+                    stops: kDesignButtonGlossStops,
+                    colors: kDesignButtonGloss,
                   ),
                 ),
               ),
@@ -182,14 +244,39 @@ class _LuckyCardActionButtonState extends State<LuckyCardActionButton> with Sing
                   : const SizedBox.shrink(),
             ),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: layout.dp(8)),
-              child: LayoutBuilder(
-                builder: (context, c) => LuckyCardStakeText(
-                  label,
-                  maxWidth: c.maxWidth,
-                  preferredSize: layout.fontSize(36),
-                  color: look.text,
-                  shadowColor: look.text == const Color(0xFFFFFFFF) ? const Color(0xCC000000) : const Color(0x66FFFFFF),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Center(
+                child: LayoutBuilder(
+                  builder: (context, c) {
+                    final preferredSize = layout.designButtonFont;
+                    final fontSize = fitLuckyCardFontSize(
+                      text: label,
+                      style: const TextStyle(
+                        fontFamily: 'Oswald',
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                      maxWidth: c.maxWidth,
+                      preferred: preferredSize,
+                    );
+                    return Text(
+                      label,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.visible,
+                      textScaler: TextScaler.noScaling,
+                      style: TextStyle(
+                        fontFamily: 'Oswald',
+                        fontWeight: FontWeight.w700,
+                        fontSize: fontSize,
+                        letterSpacing: 0.5,
+                        color: look.textColor,
+                        shadows: [
+                          Shadow(color: look.textShadow, offset: const Offset(0, 2)),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
             ),

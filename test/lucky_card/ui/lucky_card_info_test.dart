@@ -5,7 +5,6 @@
 
 import 'dart:ui' as ui;
 
-import 'package:best_smart_game/models/lucky_card_board.dart';
 import 'package:best_smart_game/providers/lucky_card_provider.dart';
 import 'package:best_smart_game/services/lucky_card_round_clock.dart';
 import 'package:best_smart_game/services/lucky_card_round_sync.dart';
@@ -13,7 +12,6 @@ import 'package:best_smart_game/widgets/lucky_card/lucky_card_info_dialog.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_info_text.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_layout.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_panel.dart';
-import 'package:best_smart_game/widgets/lucky_card/lucky_card_readouts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -100,13 +98,6 @@ void main() {
       expect(luckyCardPayoutFor(50000, 1), 500000);
       expect(luckyCardPayoutFor(50000, 10), 5000000);
       expect(luckyCardPayoutFor(10, 0), 100, reason: 'a zero bonus is no bonus');
-    });
-
-    test('the payout multiplier is the one the limits panel shows', () {
-      expect(LuckyCardLimits.minOut, LuckyCardLimits.minIn * kLuckyCardPayoutMultiplier);
-      expect(LuckyCardLimits.maxOut, LuckyCardLimits.maxIn * kLuckyCardPayoutMultiplier);
-      expect(LuckyCardLimits.minIn, kLuckyCardMinStake);
-      expect(LuckyCardLimits.maxIn, kLuckyCardMaxStake);
     });
 
     test('the table runs N then 2X to 10X, each worth the stake times 10 times the bonus', () {

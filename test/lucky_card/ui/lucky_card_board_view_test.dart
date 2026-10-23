@@ -91,7 +91,8 @@ void main() {
         final layout = LuckyCardLayout.of(d.size);
         final origin = layout.canvasRect.topLeft;
 
-        // The four suit headers: name, then total (blank when nothing is on the suit).
+        // The four suit bars: each shows ONE text, the total in full (the name only shows while the
+        // suit is empty), centred on the bar's red plate.
         const wantSuit = {
           LuckyCardSuit.hearts: '35',
           LuckyCardSuit.spades: '5',
@@ -100,41 +101,39 @@ void main() {
         };
         for (final s in LuckyCardSuit.values) {
           final texts = textsIn(tester, suit(s));
-          expect(texts.map((t) => t.data), [s.label, wantSuit[s]], reason: s.dbValue);
+          expect(texts.map((t) => t.data), [wantSuit[s]], reason: s.dbValue);
           for (final t in texts) {
             expect(t.style!.fontSize, greaterThanOrEqualTo(kLuckyCardMinReadableDp - 0.001), reason: '${s.dbValue} ${t.data}');
           }
           final rect = tester.getRect(suit(s));
           expect(rect.shift(-origin).left, closeTo(layout.suitHeader(s.index).left, 0.01));
+          // The one written exception to the 48 dp rule (the user, 2026-10-23): the bar keeps the design's
+          // height (25 to 35 dp on a phone); it is at least 48 dp across.
           expect(rect.width, greaterThanOrEqualTo(kLuckyCardMinTapDp));
-          expect(rect.height, greaterThanOrEqualTo(kLuckyCardMinTapDp));
+          expect(rect.height, greaterThan(0));
 
-          // The name sits above the bar and is centred on it; the total sits on the panel.
           final bar = layout.suitBar(s.index).shift(origin);
-          final name = tester.getRect(find.descendant(of: suit(s), matching: find.text(s.label)));
-          expect(name.center.dx, closeTo(bar.center.dx, 0.6), reason: '${s.dbValue} name centred on its bar');
-          expect(name.bottom, lessThanOrEqualTo(bar.top + 1), reason: '${s.dbValue} name above the bar');
-          final panel = LuckyCardSlots.suitPanel.within(bar);
+          final panel = LuckyCardSlots.suitPlate.within(bar);
           final total = tester.getRect(find.descendant(of: suit(s), matching: find.text(wantSuit[s]!)));
-          expect(total.center.dx, closeTo(panel.center.dx, 0.6), reason: '${s.dbValue} total on the panel');
-          expect(total.center.dy, closeTo(panel.center.dy, 0.6), reason: '${s.dbValue} total on the panel');
+          expect(total.center.dx, closeTo(panel.center.dx, 0.6), reason: '${s.dbValue} total on the plate');
+          expect(total.center.dy, closeTo(panel.center.dy, 0.6), reason: '${s.dbValue} total on the plate');
         }
 
-        // The three rank selectors: name, then total on the cream disc.
+        // The three rank badges: the total in full, centred on the purple oval.
         const wantRank = {LuckyCardRank.jack: '30', LuckyCardRank.queen: '10', LuckyCardRank.king: '10'};
         for (final r in LuckyCardRank.values) {
           final texts = textsIn(tester, rank(r));
-          expect(texts.map((t) => t.data), [luckyCardRankName(r), wantRank[r]], reason: r.dbValue);
+          expect(texts.map((t) => t.data), [wantRank[r]], reason: r.dbValue);
           for (final t in texts) {
             expect(t.style!.fontSize, greaterThanOrEqualTo(kLuckyCardMinReadableDp - 0.001), reason: '${r.dbValue} ${t.data}');
           }
           final rect = tester.getRect(rank(r));
           expect(rect.width, greaterThanOrEqualTo(kLuckyCardMinTapDp));
           expect(rect.height, greaterThanOrEqualTo(kLuckyCardMinTapDp));
-          final disc = LuckyCardSlots.rankDisc.within(layout.rankPicture(r.index).shift(origin));
+          final disc = LuckyCardSlots.rankPlate.within(layout.rankPicture(r.index).shift(origin));
           final total = tester.getRect(find.descendant(of: rank(r), matching: find.text(wantRank[r]!)));
-          expect(total.center.dx, closeTo(disc.center.dx, 0.6), reason: '${r.dbValue} total on the disc');
-          expect(total.center.dy, closeTo(disc.center.dy, 0.6), reason: '${r.dbValue} total on the disc');
+          expect(total.center.dx, closeTo(disc.center.dx, 0.6), reason: '${r.dbValue} total on the oval');
+          expect(total.center.dy, closeTo(disc.center.dy, 0.6), reason: '${r.dbValue} total on the oval');
         }
 
         // The 12 cards carry the example's amounts.
@@ -144,7 +143,7 @@ void main() {
     }
   });
 
-  group('the 19 tap targets never overlap and are all at least 48 dp', () {
+  group('the 19 tap targets never overlap and are all at least 48 dp (the four suit bars: 48 across, the height of the design)', () {
     for (final d in kDeviceMatrix) {
       testWidgets(d.name, (tester) async {
         await pumpAtSize(tester, d.size, board(example()));
@@ -157,7 +156,8 @@ void main() {
         final names = targets.keys.toList();
         for (final n in names) {
           expect(targets[n]!.width, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: n);
-          expect(targets[n]!.height, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: n);
+          // The suit bars are the written exception (the user, 2026-10-23).
+          if (!n.startsWith('suit ')) expect(targets[n]!.height, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: n);
         }
         for (var i = 0; i < names.length; i++) {
           for (var j = i + 1; j < names.length; j++) {
@@ -171,20 +171,20 @@ void main() {
 
   group('the largest numbers fit', () {
     for (final d in kDeviceMatrix) {
-      testWidgets('${d.name}: 150000 on every suit bar and 200K on every rank disc', (tester) async {
+      testWidgets('${d.name}: 150000 on every suit bar and 200000 on every rank badge', (tester) async {
         await pumpAtSize(tester, d.size, board(biggest()));
         expect(tester.takeException(), isNull);
         final layout = LuckyCardLayout.of(d.size);
         final origin = layout.canvasRect.topLeft;
         for (final s in LuckyCardSuit.values) {
-          final panel = LuckyCardSlots.suitPanel.within(layout.suitBar(s.index).shift(origin));
+          final panel = LuckyCardSlots.suitPlate.within(layout.suitBar(s.index).shift(origin));
           final total = tester.getRect(find.descendant(of: suit(s), matching: find.text('150000')));
           expect(total.width, lessThanOrEqualTo(panel.width), reason: '${s.dbValue}: 150000 inside its panel');
         }
         for (final r in LuckyCardRank.values) {
-          final disc = LuckyCardSlots.rankDisc.within(layout.rankPicture(r.index).shift(origin));
-          final total = tester.getRect(find.descendant(of: rank(r), matching: find.text('200K')));
-          expect(total.width, lessThanOrEqualTo(disc.width), reason: '${r.dbValue}: 200K inside its disc');
+          final disc = LuckyCardSlots.rankPlate.within(layout.rankPicture(r.index).shift(origin));
+          final total = tester.getRect(find.descendant(of: rank(r), matching: find.text('200000')));
+          expect(total.width, lessThanOrEqualTo(disc.width), reason: '${r.dbValue}: 200000 inside its oval');
         }
         expect(find.text('50000'), findsNWidgets(12));
       });
@@ -192,12 +192,12 @@ void main() {
   });
 
   group('colours', () {
-    testWidgets('the total on a red bar panel is light, the total on the cream disc is dark', (tester) async {
+    testWidgets('the total on the red bar plate and on the purple oval is white, as in the design', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), board(example()));
       final onBar = tester.widget<Text>(find.descendant(of: suit(LuckyCardSuit.hearts), matching: find.text('35')));
       final onDisc = tester.widget<Text>(find.descendant(of: rank(LuckyCardRank.jack), matching: find.text('30')));
-      expect(onBar.style!.color!.computeLuminance(), greaterThan(0.6));
-      expect(onDisc.style!.color!.computeLuminance(), lessThan(0.15));
+      expect(onBar.style!.color!.computeLuminance(), greaterThan(0.9));
+      expect(onDisc.style!.color!.computeLuminance(), greaterThan(0.9));
     });
   });
 
@@ -205,23 +205,23 @@ void main() {
     testWidgets('an empty board: bars and selectors show only their names; the 12 cards say "Play"', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), board(LuckyCardBoardSnapshot.empty()));
       for (final s in LuckyCardSuit.values) {
-        expect(textsIn(tester, suit(s)).map((t) => t.data), [s.label]);
+        expect(textsIn(tester, suit(s)).map((t) => t.data), [s.label.toUpperCase()]);
       }
       for (final r in LuckyCardRank.values) {
-        expect(textsIn(tester, rank(r)).map((t) => t.data), [luckyCardRankName(r)]);
+        expect(textsIn(tester, rank(r)).map((t) => t.data), [luckyCardRankName(r).toUpperCase()]);
       }
       expect(find.text('Play'), findsNWidgets(12));
     });
 
-    testWidgets('a rank disc says 99999 in full and 100K from 100,000, rounded down', (tester) async {
+    testWidgets('a rank badge says its total in full, however large (the user, 2026-10-23: never 100K)', (tester) async {
       LuckyCardBoardSnapshot rankTotal(int perCard) =>
           LuckyCardBoardSnapshot.fromStakes({for (final cd in LuckyCard.ofRank(LuckyCardRank.jack)) cd: perCard});
       await pumpAtSize(tester, const Size(844, 390), board(rankTotal(24999))); // 4 x 24,999 = 99,996
-      expect(textsIn(tester, rank(LuckyCardRank.jack)).map((t) => t.data), ['Jacks', '99996']);
+      expect(textsIn(tester, rank(LuckyCardRank.jack)).map((t) => t.data), ['99996']);
       await pumpAtSize(tester, const Size(844, 390), board(rankTotal(25000))); // 100,000
-      expect(textsIn(tester, rank(LuckyCardRank.jack)).map((t) => t.data), ['Jacks', '100K']);
+      expect(textsIn(tester, rank(LuckyCardRank.jack)).map((t) => t.data), ['100000']);
       await pumpAtSize(tester, const Size(844, 390), board(rankTotal(25999))); // 103,996
-      expect(textsIn(tester, rank(LuckyCardRank.jack)).map((t) => t.data), ['Jacks', '103K']);
+      expect(textsIn(tester, rank(LuckyCardRank.jack)).map((t) => t.data), ['103996']);
     });
   });
 

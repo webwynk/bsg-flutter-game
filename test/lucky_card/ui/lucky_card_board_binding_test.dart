@@ -24,10 +24,11 @@ Finder suit(LuckyCardSuit s) => find.byKey(ValueKey('suit-${s.dbValue}'));
 Finder rank(LuckyCardRank r) => find.byKey(ValueKey('rank-${r.dbValue}'));
 Finder card(LuckyCard cd) => find.byKey(ValueKey(cd.key));
 
-/// The numbers on a header or selector, without its name.
+/// The numbers on a header or selector, without its name (the name is drawn in capitals while
+/// nothing is on the piece).
 List<String> totalsOn(WidgetTester tester, Finder of, String name) => [
       for (final t in tester.widgetList<Text>(find.descendant(of: of, matching: find.byType(Text))))
-        if (t.data != name) t.data!,
+        if (t.data!.toLowerCase() != name.toLowerCase()) t.data!,
     ];
 
 class Counter {

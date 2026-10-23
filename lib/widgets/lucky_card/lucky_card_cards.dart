@@ -1,5 +1,6 @@
-// The 12 cards of the board: each a picture with its live stake on the red ribbon
-// ("Play" while empty), tapped to place or take back a chip.
+// The 12 cards of the board: each a picture that fills its cell, with its live stake on the red
+// plate under the card ("Play" while empty, then the whole number, never shortened), tapped to
+// place or take back a chip. The plate's place and the text's size are the reference design's.
 //
 // A cell does not know about the game. It is told its stake and whether the board
 // is locked, and it calls [LuckyCardCardTap] when tapped; how a tap is answered (a
@@ -44,24 +45,21 @@ class LuckyCardCardCell extends StatelessWidget {
   final LuckyCardCardTap onTap;
   final LuckyCardRefusedTap? onRefused;
 
-  /// The share of a card picture's height used for its stake text.
-  static const double _textHeightShare = 0.1425;
-
   @override
   Widget build(BuildContext context) {
     final cell = layout.cardCell(card.suit.index, card.rank.index);
-    final side = layout.cardSide;
-    final picture = Rect.fromCenter(center: Offset(cell.width / 2, cell.height / 2), width: side, height: side);
-    final ribbon = LuckyCardSlots.cardRibbon.within(picture);
-    final dpr = MediaQuery.devicePixelRatioOf(context);
+    // The picture fills the whole cell (the design's own object-fit: fill): the cell has the
+    // card picture's shape, so nothing is squeezed.
+    final picture = Offset.zero & cell.size;
+    final plate = LuckyCardSlots.cardPlate.within(picture);
     final empty = stake <= 0;
-    final textPreferred = layout.fontSize(side / layout.scale * _textHeightShare);
+    final dpr = MediaQuery.devicePixelRatioOf(context);
 
     final image = Image(
       image: art.image(LuckyCardArtKey.card(card), cacheWidth: layout.cardCacheWidth(dpr)),
-      width: side,
-      height: side,
-      fit: BoxFit.contain,
+      width: picture.width,
+      height: picture.height,
+      fit: BoxFit.fill,
       filterQuality: FilterQuality.medium,
       gaplessPlayback: true,
       excludeFromSemantics: true,
@@ -79,12 +77,18 @@ class LuckyCardCardCell extends StatelessWidget {
         children: [
           Positioned.fromRect(rect: picture, child: tinted(image)),
           Positioned.fromRect(
-            rect: ribbon,
+            rect: plate,
             child: LuckyCardStakeText(
               luckyCardRibbonLabel(stake),
-              maxWidth: ribbon.width * 0.92,
-              preferredSize: textPreferred,
-              color: empty ? const Color(0xCCFFD27A) : const Color(0xFFFFF3C4),
+              maxWidth: plate.width,
+              preferredSize: layout.designCardFont,
+              // White like the design's own card letters; "Play" is a touch dimmer so an empty
+              // card still reads as empty next to one with a stake on it.
+              color: empty ? const Color(0xCCFFFFFF) : const Color(0xFFFFFFFF),
+              shadowColor: const Color(0xFF5A0610),
+              weight: FontWeight.w700,
+              shadowOffset: const Offset(0, 2),
+              shadowBlur: 0,
             ),
           ),
         ],

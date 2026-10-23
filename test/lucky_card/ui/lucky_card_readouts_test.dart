@@ -1,8 +1,8 @@
-// Tests for the Lucky Card top bar, status strip and side-column readouts
+// Tests for the Lucky Card top bar, status words and bet-panel readouts
 // (lucky_card_top_bar.dart, lucky_card_status_strip.dart, lucky_card_readouts.dart).
 //
-// What the player reads: the balance, the countdown, the words under the board,
-// PLAY and WIN, the limits and the ten latest results. Everything is checked on every
+// What the player reads: the balance, the countdown, the status words, PLAY and WIN and the
+// ten latest results. Everything is checked on every
 // device of the matrix: where it sits, that each button has a tap area of at least
 // 48 dp, that no text is smaller than 11 dp, that nothing overflows, and that the
 // phone's font-size setting changes nothing. The pieces here are given plain values;
@@ -12,8 +12,10 @@ import 'package:best_smart_game/models/lucky_card_models.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_art.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_canvas.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_layout.dart';
-import 'package:best_smart_game/widgets/lucky_card/lucky_card_panel.dart';
+import 'package:best_smart_game/widgets/lucky_card/lucky_card_palette.dart';
+import 'package:best_smart_game/widgets/lucky_card/lucky_card_panel.dart' show luckyCardGrouped;
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_readouts.dart';
+import 'package:best_smart_game/widgets/lucky_card/lucky_card_readouts_binding.dart' show luckyCardHeaderStatus;
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_status_strip.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_top_bar.dart';
 import 'package:flutter/material.dart';
@@ -47,8 +49,9 @@ class Taps {
   int exit = 0, sound = 0, info = 0;
 }
 
-/// The screen as the Step 7a pieces build it: the top bar, the status strip, and
-/// PLAY, WIN, the limits and the results in the side column.
+/// The screen as the Step 7a pieces build it: the top bar (which now carries the status
+/// words itself, the reference design having no separate strip for them), and PLAY, WIN
+/// and the results in the bet panel.
 Widget scene({
   LuckyCardArt art = const FileLuckyCardArt(),
   int balance = 12345,
@@ -56,47 +59,63 @@ Widget scene({
   bool soundOn = true,
   bool infoEnabled = true,
   LuckyCardStatusMode mode = LuckyCardStatusMode.placeChips,
-  int play = 150,
+  int total = 150,
   int win = 0,
   List<LuckyCardRecentRound>? history,
   Taps? taps,
 }) {
   final rounds = history ?? ten;
+  // Matches what LuckyCardTopBarBinding actually feeds the header from a mode, so a test
+  // here that picks a mode sees the same words, colour and flashing the real screen would.
   return LuckyCardCanvas(
-    topBar: (context, layout) => LuckyCardTopBar(
-      layout: layout,
-      balance: balance,
-      countdown: countdown,
-      soundOn: soundOn,
-      infoEnabled: infoEnabled,
-      onExit: taps == null ? null : () => taps.exit++,
-      onToggleSound: taps == null ? null : () => taps.sound++,
-      onInfo: taps == null ? null : () => taps.info++,
-    ),
-    status: (context, layout) => LuckyCardStatusStrip(layout: layout, mode: mode),
+    topBar: (context, layout) {
+      final status = luckyCardHeaderStatus(mode: mode);
+      return LuckyCardTopBar(
+        layout: layout, art: const FileLuckyCardArt(),
+        balance: balance,
+        countdown: countdown,
+        soundOn: soundOn,
+        infoEnabled: infoEnabled,
+        statusWidget: LuckyCardStatusLine(
+          key: const ValueKey('top-status'),
+          text: status.text,
+          size: layout.designStatusFont,
+          color: status.color,
+          flashing: status.isFlashing,
+        ),
+        onExit: taps == null ? null : () => taps.exit++,
+        onToggleSound: taps == null ? null : () => taps.sound++,
+        onInfo: taps == null ? null : () => taps.info++,
+      );
+    },
     side: (context, layout) {
       Rect inSide(Rect r) => layout.within(layout.side, r);
       return Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned.fromRect(
-            rect: inSide(layout.playCell),
-            child: LuckyCardAmountCell(key: const ValueKey('play'), layout: layout, label: 'PLAY', value: luckyCardGrouped(play)),
-          ),
-          Positioned.fromRect(
-            rect: inSide(layout.winCell),
-            child: LuckyCardAmountCell(
-              key: const ValueKey('win'),
+            rect: inSide(layout.totalBetCell),
+            child: LuckyCardTotalCell(
+              key: const ValueKey('total-bet'),
               layout: layout,
-              label: 'WIN',
-              value: luckyCardWinText(win),
-              valueColor: win > 0 ? kLuckyCardWin : kLuckyCardCream,
-              highlighted: win > 0,
+              label: 'Play',
+              value: luckyCardGrouped(total),
+              fill: kDesignTotalBetFill,
+              labelColor: kDesignTotalBetLabel,
+              under: kDesignTotalBetUnder,
             ),
           ),
           Positioned.fromRect(
-            rect: inSide(layout.limitsPanel),
-            child: LuckyCardLimitsPanel(key: const ValueKey('limits'), layout: layout),
+            rect: inSide(layout.winCell),
+            child: LuckyCardTotalCell(
+              key: const ValueKey('win'),
+              layout: layout,
+              label: 'Win',
+              value: luckyCardWinText(win),
+              fill: kDesignWinFill,
+              labelColor: kDesignWinLabel,
+              under: kDesignWinUnder,
+            ),
           ),
           Positioned.fromRect(
             rect: inSide(layout.resultsPanel),
@@ -167,15 +186,6 @@ void main() {
       expect(luckyCardStatusText(LuckyCardStatusMode.noMoreSteady), 'NO MORE PLAY');
     });
 
-    test('the limits are the spec numbers: the stake pays ten times, before the bonus', () {
-      expect(LuckyCardLimits.minIn, 5);
-      expect(LuckyCardLimits.minOut, 50);
-      expect(LuckyCardLimits.maxIn, 50000);
-      expect(LuckyCardLimits.maxOut, 500000);
-      expect(LuckyCardLimits.minOut, LuckyCardLimits.minIn * 10);
-      expect(LuckyCardLimits.maxOut, LuckyCardLimits.maxIn * 10);
-    });
-
     test('a result is read out with its rank, suit and bonus', () {
       expect(luckyCardResultSemantics(ten[0]), 'Queen of Spades, bonus 4X');
       expect(luckyCardResultSemantics(ten[1]), 'Jack of Hearts, no bonus');
@@ -190,19 +200,14 @@ void main() {
         final l = LuckyCardLayout.of(d.size);
         expect(tester.takeException(), isNull, reason: 'no overflow or error');
 
-        // Each piece is exactly where the layout says.
+        // Each side-column piece is exactly where the layout says (the header's own row
+        // layout is its own thing now, proven by lucky_card_top_bar_history_test.dart).
         Map<String, Rect> expected = {
-          'top-exit': l.exitHit,
-          'top-sound': l.soundHit,
-          'top-info': l.infoHit,
-          'top-balance': l.balanceBox,
-          'top-countdown': l.countdownBox,
-          'play': l.playCell,
+          'total-bet': l.totalBetCell,
           'win': l.winCell,
-          'limits': l.limitsPanel,
           'results': l.resultsPanel,
-          'result-latest': l.resultCurrent,
-          for (var i = 0; i < 9; i++) 'result-$i': l.resultTile(i),
+          'result-latest': l.resultTile(0),
+          for (var i = 0; i < 9; i++) 'result-$i': l.resultTile(i + 1),
         };
         for (final e in expected.entries) {
           final got = rectOf(tester, e.key);
@@ -234,7 +239,7 @@ void main() {
       const size = Size(640, 360);
       await pumpAtSize(tester, size, scene());
       final before = {
-        for (final k in ['top-balance', 'top-countdown', 'play', 'win', 'limits', 'results']) k: rectOf(tester, k),
+        for (final k in ['top-balance', 'top-countdown', 'total-bet', 'win', 'results']) k: rectOf(tester, k),
       };
       final textsBefore = [for (final t in tester.widgetList<Text>(find.byType(Text))) '${t.data}:${t.style!.fontSize}'];
 
@@ -252,8 +257,14 @@ void main() {
 
   group('the top bar', () {
     testWidgets('shows the balance with thousands separators and the countdown in two digits', (tester) async {
+      // The coin beside the figure is the BSG coin picture (the user's decision of 2026-10-23), not a
+      // drawn "$", so the balance pill reads only the figure.
       await pumpAtSize(tester, const Size(844, 390), scene(balance: 1234567, countdown: 7));
       expect(textsIn(tester, find.byKey(const ValueKey('top-balance'))), ['1,234,567']);
+      final coin = tester.widget<Image>(find.byKey(const ValueKey('top-coin')));
+      final coinFile = ((coin.image as ResizeImage).imageProvider as FileImage).file.path.split(RegExp(r'[\\/]')).last;
+      expect(coinFile, 'bsg_coin.webp');
+      expect(tester.getSize(find.byKey(const ValueKey('top-coin'))).width, closeTo(LuckyCardLayout.of(const Size(844, 390)).designCoinSize, 0.01));
       expect(textsIn(tester, find.byKey(const ValueKey('top-countdown'))), ['07']);
 
       await pumpAtSize(tester, const Size(844, 390), scene(balance: 0, countdown: 90));
@@ -261,19 +272,28 @@ void main() {
       expect(textsIn(tester, find.byKey(const ValueKey('top-countdown'))), ['90']);
     });
 
-    testWidgets('the countdown is gold, and red for the last five seconds only', (tester) async {
-      Color colorAt(int seconds) {
+    testWidgets('the countdown ring is gold, and red for the last five seconds only; the digits stay white, as the design draws them', (tester) async {
+      // The design's countdown turns urgent in its RING, not its digits (a purple disc with
+      // white digits throughout): the old gold/red text is gone with the strip that used it.
+      Color ringColorAt(int seconds) {
+        final container = tester.widget<Container>(find.descendant(of: find.byKey(const ValueKey('top-countdown')), matching: find.byType(Container)).first);
+        return ((container.decoration as BoxDecoration).gradient as SweepGradient).colors.first;
+      }
+
+      Color textColorAt(int seconds) {
         final t = tester.widget<Text>(find.descendant(of: find.byKey(const ValueKey('top-countdown')), matching: find.byType(Text)));
         return t.style!.color!;
       }
 
       for (final s in [90, 6, 0]) {
         await pumpAtSize(tester, const Size(844, 390), scene(countdown: s));
-        expect(colorAt(s), kLuckyCardGoldBright, reason: '$s seconds');
+        expect(ringColorAt(s), kDesignRing, reason: '$s seconds');
+        expect(textColorAt(s), kDesignCountdownText, reason: '$s seconds');
       }
       for (final s in [5, 3, 1]) {
         await pumpAtSize(tester, const Size(844, 390), scene(countdown: s));
-        expect(colorAt(s), kLuckyCardAlert, reason: '$s seconds');
+        expect(ringColorAt(s), kDesignAlertText, reason: '$s seconds');
+        expect(textColorAt(s), kDesignCountdownText, reason: '$s seconds, digits unchanged');
       }
     });
 
@@ -281,26 +301,25 @@ void main() {
       for (final d in kDeviceMatrix) {
         final taps = Taps();
         await pumpAtSize(tester, d.size, scene(taps: taps));
-        final l = LuckyCardLayout.of(d.size);
         final areas = {
-          'exit': (l.exitHit, () => taps.exit),
-          'sound': (l.soundHit, () => taps.sound),
-          'info': (l.infoHit, () => taps.info),
+          'top-exit': () => taps.exit,
+          'top-sound': () => taps.sound,
+          'top-info': () => taps.info,
         };
         for (final e in areas.entries) {
-          final hit = onScreen(l, e.value.$1);
+          final hit = tester.getRect(find.byKey(ValueKey(e.key)));
           // The middle, and a point 1 dp inside each corner of the area.
           for (final p in [hit.center, hit.topLeft + const Offset(1, 1), hit.bottomRight - const Offset(1, 1), hit.topRight + const Offset(-1, 1), hit.bottomLeft + const Offset(1, -1)]) {
-            final before = e.value.$2();
+            final before = e.value();
             await tester.tapAt(p);
             await tester.pump();
-            expect(e.value.$2(), before + 1, reason: '${e.key} at $p on ${d.name}');
+            expect(e.value(), before + 1, reason: '${e.key} at $p on ${d.name}');
           }
         }
         expect([taps.exit, taps.sound, taps.info], [5, 5, 5], reason: d.name);
 
         // Just outside an area, nothing happens.
-        final exit = onScreen(l, l.exitHit);
+        final exit = tester.getRect(find.byKey(const ValueKey('top-exit')));
         await tester.tapAt(exit.centerRight + const Offset(1.5, 0));
         await tester.pump();
         expect([taps.exit, taps.sound, taps.info], [5, 5, 5], reason: 'a tap beside the exit button, ${d.name}');
@@ -310,10 +329,9 @@ void main() {
     testWidgets('Info is dimmed and ignores taps while it is disabled; Exit and Sound still work', (tester) async {
       final taps = Taps();
       await pumpAtSize(tester, const Size(844, 390), scene(taps: taps, infoEnabled: false));
-      final l = LuckyCardLayout.of(const Size(844, 390));
-      await tester.tapAt(onScreen(l, l.infoHit).center);
-      await tester.tapAt(onScreen(l, l.exitHit).center);
-      await tester.tapAt(onScreen(l, l.soundHit).center);
+      await tester.tap(find.byKey(const ValueKey('top-info')), warnIfMissed: false);
+      await tester.tap(find.byKey(const ValueKey('top-exit')));
+      await tester.tap(find.byKey(const ValueKey('top-sound')));
       await tester.pump();
       expect([taps.exit, taps.sound, taps.info], [1, 1, 0]);
 
@@ -325,42 +343,48 @@ void main() {
 
     testWidgets('a button with no callback is dimmed and harmless', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene());
-      final l = LuckyCardLayout.of(const Size(844, 390));
-      await tester.tapAt(onScreen(l, l.exitHit).center);
+      await tester.tap(find.byKey(const ValueKey('top-exit')), warnIfMissed: false);
       await tester.pump();
       expect(tester.takeException(), isNull);
       expect(find.descendant(of: find.byKey(const ValueKey('top-exit')), matching: find.byType(Opacity)), findsOneWidget);
     });
 
-    testWidgets('a pressed button shrinks a little while the finger is down and springs back', (tester) async {
+    // The design pushes a pressed button down 2 dp (`button:active { transform:
+    // translateY(2px) }`), not the old shrink: the Y offset of its AnimatedContainer's own
+    // transform is what moves, not an AnimatedScale (removed with the rest of the old look).
+    testWidgets('a pressed button eases down a little while the finger is down and springs back', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene(taps: Taps()));
-      final l = LuckyCardLayout.of(const Size(844, 390));
-      double scaleOf(String k) => tester
-          .widget<AnimatedScale>(find.descendant(of: find.byKey(ValueKey(k)), matching: find.byType(AnimatedScale)))
-          .scale;
-      expect(scaleOf('top-exit'), 1.0);
-      final finger = await tester.startGesture(onScreen(l, l.exitHit).center);
+      double offsetOf(String k) {
+        final container = tester.widget<AnimatedContainer>(find.descendant(of: find.byKey(ValueKey(k)), matching: find.byType(AnimatedContainer)));
+        return container.transform!.getTranslation().y;
+      }
+
+      expect(offsetOf('top-exit'), 0.0);
+      final finger = await tester.startGesture(tester.getCenter(find.byKey(const ValueKey('top-exit'))));
       await tester.pump(const Duration(milliseconds: 20));
-      expect(scaleOf('top-exit'), lessThan(1.0), reason: 'pressed');
-      expect(scaleOf('top-sound'), 1.0, reason: 'only the pressed button moves');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(offsetOf('top-exit'), greaterThan(0.0), reason: 'pressed');
+      expect(offsetOf('top-sound'), 0.0, reason: 'only the pressed button moves');
       await finger.up();
-      await tester.pump(const Duration(milliseconds: 200));
-      expect(scaleOf('top-exit'), 1.0, reason: 'released');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(offsetOf('top-exit'), 0.0, reason: 'released');
     });
 
     testWidgets('a pressed button springs back when the finger slides away and the tap is cancelled', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene(taps: Taps()));
-      final l = LuckyCardLayout.of(const Size(844, 390));
-      double scaleOf() => tester
-          .widget<AnimatedScale>(find.descendant(of: find.byKey(const ValueKey('top-exit')), matching: find.byType(AnimatedScale)))
-          .scale;
-      final finger = await tester.startGesture(onScreen(l, l.exitHit).center);
+      double offsetOf() {
+        final container = tester.widget<AnimatedContainer>(find.descendant(of: find.byKey(const ValueKey('top-exit')), matching: find.byType(AnimatedContainer)));
+        return container.transform!.getTranslation().y;
+      }
+
+      final finger = await tester.startGesture(tester.getCenter(find.byKey(const ValueKey('top-exit'))));
       await tester.pump(const Duration(milliseconds: 20));
-      expect(scaleOf(), lessThan(1.0));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(offsetOf(), greaterThan(0.0));
       await finger.moveBy(const Offset(0, 300));
       await finger.cancel();
-      await tester.pump(const Duration(milliseconds: 200));
-      expect(scaleOf(), 1.0);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(offsetOf(), 0.0);
     });
 
     testWidgets('the sound button shows its state, and says it', (tester) async {
@@ -384,29 +408,28 @@ void main() {
     });
   });
 
-  group('the status strip', () {
-    testWidgets('says what each mode says, in the strip under the board', (tester) async {
+  group('the status words (now in the header -- lucky_card_top_bar.dart\'s LuckyCardStatusLine, key top-status; the reference design has no separate strip)', () {
+    testWidgets('says what each mode says', (tester) async {
       const size = Size(844, 390);
-      final l = LuckyCardLayout.of(size);
       for (final mode in LuckyCardStatusMode.values) {
         await pumpAtSize(tester, size, scene(mode: mode));
         expect(find.text(luckyCardStatusText(mode)), findsOneWidget, reason: '$mode');
-        expect(tester.getRect(find.byType(LuckyCardStatusStrip)), onScreen(l, l.status), reason: '$mode');
+        expect(find.descendant(of: find.byKey(const ValueKey('top-status')), matching: find.text(luckyCardStatusText(mode))), findsOneWidget, reason: '$mode');
       }
     });
 
     testWidgets('the words are cream while betting is open and red once it is closed', (tester) async {
-      Color color() => tester.widget<Text>(find.descendant(of: find.byType(LuckyCardStatusStrip), matching: find.byType(Text))).style!.color!;
+      Color color() => tester.widget<Text>(find.descendant(of: find.byKey(const ValueKey('top-status')), matching: find.byType(Text))).style!.color!;
       await pumpAtSize(tester, const Size(844, 390), scene(mode: LuckyCardStatusMode.placeChips));
-      expect(color(), kLuckyCardCream);
+      expect(color(), kDesignStatusText);
       await pumpAtSize(tester, const Size(844, 390), scene(mode: LuckyCardStatusMode.noMoreFlashing));
-      expect(color(), kLuckyCardAlert);
+      expect(color(), kDesignAlertText);
       await pumpAtSize(tester, const Size(844, 390), scene(mode: LuckyCardStatusMode.noMoreSteady));
-      expect(color(), kLuckyCardAlert);
+      expect(color(), kDesignAlertText);
     });
 
     double opacity(WidgetTester tester) => tester
-        .widget<Opacity>(find.descendant(of: find.byType(LuckyCardStatusStrip), matching: find.byType(Opacity)).last)
+        .widget<Opacity>(find.descendant(of: find.byKey(const ValueKey('top-status')), matching: find.byType(Opacity)).last)
         .opacity;
 
     testWidgets('the flashing mode fades the words down and back; the other two never move', (tester) async {
@@ -469,30 +492,34 @@ void main() {
 
   group('PLAY and WIN', () {
     testWidgets('PLAY shows the stake, WIN shows 0 until a win', (tester) async {
-      await pumpAtSize(tester, const Size(844, 390), scene(play: 12500, win: 0));
-      expect(textsIn(tester, find.byKey(const ValueKey('play'))), ['PLAY', '12,500']);
+      await pumpAtSize(tester, const Size(844, 390), scene(total: 12500, win: 0));
+      expect(textsIn(tester, find.byKey(const ValueKey('total-bet'))), ['PLAY', '12,500']);
       expect(textsIn(tester, find.byKey(const ValueKey('win'))), ['WIN', '0']);
     });
 
     testWidgets('a screen reader hears each amount with its name', (tester) async {
       final handle = tester.ensureSemantics();
-      await pumpAtSize(tester, const Size(844, 390), scene(play: 150, win: 1500));
-      expect(find.bySemanticsLabel('PLAY: 150'), findsOneWidget);
-      expect(find.bySemanticsLabel('WIN: +1,500'), findsOneWidget);
+      await pumpAtSize(tester, const Size(844, 390), scene(total: 150, win: 1500));
+      expect(find.bySemanticsLabel('Play: 150'), findsOneWidget);
+      expect(find.bySemanticsLabel('Win: +1,500'), findsOneWidget);
       handle.dispose();
     });
 
-    testWidgets('a win shows +amount, in green, on a highlighted cell', (tester) async {
-      await pumpAtSize(tester, const Size(844, 390), scene(play: 120, win: 1500));
+    testWidgets('a win shows +amount; the figures are white on the blue and green cells, as in the design', (tester) async {
+      await pumpAtSize(tester, const Size(844, 390), scene(total: 120, win: 1500));
       expect(textsIn(tester, find.byKey(const ValueKey('win'))), ['WIN', '+1,500']);
-      final value = tester.widget<Text>(find.descendant(of: find.byKey(const ValueKey('win')), matching: find.text('+1,500')));
-      expect(value.style!.color, kLuckyCardWin);
+      Text text(String key, String value) => tester.widget<Text>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.text(value)));
+      expect(text('win', '+1,500').style!.color, const Color(0xFFFFFFFF));
+      expect(text('total-bet', '120').style!.color, const Color(0xFFFFFFFF));
+      expect(text('total-bet', 'PLAY').style!.color, kDesignTotalBetLabel);
+      expect(text('win', 'WIN').style!.color, kDesignWinLabel);
+      expect(text('total-bet', '120').style!.fontFamily, 'Oswald');
     });
 
     testWidgets('the biggest numbers fit their cell on the smallest phone', (tester) async {
-      await pumpAtSize(tester, const Size(640, 360), scene(play: 1000000, win: 9999999));
+      await pumpAtSize(tester, const Size(640, 360), scene(total: 1000000, win: 9999999));
       expect(tester.takeException(), isNull);
-      for (final key in ['play', 'win']) {
+      for (final key in ['total-bet', 'win']) {
         final cell = rectOf(tester, key);
         for (final t in find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(Text)).evaluate()) {
           final r = tester.getRect(find.byWidget(t.widget));
@@ -501,45 +528,20 @@ void main() {
         }
       }
     });
-  });
 
-  group('the limits', () {
-    testWidgets('MIN and MAX with their IN and OUT numbers', (tester) async {
+    testWidgets('no limits are drawn on the board any more (they stay in the Info dialog)', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene());
-      expect(textsIn(tester, find.byKey(const ValueKey('limits'))), ['MIN', 'IN 5', 'OUT 50', 'MAX', 'IN 50,000', 'OUT 500,000']);
-    });
-
-    testWidgets('a screen reader hears the limits as one sentence', (tester) async {
-      final handle = tester.ensureSemantics();
-      await pumpAtSize(tester, const Size(844, 390), scene());
-      expect(
-        find.bySemanticsLabel('Limits. Minimum: stake 5, pays up to 50. Maximum: stake 50,000, pays up to 500,000.'),
-        findsOneWidget,
-      );
-      handle.dispose();
-    });
-
-    testWidgets('on every device each limit text lies inside the panel', (tester) async {
-      for (final d in kDeviceMatrix) {
-        await pumpAtSize(tester, d.size, scene());
-        final panel = rectOf(tester, 'limits');
-        for (final t in find.descendant(of: find.byKey(const ValueKey('limits')), matching: find.byType(Text)).evaluate()) {
-          final r = tester.getRect(find.byWidget(t.widget));
-          expect(r.left, greaterThanOrEqualTo(panel.left), reason: '${(t.widget as Text).data} on ${d.name}');
-          expect(r.right, lessThanOrEqualTo(panel.right), reason: '${(t.widget as Text).data} on ${d.name}');
-          expect(r.top, greaterThanOrEqualTo(panel.top), reason: '${(t.widget as Text).data} on ${d.name}');
-          expect(r.bottom, lessThanOrEqualTo(panel.bottom), reason: '${(t.widget as Text).data} on ${d.name}');
-        }
-      }
+      expect(find.text('MIN'), findsNothing);
+      expect(find.text('MAX'), findsNothing);
     });
   });
 
   group('the results', () {
-    testWidgets('the latest result is large on top, the nine before it fill the grid in order', (tester) async {
+    testWidgets('the ten latest rounds fill two rows of five, newest first, each with its bonus under the letter and suit', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene());
       expect(textsIn(tester, find.byKey(const ValueKey('result-latest'))), ['Q', '4X']);
-      final grid = [for (var i = 0; i < 9; i++) textsIn(tester, find.byKey(ValueKey('result-$i')))];
-      expect(grid, [
+      final row = [for (var i = 0; i < 9; i++) textsIn(tester, find.byKey(ValueKey('result-$i')))];
+      expect(row, [
         ['J', 'N'],
         ['K', '10X'],
         ['Q', '2X'],
@@ -550,9 +552,11 @@ void main() {
         ['K', 'N'],
         ['J', '5X'],
       ]);
+      expect(find.text('LAST RESULT'), findsNothing, reason: 'no caption line any more');
+      expect(find.text('Previous 9'), findsNothing);
     });
 
-    testWidgets('each result carries the icon of its own suit', (tester) async {
+    testWidgets('each result carries the picture of its own suit', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene());
       String? iconOf(String key) {
         final image = tester.widget<Image>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(Image)));
@@ -574,35 +578,37 @@ void main() {
       ]);
     });
 
-    testWidgets('a new table has fewer than ten rounds: the missing ones are empty tiles', (tester) async {
+    testWidgets('a new table has fewer than ten rounds: the missing ones are empty slots', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene(history: ten.sublist(0, 3)));
       expect(textsIn(tester, find.byKey(const ValueKey('result-latest'))), ['Q', '4X']);
       expect(textsIn(tester, find.byKey(const ValueKey('result-0'))), ['J', 'N']);
       expect(textsIn(tester, find.byKey(const ValueKey('result-1'))), ['K', '10X']);
       for (var i = 2; i < 9; i++) {
-        expect(textsIn(tester, find.byKey(ValueKey('result-$i'))), isEmpty, reason: 'tile $i is empty');
+        expect(textsIn(tester, find.byKey(ValueKey('result-$i'))), isEmpty, reason: 'slot $i is empty');
         expect(find.descendant(of: find.byKey(ValueKey('result-$i')), matching: find.byType(Image)), findsNothing);
       }
       expect(find.descendant(of: find.byKey(const ValueKey('results')), matching: find.byType(Image)), findsNWidgets(3));
     });
 
-    testWidgets('an empty tile is dimmed, a filled one is not', (tester) async {
+    testWidgets('an empty slot is a faint blank box, the newest card white and the older ones dark purple', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene(history: ten.sublist(0, 3)));
-      Finder dim(String k) => find.descendant(of: find.byKey(ValueKey(k)), matching: find.byType(Opacity));
-      expect(dim('result-latest'), findsNothing);
-      expect(dim('result-0'), findsNothing);
-      expect(dim('result-1'), findsNothing);
+      BoxDecoration decoration(String k) =>
+          tester.widget<DecoratedBox>(find.descendant(of: find.byKey(ValueKey(k)), matching: find.byType(DecoratedBox)).first).decoration as BoxDecoration;
+      expect(decoration('result-latest').gradient!.colors, kDesignTileFill, reason: 'the newest is white');
+      expect(decoration('result-latest').gradient!.colors.every((c) => c == const Color(0xFFFFFFFF)), isTrue);
+      expect(decoration('result-0').gradient!.colors, kDesignOldTileFill, reason: 'older ones are dark purple');
+      expect(decoration('result-1').gradient!.colors, kDesignOldTileFill);
       for (var i = 2; i < 9; i++) {
-        expect(dim('result-$i'), findsOneWidget, reason: 'tile $i');
+        expect(decoration('result-$i').gradient, isNull, reason: 'slot $i');
+        expect(decoration('result-$i').color, const Color(0x1FFFFFFF), reason: 'slot $i');
       }
     });
 
-    testWidgets('the suit icons are decoded no wider than the largest one drawn, at any pixel density', (tester) async {
+    testWidgets('the suit pictures are decoded no wider than the largest one drawn, at any pixel density', (tester) async {
       for (final dpr in [1.0, 2.0, 3.0]) {
         const size = Size(844, 390);
         await pumpAtSize(tester, size, scene(), devicePixelRatio: dpr);
-        final l = LuckyCardLayout.of(size);
-        final need = (l.resultCurrentIcon * dpr).ceil();
+        final need = (LuckyCardLayout.designTileIcon * dpr).ceil();
         for (final k in ['result-latest', for (var i = 0; i < 9; i++) 'result-$i']) {
           final image = tester.widget<Image>(find.descendant(of: find.byKey(ValueKey(k)), matching: find.byType(Image)));
           final width = (image.image as ResizeImage).width!;
@@ -612,11 +618,11 @@ void main() {
       }
     });
 
-    testWidgets('no rounds at all: ten empty tiles, nothing drawn, nothing thrown', (tester) async {
+    testWidgets('no rounds at all: ten empty slots, nothing drawn, nothing thrown', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene(history: const []));
       expect(tester.takeException(), isNull);
       expect(find.descendant(of: find.byKey(const ValueKey('results')), matching: find.byType(Image)), findsNothing);
-      expect(find.descendant(of: find.byKey(const ValueKey('results')), matching: find.byType(Text)), findsNothing);
+      expect(textsIn(tester, find.byKey(const ValueKey('results'))), isEmpty);
     });
 
     testWidgets('more than ten rounds: only the latest ten are shown', (tester) async {
@@ -626,19 +632,19 @@ void main() {
       expect(find.descendant(of: find.byKey(const ValueKey('results')), matching: find.byType(Image)), findsNWidgets(10));
     });
 
-    testWidgets('the rank is red for hearts and diamonds, cream for spades and clubs; a real bonus is bright', (tester) async {
+    testWidgets('the newest card has dark writing (a real bonus amber, none a muted purple); the older ones light writing', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene());
       Color color(String key, String text) =>
           tester.widget<Text>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.text(text))).style!.color!;
-      expect(color('result-latest', 'Q'), kLuckyCardCream, reason: 'spades');
-      expect(color('result-0', 'J'), const Color(0xFFFF6B5E), reason: 'hearts');
-      expect(color('result-1', 'K'), const Color(0xFFFF6B5E), reason: 'diamonds');
-      expect(color('result-2', 'Q'), kLuckyCardCream, reason: 'clubs');
-      expect(color('result-latest', '4X'), kLuckyCardGoldBright, reason: 'a bonus');
-      expect(color('result-0', 'N'), kLuckyCardGold, reason: 'no bonus');
+      expect(color('result-latest', 'Q'), kDesignTileLetter);
+      expect(color('result-latest', '4X'), kDesignTileBonus, reason: 'a bonus on the white card');
+      expect(color('result-0', 'J'), kDesignOldTileLetter);
+      expect(color('result-1', 'K'), kDesignOldTileLetter);
+      expect(color('result-1', '10X'), kDesignOldTileBonus, reason: 'a bonus on a dark card');
+      expect(color('result-0', 'N'), kDesignOldTileNoBonus, reason: 'no bonus on a dark card');
     });
 
-    testWidgets('every result tile holds its content on every device', (tester) async {
+    testWidgets('every result holds its content on every device, the bonus at 11 dp or more', (tester) async {
       for (final d in kDeviceMatrix) {
         await pumpAtSize(tester, d.size, scene());
         expect(tester.takeException(), isNull, reason: d.name);
@@ -652,6 +658,9 @@ void main() {
               expect(r.right, lessThanOrEqualTo(tile.right + 0.5), reason: '$what in $key on ${d.name}');
               expect(r.top, greaterThanOrEqualTo(tile.top - 0.5), reason: '$what in $key on ${d.name}');
               expect(r.bottom, lessThanOrEqualTo(tile.bottom + 0.5), reason: '$what in $key on ${d.name}');
+              if (e.widget is Text) {
+                expect((e.widget as Text).style!.fontSize, greaterThanOrEqualTo(kLuckyCardMinReadableDp - 0.001), reason: '$what in $key');
+              }
             }
           }
         }
@@ -689,7 +698,7 @@ void main() {
         tester,
         d,
         'readouts_win_empty',
-        (art) => scene(art: art, win: 1500, play: 0, countdown: 3, balance: 98765432, mode: LuckyCardStatusMode.noMoreSteady, infoEnabled: false, soundOn: false, history: ten.sublist(0, 2)),
+        (art) => scene(art: art, win: 1500, total: 0, countdown: 3, balance: 98765432, mode: LuckyCardStatusMode.noMoreSteady, infoEnabled: false, soundOn: false, history: ten.sublist(0, 2)),
       );
     });
   });

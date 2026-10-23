@@ -1,15 +1,20 @@
 // Tests for lucky_card_messages.dart (the refusal lines, the problem dialogs, the notice) and for
-// the status strip showing a notice (lucky_card_status_strip.dart, lucky_card_readouts_binding.dart).
+// the header showing a notice in place of its status words (lucky_card_top_bar.dart's
+// LuckyCardStatusLine, lucky_card_readouts_binding.dart's luckyCardHeaderStatus/LuckyCardTopBarBinding;
+// the reference design has no separate strip under the board for these words any more).
 
 import 'package:best_smart_game/models/lucky_card_board.dart';
 import 'package:best_smart_game/models/lucky_card_models.dart';
 import 'package:best_smart_game/providers/lucky_card_provider.dart';
+import 'package:best_smart_game/widgets/lucky_card/lucky_card_art.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_canvas.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_layout.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_messages.dart';
+import 'package:best_smart_game/widgets/lucky_card/lucky_card_palette.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_panel.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_readouts_binding.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_status_strip.dart';
+import 'package:best_smart_game/widgets/lucky_card/lucky_card_top_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,15 +25,35 @@ const Size phone = Size(844, 390);
 
 Set<LuckyCardBoardIssue> only(LuckyCardBoardIssue i) => {i};
 
-Widget strip(LuckyCardStatusMode mode, {String? notice, bool important = false}) => LuckyCardCanvas(
-      status: (context, layout) => LuckyCardStatusStrip(layout: layout, mode: mode, notice: notice, noticeImportant: important),
-    );
+/// Just the header, built exactly as LuckyCardTopBarBinding derives it from a mode and a
+/// notice (luckyCardHeaderStatus), but without a provider: the plain values this file tests.
+Widget strip(LuckyCardStatusMode mode, {String? notice, bool important = false}) {
+  final status = luckyCardHeaderStatus(mode: mode, notice: notice, noticeImportant: important);
+  return LuckyCardCanvas(
+    topBar: (context, layout) => LuckyCardTopBar(
+      layout: layout, art: const FileLuckyCardArt(),
+      balance: 0,
+      countdown: 47,
+      soundOn: true,
+      infoEnabled: true,
+      statusWidget: LuckyCardStatusLine(
+        key: const ValueKey('top-status'),
+        text: status.text,
+        size: layout.designStatusFont,
+        color: status.color,
+        flashing: status.isFlashing,
+      ),
+    ),
+  );
+}
+
+Finder get _statusLine => find.byKey(const ValueKey('top-status'));
 
 String stripText(WidgetTester tester) =>
-    tester.widget<Text>(find.descendant(of: find.byType(LuckyCardStatusStrip), matching: find.byType(Text))).data!;
+    tester.widget<Text>(find.descendant(of: _statusLine, matching: find.byType(Text))).data!;
 
 Color stripColor(WidgetTester tester) =>
-    tester.widget<Text>(find.descendant(of: find.byType(LuckyCardStatusStrip), matching: find.byType(Text))).style!.color!;
+    tester.widget<Text>(find.descendant(of: _statusLine, matching: find.byType(Text))).style!.color!;
 
 void main() {
   setUpAll(loadLuckyCardFonts);
@@ -36,13 +61,36 @@ void main() {
   group('the refusal lines (pure)', () {
     test('each reason that deserves a line has Triple Chance\'s plain style and the right number', () {
       expect(luckyCardRefusalLine(only(LuckyCardBoardIssue.notEnoughCoins)), 'NOT ENOUGH COINS');
-      expect(luckyCardRefusalLine(only(LuckyCardBoardIssue.cardAtMaximum)), 'CARD AT 50,000 LIMIT');
       expect(luckyCardRefusalLine(only(LuckyCardBoardIssue.noChipSelected)), 'PICK A CHIP FIRST');
       expect(luckyCardRefusalLine(only(LuckyCardBoardIssue.nothingToRemove)), 'NOTHING TO TAKE BACK');
     });
 
-    test('the limit in the line is the game\'s own limit', () {
-      expect(luckyCardRefusalLine(only(LuckyCardBoardIssue.cardAtMaximum)), contains(luckyCardGrouped(kLuckyCardMaxStake)));
+    test('a card at its largest stake has no header line: it gets the snackbar (the user, 2026-10-23)', () {
+      expect(luckyCardRefusalLine(only(LuckyCardBoardIssue.cardAtMaximum)), isNull);
+      expect(luckyCardRefusalIsLimit(only(LuckyCardBoardIssue.cardAtMaximum)), isTrue);
+      expect(luckyCardRefusalIsLimit({LuckyCardBoardIssue.nothingToRemove, LuckyCardBoardIssue.cardAtMaximum}), isTrue);
+      expect(luckyCardRefusalIsLimit({LuckyCardBoardIssue.cardAtMaximum, LuckyCardBoardIssue.notEnoughCoins}), isFalse,
+          reason: 'not enough coins is the more useful thing to say');
+      expect(luckyCardRefusalIsLimit(only(LuckyCardBoardIssue.notEnoughCoins)), isFalse);
+      expect(luckyCardRefusalIsLimit({}), isFalse);
+    });
+
+    testWidgets('the limit snackbar reads CARD PLAY LIMIT REACHED and the game\'s own maximum, for 3 seconds', (tester) async {
+      expect(kLuckyCardLimitSnackBarTime, const Duration(seconds: 3));
+      final bar = luckyCardLimitSnackBar();
+      expect(bar.duration, kLuckyCardLimitSnackBarTime);
+      expect(bar.behavior, SnackBarBehavior.fixed);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Builder(builder: (context) => TextButton(onPressed: () => ScaffoldMessenger.of(context).showSnackBar(bar), child: const Text('go')))),
+      ));
+      await tester.tap(find.text('go'));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('CARD PLAY LIMIT REACHED'), findsOneWidget);
+      expect(find.text('Max ${luckyCardGrouped(kLuckyCardMaxStake)} / card'), findsOneWidget);
+      expect(find.text('Max 50,000 / card'), findsOneWidget);
+      for (final t in tester.widgetList<Text>(find.descendant(of: find.byType(SnackBar), matching: find.byType(Text)))) {
+        expect(t.style!.fontSize, greaterThanOrEqualTo(11), reason: t.data);
+      }
     });
 
     test('every other reason is silent', () {
@@ -54,7 +102,8 @@ void main() {
 
     test('with several reasons at once the most useful wins', () {
       expect(luckyCardRefusalLine({LuckyCardBoardIssue.cardAtMaximum, LuckyCardBoardIssue.notEnoughCoins}), 'NOT ENOUGH COINS');
-      expect(luckyCardRefusalLine({LuckyCardBoardIssue.nothingToRemove, LuckyCardBoardIssue.cardAtMaximum}), 'CARD AT 50,000 LIMIT');
+      expect(luckyCardRefusalLine({LuckyCardBoardIssue.nothingToRemove, LuckyCardBoardIssue.cardAtMaximum}), 'NOTHING TO TAKE BACK',
+          reason: 'the header line only; the screen shows the limit snackbar first (luckyCardRefusalIsLimit)');
       expect(luckyCardRefusalLine({LuckyCardBoardIssue.locked, LuckyCardBoardIssue.noChipSelected}), 'PICK A CHIP FIRST');
       expect(luckyCardRefusalLine({LuckyCardBoardIssue.locked, LuckyCardBoardIssue.nothingToRemove}), 'NOTHING TO TAKE BACK');
     });
@@ -192,28 +241,28 @@ void main() {
     });
   });
 
-  group('the status strip with a notice', () {
+  group('the header\'s status words with a notice', () {
     testWidgets('betting open: the notice replaces the words, in amber; without it the words are back', (tester) async {
       await pumpAtSize(tester, phone, strip(LuckyCardStatusMode.placeChips, notice: 'NOT ENOUGH COINS'));
       expect(stripText(tester), 'NOT ENOUGH COINS');
-      expect(stripColor(tester), LuckyCardStatusStrip.noticeColor);
+      expect(stripColor(tester), kDesignNoticeText);
       await pumpAtSize(tester, phone, strip(LuckyCardStatusMode.placeChips));
       expect(stripText(tester), 'PLACE YOUR CHIPS');
-      expect(stripColor(tester), kLuckyCardCream);
+      expect(stripColor(tester), kDesignStatusText);
     });
 
     testWidgets('betting closed: an ordinary notice is not shown, the words stay', (tester) async {
       for (final mode in [LuckyCardStatusMode.noMoreFlashing, LuckyCardStatusMode.noMoreSteady]) {
         await pumpAtSize(tester, phone, strip(mode, notice: 'NOT ENOUGH COINS'));
         expect(stripText(tester), 'NO MORE PLAY', reason: '$mode');
-        expect(stripColor(tester), kLuckyCardAlert);
+        expect(stripColor(tester), kDesignAlertText);
       }
     });
 
     testWidgets('betting closed: an important notice is shown', (tester) async {
       await pumpAtSize(tester, phone, strip(LuckyCardStatusMode.noMoreSteady, notice: kLuckyCardBalanceLine, important: true));
       expect(stripText(tester), kLuckyCardBalanceLine);
-      expect(stripColor(tester), LuckyCardStatusStrip.noticeColor);
+      expect(stripColor(tester), kDesignNoticeText);
     });
 
     testWidgets('a screen reader hears the notice', (tester) async {
@@ -223,13 +272,13 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('the longest line still fits the strip on the smallest phone, at 11 dp or more', (tester) async {
+    testWidgets('the longest line still fits the header on the smallest phone, at 11 dp or more', (tester) async {
       await pumpAtSize(tester, const Size(640, 360), strip(LuckyCardStatusMode.noMoreSteady, notice: kLuckyCardBalanceLine, important: true));
       expect(tester.takeException(), isNull);
-      final t = tester.widget<Text>(find.descendant(of: find.byType(LuckyCardStatusStrip), matching: find.byType(Text)));
+      final t = tester.widget<Text>(find.descendant(of: _statusLine, matching: find.byType(Text)));
       expect(t.style!.fontSize, greaterThanOrEqualTo(kLuckyCardMinReadableDp));
-      final box = tester.getRect(find.byType(LuckyCardStatusStrip));
-      final text = tester.getRect(find.descendant(of: find.byType(LuckyCardStatusStrip), matching: find.byType(Text)));
+      final box = tester.getRect(_statusLine);
+      final text = tester.getRect(find.descendant(of: _statusLine, matching: find.byType(Text)));
       expect(text.left, greaterThanOrEqualTo(box.left - 0.5));
       expect(text.right, lessThanOrEqualTo(box.right + 0.5));
     });
@@ -240,7 +289,9 @@ void main() {
       await pumpAtSize(
         tester,
         phone,
-        LuckyCardCanvas(status: (context, layout) => LuckyCardStatusBinding(provider: rig.provider, layout: layout, notice: notice)),
+        LuckyCardCanvas(
+          topBar: (context, layout) => LuckyCardTopBarBinding(provider: rig.provider, layout: layout, art: const FileLuckyCardArt(), soundOn: true, notice: notice),
+        ),
       );
       await rig.open();
       expect(stripText(tester), 'PLACE YOUR CHIPS');
@@ -259,7 +310,9 @@ void main() {
       await pumpAtSize(
         tester,
         phone,
-        LuckyCardCanvas(status: (context, layout) => LuckyCardStatusBinding(provider: rig.provider, layout: layout, notice: notice)),
+        LuckyCardCanvas(
+          topBar: (context, layout) => LuckyCardTopBarBinding(provider: rig.provider, layout: layout, art: const FileLuckyCardArt(), soundOn: true, notice: notice),
+        ),
       );
       await rig.open();
       await rig.world.runUntil(87.0);
@@ -280,7 +333,11 @@ void main() {
 
     testWidgets('without a notice the binding is what it was', (tester) async {
       final rig = BetRig(tester);
-      await pumpAtSize(tester, phone, LuckyCardCanvas(status: (context, layout) => LuckyCardStatusBinding(provider: rig.provider, layout: layout)));
+      await pumpAtSize(
+        tester,
+        phone,
+        LuckyCardCanvas(topBar: (context, layout) => LuckyCardTopBarBinding(provider: rig.provider, layout: layout, art: const FileLuckyCardArt(), soundOn: true)),
+      );
       await rig.open();
       expect(stripText(tester), 'PLACE YOUR CHIPS');
       await rig.finish();

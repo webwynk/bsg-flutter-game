@@ -54,23 +54,46 @@ void expectSound(Size screen, {bool tapTargets = true}) {
     }
   }
 
-  // Margins: at least 20 units from every canvas edge, below the top bar.
-  final m = l.dp(20) - eps;
-  for (final name in ['grid', 'rankColumn', 'status', 'side']) {
-    final z = zones[name]!;
-    expect(z.left, greaterThanOrEqualTo(m), reason: '$name left margin: $why');
-    expect(l.canvasSize.width - z.right, greaterThanOrEqualTo(m), reason: '$name right margin: $why');
-    expect(l.canvasSize.height - z.bottom, greaterThanOrEqualTo(m), reason: '$name bottom margin: $why');
-    expect(z.top - l.topBar.bottom, greaterThanOrEqualTo(m), reason: '$name under the top bar: $why');
+  // The body (the reference design): everything under the header, inside its padding (1% of
+  // the width, 6 to 10 dp), with the bet panel at its right. Every zone sits inside it.
+  final body = l.designBody;
+  expect(body.left, greaterThanOrEqualTo(6 - eps), reason: 'padding at least 6 dp: $why');
+  expect(body.left, lessThanOrEqualTo(10 + eps), reason: 'padding at most 10 dp: $why');
+  expect(l.canvasSize.width - body.right, closeTo(body.left, eps), reason: 'the same padding on both sides: $why');
+  expect(l.canvasSize.height - body.bottom, closeTo(body.left, eps), reason: 'and under the body: $why');
+  expect(body.top - l.designHeaderBar.bottom, closeTo(LuckyCardLayout.designBodyGapY, eps), reason: '6 dp under the header: $why');
+  for (final name in ['grid', 'rankColumn', 'side']) {
+    expect(containsRect(body, zones[name]!), isTrue, reason: '$name inside the body: $why');
   }
 
-  // The 16 grid cells tile the grid exactly.
-  var area = 0.0;
+  // The bet panel: 38% of the width, between 244 and 360 dp, the full height of the body.
+  expect(l.side.width, closeTo((l.canvasSize.width * 0.38).clamp(244.0, 360.0), eps), reason: why);
+  expect(l.side.right, closeTo(body.right, eps), reason: why);
+  expect(l.side.top, closeTo(body.top, eps), reason: why);
+  expect(l.side.bottom, closeTo(body.bottom, eps), reason: why);
+
+  // The board: the largest box of shape 1.48 : 1 that fits what is left of the body, centred in
+  // it, with the design's gap between it and the panel.
+  final section = l.designSection;
+  final board = l.designBoard;
+  expect(section.right, closeTo(l.side.left - l.designBodyGapX, eps), reason: 'the gap to the panel: $why');
+  expect(containsRect(section, board), isTrue, reason: 'the board inside its section: $why');
+  expect(board.center.dx, closeTo(section.center.dx, eps), reason: 'centred across: $why');
+  expect(board.center.dy, closeTo(section.center.dy, eps), reason: 'centred up and down: $why');
+  expect(board.width >= section.width - eps || board.height >= section.height - eps, isTrue, reason: 'as large as the section allows: $why');
+  expect(containsRect(board, l.grid), isTrue, reason: why);
+  expect(containsRect(board, l.rankColumn), isTrue, reason: why);
+  expect(l.grid.top, closeTo(board.top, eps), reason: why);
+  expect(l.grid.bottom, closeTo(board.bottom, eps), reason: 'the board reaches the bottom of its box: $why');
+
+  // The 16 grid cells sit inside the grid, never overlap, and are one gap (1% of the board's
+  // width) apart, across and down; the rank column is one gap from the grid.
+  final gap = l.designBoardGap;
+  expect(gap, closeTo(board.width * 0.01, eps), reason: why);
   for (var c = 0; c < LuckyCardLayout.gridColumns; c++) {
     for (var r = 0; r < LuckyCardLayout.gridRows; r++) {
       final cell = l.gridCell(c, r);
       expect(containsRect(l.grid, cell), isTrue, reason: 'cell $c,$r outside the grid: $why');
-      area += cell.width * cell.height;
       for (var c2 = 0; c2 < LuckyCardLayout.gridColumns; c2++) {
         for (var r2 = 0; r2 < LuckyCardLayout.gridRows; r2++) {
           if (c2 * 10 + r2 > c * 10 + r) {
@@ -78,56 +101,60 @@ void expectSound(Size screen, {bool tapTargets = true}) {
           }
         }
       }
+      if (c < LuckyCardLayout.gridColumns - 1) {
+        expect(l.gridCell(c + 1, r).left - cell.right, closeTo(gap, eps), reason: 'gap across: $why');
+      }
+      if (r < LuckyCardLayout.gridRows - 1) {
+        expect(l.gridCell(c, r + 1).top - cell.bottom, closeTo(gap, eps), reason: 'gap down: $why');
+      }
     }
   }
-  expect(area, closeTo(l.grid.width * l.grid.height, 0.01), reason: 'the cells fill the grid: $why');
+  expect(l.rankColumn.left - l.grid.right, closeTo(gap, eps), reason: why);
 
-  // The rank selectors are level with their rows of cards; card pictures are
-  // squares centred in their cells.
+  // The design's proportions: four cards of 458 parts then the badge of 481 across; the bar row
+  // of 157 parts over three card rows of 464 down.
+  expect(l.rankSelector(0).width / l.cardCell(0, 0).width, closeTo(481 / 458, 1e-9), reason: why);
+  expect(l.cardCell(0, 0).height / l.suitHeader(0).height, closeTo(464 / 157, 1e-9), reason: why);
+  for (var c = 1; c < 4; c++) {
+    expect(l.cardCell(c, 0).width, closeTo(l.cardCell(0, 0).width, eps), reason: why);
+  }
+
+  // The rank badges are level with their rows of cards; every picture fills its cell (the
+  // design's own object-fit: fill).
   for (var r = 0; r < 3; r++) {
     final sel = l.rankSelector(r);
     expect(containsRect(l.rankColumn, sel), isTrue, reason: why);
+    expect(l.rankPicture(r), sel, reason: why);
     for (var c = 0; c < 4; c++) {
       final cell = l.cardCell(c, r);
-      expect(sel.top, closeTo(cell.top, eps), reason: 'selector level with its row: $why');
+      expect(sel.top, closeTo(cell.top, eps), reason: 'badge level with its row: $why');
       expect(sel.height, closeTo(cell.height, eps), reason: why);
-      final img = l.cardImage(c, r);
-      expect(containsRect(cell, img), isTrue, reason: 'card picture inside its cell: $why');
-      expect(img.width, closeTo(img.height, eps), reason: why);
-      expect(img.center.dx, closeTo(cell.center.dx, eps), reason: why);
+      expect(l.cardImage(c, r), cell, reason: 'the card picture fills its cell: $why');
     }
   }
   for (var c = 0; c < 4; c++) {
     expect(l.suitHeader(c).top, closeTo(l.grid.top, eps), reason: why);
+    expect(l.suitBar(c), l.suitHeader(c), reason: 'the bar picture fills its cell: $why');
   }
   expect(containsRect(l.rankColumn, l.rankHeaderSlot), isTrue, reason: why);
+  expect(l.cardSize, l.cardCell(0, 0).size, reason: why);
 
-  // Each suit header holds its name above its bar picture, both inside the header;
-  // each rank row holds its name above its selector picture, both inside the row.
-  for (var c = 0; c < 4; c++) {
-    final header = l.suitHeader(c);
-    final label = l.suitLabel(c);
-    final bar = l.suitBar(c);
-    expect(containsRect(header, label), isTrue, reason: 'suit name inside its header: $why');
-    expect(containsRect(header, bar), isTrue, reason: 'bar inside its header: $why');
-    expect(label.bottom, lessThanOrEqualTo(bar.top + eps), reason: 'name above the bar: $why');
-    expect(bar.width / bar.height, closeTo(LuckyCardLayout.barAspect, 1e-6), reason: 'bar keeps its shape: $why');
-    expect(bar.center.dx, closeTo(header.center.dx, eps), reason: why);
-    expect(label.height, greaterThanOrEqualTo(kLuckyCardMinReadableDp), reason: 'name tall enough for 11 dp text: $why');
+  // The text on the board is sized from the board's width, as the design does (CSS cqw).
+  expect(l.designCardFont, closeTo(board.width * 0.034, eps), reason: why);
+  expect(l.designBarFont, closeTo(board.width * 0.021, eps), reason: why);
+  expect(l.designBadgeFont, closeTo(board.width * 0.024, eps), reason: why);
+
+  // A picture is stretched to its cell, so the cell must have the picture's shape. The design's
+  // cells match the new pictures (card 549 x 556, bar 821 x 281, badge 878 x 846) to within 4%,
+  // the most that the board's gap, taken from its width, can bend them when it is limited by its
+  // height. Checked where the supported devices are.
+  if (tapTargets) {
+    expect(l.cardCell(0, 0).width / l.cardCell(0, 0).height, closeTo(549 / 556, 0.04 * 549 / 556), reason: 'card shape: $why');
+    expect(l.suitHeader(0).width / l.suitHeader(0).height, closeTo(821 / 281, 0.04 * 821 / 281), reason: 'bar shape: $why');
+    expect(l.rankSelector(0).width / l.rankSelector(0).height, closeTo(878 / 846, 0.04 * 878 / 846), reason: 'badge shape: $why');
   }
-  for (var r = 0; r < 3; r++) {
-    final row = l.rankSelector(r);
-    final label = l.rankLabel(r);
-    final picture = l.rankPicture(r);
-    expect(containsRect(row, label), isTrue, reason: 'rank name inside its row: $why');
-    expect(containsRect(row, picture), isTrue, reason: 'selector inside its row: $why');
-    expect(label.bottom, lessThanOrEqualTo(picture.top + eps), reason: 'name above the selector: $why');
-    expect(picture.width / picture.height, closeTo(LuckyCardLayout.selectorAspect, 1e-6), reason: why);
-    expect(picture.center.dx, closeTo(row.center.dx, eps), reason: why);
-  }
-  expect(l.labelFontSize, greaterThanOrEqualTo(kLuckyCardMinReadableDp), reason: why);
   for (final dpr in [1.0, 2.0, 3.0]) {
-    expect(l.cardCacheWidth(dpr), LuckyCardLayout.cacheWidth(l.cardSide, dpr), reason: why);
+    expect(l.cardCacheWidth(dpr), LuckyCardLayout.cacheWidth(l.cardSize.width, dpr), reason: why);
     expect(l.barCacheWidth(dpr), LuckyCardLayout.cacheWidth(l.suitBar(0).width, dpr), reason: why);
     expect(l.selectorCacheWidth(dpr), LuckyCardLayout.cacheWidth(l.rankPicture(0).width, dpr), reason: why);
   }
@@ -165,70 +192,116 @@ void expectSound(Size screen, {bool tapTargets = true}) {
     expect(l.winPopupCacheWidth(dpr), LuckyCardLayout.cacheWidth(popup.width, dpr), reason: why);
   }
 
-  // The top bar: three buttons with tap areas as tall as the bar, the balance and
-  // the countdown between them; nothing overlaps and everything is inside the bar.
-  final bar = l.topBar;
-  final hits = {'exit': l.exitHit, 'sound': l.soundHit, 'info': l.infoHit};
-  final bits = {...hits, 'balance': l.balanceBox, 'countdown': l.countdownBox};
-  for (final e in bits.entries) {
-    expect(containsRect(bar, e.value), isTrue, reason: '${e.key} inside the top bar: $why');
+  // The header bar (the reference design, App Step H1): flush with the top and both sides
+  // of the canvas, never taller than the zone that holds it. What goes inside the bar --
+  // the balance, the countdown, the round buttons -- is laid out by the widget as a row, not
+  // by this class, so only the bar itself and the sizes it hands out are geometry the layout
+  // class owns; lucky_card_top_bar_history_test.dart proves the row that is built from them.
+  final headerBar = l.designHeaderBar;
+  expect(headerBar.left, closeTo(0, eps), reason: 'flush with the left edge: $why');
+  expect(headerBar.top, closeTo(0, eps), reason: 'flush with the top edge: $why');
+  expect(headerBar.width, closeTo(l.canvasSize.width, eps), reason: 'the full width: $why');
+  expect(headerBar.height, lessThanOrEqualTo(l.topBar.height + eps), reason: 'fits the zone that holds it: $why');
+  expect(l.designBallHit, greaterThanOrEqualTo(kLuckyCardMinTapDp - eps), reason: 'a round button answers at least 48 dp: $why');
+  expect(l.designBallSize, lessThanOrEqualTo(l.designBallHit + eps), reason: 'drawn no bigger than its own tap area: $why');
+  expect(l.designCoinSize, lessThan(l.designPillHeight), reason: 'the coin fits inside its pill: $why');
+  // Only guaranteed within the supported device matrix: an off-matrix, severely letterboxed
+  // ratio can shrink the header's own zone below the countdown's 40 dp floor, exactly as the
+  // strict 48 dp tap-target checks below are also only guaranteed there.
+  if (tapTargets) {
+    expect(l.designCountdownSize, lessThanOrEqualTo(headerBar.height + eps), reason: 'the countdown fits the bar: $why');
   }
-  final bitNames = bits.keys.toList();
-  for (var i = 0; i < bitNames.length; i++) {
-    for (var j = i + 1; j < bitNames.length; j++) {
-      expect(overlaps(bits[bitNames[i]]!, bits[bitNames[j]]!), isFalse, reason: '${bitNames[i]} overlaps ${bitNames[j]}: $why');
-    }
+  for (final size in [l.designHeaderHeight, l.designBallSize, l.designPillHeight, l.designCoinSize, l.designCountdownSize, l.designHeaderGap, l.designBalanceFont, l.designCountdownFont, l.designStatusFont]) {
+    expect(size, greaterThan(0), reason: why);
   }
-  for (final pair in [(l.exitButton, l.exitHit), (l.soundButton, l.soundHit), (l.infoButton, l.infoHit)]) {
-    expect(containsRect(pair.$2, pair.$1), isTrue, reason: 'a button is drawn inside its tap area: $why');
-    expect(pair.$1.center.dx, closeTo(pair.$2.center.dx, eps), reason: why);
-    expect(pair.$1.center.dy, closeTo(pair.$2.center.dy, eps), reason: why);
-  }
-  expect(l.countdownBox.center.dx, closeTo(l.canvasSize.width / 2, eps), reason: 'the countdown is in the middle: $why');
-  expect(l.exitHit.left, greaterThanOrEqualTo(l.dp(20) - eps), reason: why);
-  expect(l.canvasSize.width - l.infoHit.right, greaterThanOrEqualTo(l.dp(20) - eps), reason: why);
 
-  // The side column: every piece inside it, none overlapping another.
-  final sideBits = <String, Rect>{
-    'chipRail': l.chipRail,
-    'play': l.playCell,
-    'win': l.winCell,
-    'limits': l.limitsPanel,
-    'results': l.resultsPanel,
-    for (var i = 0; i < LuckyCardLayout.actionButtonCount; i++) 'button$i': l.actionButton(i),
-  };
-  for (final e in sideBits.entries) {
-    expect(containsRect(l.side, e.value), isTrue, reason: '${e.key} inside the side column: $why');
-    expect(e.value.width > 0 && e.value.height > 0, isTrue, reason: '${e.key} is empty: $why');
-  }
-  final sideNames = sideBits.keys.toList();
-  for (var i = 0; i < sideNames.length; i++) {
-    for (var j = i + 1; j < sideNames.length; j++) {
-      expect(overlaps(sideBits[sideNames[i]]!, sideBits[sideNames[j]]!), isFalse, reason: '${sideNames[i]} overlaps ${sideNames[j]}: $why');
+  // The bet panel (the design's aside): a border and padding round four rows, from the top TOTAL BET |
+  // WIN, the results, the chips and (at the bottom) the three buttons, a gap apart in that order.
+  final inner = l.panelInner;
+  final panelEdge = LuckyCardLayout.designPanelBorder + l.designPanelPad;
+  expect(inner.left, closeTo(l.side.left + panelEdge, eps), reason: why);
+  expect(inner.right, closeTo(l.side.right - panelEdge, eps), reason: why);
+  expect(inner.top, closeTo(l.side.top + panelEdge, eps), reason: why);
+  expect(inner.bottom, closeTo(l.side.bottom - panelEdge, eps), reason: why);
+  expect(l.designPanelPad, inInclusiveRange(7, 10), reason: why);
+  expect(l.designPanelGap, inInclusiveRange(6, 10), reason: why);
+
+  // Side by side, level, equal, 7 dp apart, filling the width.
+  expect(l.totalBetCell.top, closeTo(inner.top, eps), reason: why);
+  expect(l.winCell.top, closeTo(l.totalBetCell.top, eps), reason: why);
+  expect(l.winCell.width, closeTo(l.totalBetCell.width, eps), reason: why);
+  expect(l.winCell.left - l.totalBetCell.right, closeTo(LuckyCardLayout.designCellGap, eps), reason: why);
+  expect(l.totalBetCell.left, closeTo(inner.left, eps), reason: why);
+  expect(l.winCell.right, closeTo(inner.right, eps), reason: why);
+  expect(l.totalBetCell.height, closeTo(l.designTotalHeight, eps), reason: why);
+  expect(l.designTotalLabelFont, greaterThanOrEqualTo(kLuckyCardMinReadableDp), reason: why);
+
+  // The results box: the ten latest rounds in two rows of five, 4 dp apart, inside a 7 dp padding.
+  final results = l.resultsPanel;
+  expect(results.left, closeTo(inner.left, eps), reason: why);
+  expect(results.width, closeTo(inner.width, eps), reason: why);
+  expect(results.top - l.totalBetCell.bottom, closeTo(l.designPanelGap, eps), reason: why);
+  expect(results.height, closeTo(14 + 2 * l.designTileHeight + 4, eps), reason: why);
+  expect(LuckyCardLayout.designResultTiles, 10);
+  for (var i = 0; i < LuckyCardLayout.designResultTiles; i++) {
+    final tile = l.resultTile(i);
+    expect(containsRect(results, tile), isTrue, reason: 'result card $i inside the box: $why');
+    expect(tile.height, closeTo(l.designTileHeight, eps), reason: why);
+    expect(tile.width, closeTo(l.resultTile(0).width, eps), reason: why);
+    for (var j = i + 1; j < LuckyCardLayout.designResultTiles; j++) {
+      expect(overlaps(tile, l.resultTile(j)), isFalse, reason: 'cards $i and $j overlap: $why');
     }
+    if (i % 5 > 0) expect(tile.left - l.resultTile(i - 1).right, closeTo(4, eps), reason: 'cards 4 dp apart across: $why');
+    if (i >= 5) expect(tile.top - l.resultTile(i - 5).bottom, closeTo(4, eps), reason: 'rows 4 dp apart: $why');
+    if (i >= 5) expect(tile.left, closeTo(l.resultTile(i - 5).left, eps), reason: 'columns line up: $why');
   }
+  expect(l.resultTile(0).left, closeTo(results.left + 7, eps), reason: why);
+  expect(l.resultTile(0).top, closeTo(results.top + 7, eps), reason: why);
+  expect(l.resultTile(4).right, closeTo(results.right - 7, eps), reason: why);
+  expect(l.resultTile(9).bottom, closeTo(results.bottom - 7, eps), reason: why);
+  expect(l.designTileHeight, inInclusiveRange(36, 44), reason: why);
+
+  // The chips: one row under the results; the design's size between 34 and 52 dp.
+  expect(l.chipRail.top - results.bottom, closeTo(l.designPanelGap, eps), reason: why);
+  expect(l.chipRail.left, closeTo(inner.left, eps), reason: why);
+  expect(l.chipRail.width, closeTo(inner.width, eps), reason: why);
+  expect(l.designChipSize, inInclusiveRange(34, 52), reason: why);
+  expect(l.designChipSize, lessThanOrEqualTo(math.max(34, l.canvasSize.width * 0.056) + eps), reason: 'no wider than 5.6% of the width, or the 34 dp floor: $why');
   for (var i = 0; i < LuckyCardLayout.chipCount; i++) {
-    expect(containsRect(l.chipRail, l.chip(i)), isTrue, reason: 'chip $i inside the rail: $why');
-    expect(l.chip(i).width, closeTo(l.chip(i).height, eps), reason: 'a chip is a square: $why');
-    if (i > 0) expect(l.chip(i).top, greaterThan(l.chip(i - 1).bottom), reason: 'chips do not touch: $why');
+    final chip = l.chip(i);
+    expect(containsRect(l.chipRail, chip), isTrue, reason: 'chip $i inside the row: $why');
+    expect(chip.height, closeTo(kLuckyCardMinTapDp, eps), reason: why);
+    expect(chip.top, closeTo(l.chip(0).top, eps), reason: 'one row: $why');
+    expect(chip.width, closeTo(l.chip(0).width, eps), reason: why);
+    expect(chip.width, greaterThanOrEqualTo(l.designChipSize - eps), reason: 'a chip is drawn inside its own tap area: $why');
+    if (i > 0) expect(chip.left, closeTo(l.chip(i - 1).right, eps), reason: 'tap areas touch but never overlap: $why');
   }
-  expect(containsRect(l.resultsPanel, l.resultCurrent), isTrue, reason: why);
-  for (var i = 0; i < 9; i++) {
-    expect(containsRect(l.resultsPanel, l.resultTile(i)), isTrue, reason: 'result tile $i inside the panel: $why');
-    expect(overlaps(l.resultCurrent, l.resultTile(i)), isFalse, reason: 'tile $i under the latest: $why');
-    for (var j = i + 1; j < 9; j++) {
-      expect(overlaps(l.resultTile(i), l.resultTile(j)), isFalse, reason: 'tiles $i and $j overlap: $why');
+
+  // The buttons: along the bottom of the panel, equal, 7 dp apart, filling the width.
+  for (var i = 0; i < LuckyCardLayout.actionButtonCount; i++) {
+    final b = l.actionButton(i);
+    expect(b.bottom, closeTo(inner.bottom, eps), reason: why);
+    expect(b.height, greaterThanOrEqualTo(kLuckyCardMinTapDp - eps), reason: 'button $i: $why');
+    expect(b.width, closeTo(l.actionButton(0).width, eps), reason: why);
+    if (i > 0) expect(b.left - l.actionButton(i - 1).right, closeTo(LuckyCardLayout.designCellGap, eps), reason: why);
+  }
+  expect(l.actionButton(0).left, closeTo(inner.left, eps), reason: why);
+  expect(l.actionButton(2).right, closeTo(inner.right, eps), reason: why);
+
+  // On the devices that are supported the four rows fit one above the other inside the panel.
+  if (tapTargets) {
+    for (final r in [l.totalBetCell, l.winCell, results, l.chipRail, for (var i = 0; i < 3; i++) l.actionButton(i)]) {
+      expect(containsRect(inner, r), isTrue, reason: 'inside the panel: $why');
     }
+    expect(l.chipRail.bottom, lessThanOrEqualTo(l.actionButton(0).top + eps), reason: 'chips above the buttons: $why');
   }
-  expect(l.playCell.top, closeTo(l.winCell.top, eps), reason: 'PLAY and WIN side by side: $why');
-  expect(l.playCell.right, lessThan(l.winCell.left), reason: why);
-  expect(l.chipRail.right, lessThan(l.playCell.left), reason: 'the rail is left of the right part: $why');
-  expect(l.actionButton(0).top, greaterThan(l.resultsPanel.bottom), reason: 'buttons under the results: $why');
 
   if (tapTargets) {
     for (var c = 0; c < 4; c++) {
       expect(l.suitHeader(c).width, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'suit header width: $why');
-      expect(l.suitHeader(c).height, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'suit header height: $why');
+      // The one written exception to the 48 dp rule (the user's decision, 2026-10-23): the design's suit
+      // bars are 25 to 35 dp tall on a phone and are kept as drawn. They are at least 48 dp across.
+      expect(l.suitHeader(c).height, greaterThan(0), reason: 'suit header height: $why');
       for (var r = 0; r < 3; r++) {
         expect(l.cardCell(c, r).width, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'card width: $why');
         expect(l.cardCell(c, r).height, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'card height: $why');
@@ -238,18 +311,22 @@ void expectSound(Size screen, {bool tapTargets = true}) {
       expect(l.rankSelector(r).width, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: why);
       expect(l.rankSelector(r).height, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: why);
     }
-    expect(l.cardSide, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'card picture: $why');
-    for (final h in [l.exitHit, l.soundHit, l.infoHit]) {
-      expect(h.width, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'top-bar tap area width: $why');
-      expect(h.height, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'top-bar tap area height: $why');
-    }
+    expect(l.cardSize.width, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'card picture width: $why');
+    expect(l.cardSize.height, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'card picture height: $why');
+    // Already asserted above as designBallHit >= 48 dp; each header button is square, so the
+    // one figure covers both width and height.
+    // The chips are 48 dp tall and a fifth of the row wide. The row is 222.7 dp on the smallest
+    // phone (and 42.8 dp at the very least, with the largest padding), so a chip is about 43 dp wide there:
+    // the written exception of 2026-10-23. From a panel of
+    // 270 dp up (every phone but the smallest few) a chip is a full 48 dp.
     for (var i = 0; i < LuckyCardLayout.chipCount; i++) {
-      expect(l.chip(i).width, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'chip $i: $why');
-      expect(l.chip(i).height, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'chip $i: $why');
+      expect(l.chip(i).width, greaterThanOrEqualTo(42.8), reason: 'chip $i: $why');
+      if (l.side.width >= 270) expect(l.chip(i).width, greaterThanOrEqualTo(kLuckyCardMinTapDp - eps), reason: 'chip $i: $why');
+      expect(l.chip(i).height, greaterThanOrEqualTo(kLuckyCardMinTapDp - eps), reason: 'chip $i: $why');
     }
     for (var i = 0; i < LuckyCardLayout.actionButtonCount; i++) {
-      expect(l.actionButton(i).width, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'button $i: $why');
-      expect(l.actionButton(i).height, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'button $i: $why');
+      expect(l.actionButton(i).width, greaterThanOrEqualTo(kLuckyCardMinTapDp - eps), reason: 'button $i: $why');
+      expect(l.actionButton(i).height, greaterThanOrEqualTo(kLuckyCardMinTapDp - eps), reason: 'button $i: $why');
     }
   }
 }
@@ -288,34 +365,39 @@ void main() {
     });
   });
 
-  group('the canvas flexes: extra width goes to the cells, then the side column, then the margins', () {
-    test('at 1.6 : 1 the side column is at its minimum and the cells give a little', () {
-      final l = LuckyCardLayout.of(const Size(1600, 1000));
-      expect(l.side.width, closeTo(560, eps));
-      expect(l.gridCell(0, 0).width, closeTo(175, eps));
-      expect(l.grid.left, closeTo(20, eps));
+  group('the board follows the reference design', () {
+    test('the bet panel is 38% of the width, held between 244 and 360 dp', () {
+      // 640 x 360: 243.2 is held up to 244; 844 x 390: 320.72; 932 x 430: 354.16; 1366 x 768: 519 is held down to 360.
+      expect(LuckyCardLayout.of(const Size(640, 360)).side.width, closeTo(244, eps));
+      expect(LuckyCardLayout.of(const Size(844, 390)).side.width, closeTo(320.72, eps));
+      expect(LuckyCardLayout.of(const Size(932, 430)).side.width, closeTo(354.16, eps));
+      expect(LuckyCardLayout.of(const Size(1366, 768)).side.width, closeTo(360, eps));
     });
 
-    test('at about 2.04 : 1 the cells are full width and the side column has grown', () {
-      final l = LuckyCardLayout.of(const Size(2040, 1000));
-      expect(l.gridCell(0, 0).width, closeTo(230, eps));
-      expect(l.side.width, greaterThan(560));
-      expect(l.side.width, lessThanOrEqualTo(880 + eps));
+    test('on an 844 x 390 phone the board is the largest 1.48 : 1 box the body leaves, limited by its height', () {
+      // Worked by hand from the design's rules: header 50.7 dp (13% of 390), body from 56.7 to 381.56
+      // (padding 8.44), panel 320.72, gap 10, so the section is 496.4 x 324.86; 1.48 x 324.86 = 480.79
+      // is narrower than 496.4, so the height limits the board, and 0.675 x 496.4 = 335.1 is taller than
+      // 324.86, so the full height is used.
+      final board = LuckyCardLayout.of(const Size(844, 390)).designBoard;
+      expect(board.width, closeTo(480.79, 0.05));
+      expect(board.height, closeTo(324.86, 0.05));
     });
 
-    test('at 2.4 : 1 everything is at its maximum and the content is centred, margins taking the rest', () {
-      final l = LuckyCardLayout.of(const Size(2400, 1000));
-      expect(l.gridCell(0, 0).width, closeTo(230, eps));
-      expect(l.side.width, closeTo(880, eps));
-      expect(l.grid.left, closeTo(l.canvasSize.width - l.side.right, eps), reason: 'centred');
-      expect(l.grid.left, greaterThan(100));
-    });
-
-    test('the card picture is as large as the row allows from about 1.65 : 1, and at least 95% of that at 1.6 : 1', () {
-      final tall = LuckyCardLayout.of(const Size(2040, 1000)).cardSide;
-      final narrow = LuckyCardLayout.of(const Size(1600, 1000)).cardSide;
-      expect(tall, closeTo(184, eps));
-      expect(narrow / tall, greaterThan(0.95));
+    test('on a 640 x 360 phone the board is limited by its width, and its cells are the sizes worked out by hand', () {
+      // Header 48 dp (the 48 dp floor), body 54 to 353.6 (padding 6.4), panel 244 (held up from 243.2), gap
+      // 7.68: the section is 375.52 x 299.6. 1.48 x 299.6 = 443 is wider, so the width limits the board, and
+      // 0.675 x 375.52 = 253.48 is its height. The gap is 3.7552; one width part is 0.155859 dp and one
+      // height part 0.156362 dp, so a card is 458 x 464 parts = 71.38 x 72.55 dp, a bar 71.38 x 24.55 dp
+      // (157 height parts) and a badge 481 width parts = 74.97 dp wide.
+      final l = LuckyCardLayout.of(const Size(640, 360));
+      expect(l.designBoard.width, closeTo(375.52, 0.05));
+      expect(l.designBoard.height, closeTo(253.48, 0.05));
+      expect(l.cardSize.width, closeTo(71.38, 0.05));
+      expect(l.cardSize.height, closeTo(72.55, 0.05));
+      expect(l.suitHeader(0).width, closeTo(71.38, 0.05));
+      expect(l.suitHeader(0).height, closeTo(24.55, 0.05));
+      expect(l.rankSelector(0).width, closeTo(74.97, 0.05));
     });
 
     test('the structure is the same at every ratio: the zones keep their order left to right', () {
@@ -323,7 +405,22 @@ void main() {
         final l = LuckyCardLayout.of(Size(r * 1000, 1000));
         expect(l.grid.right, lessThan(l.rankColumn.left), reason: 'ratio $r');
         expect(l.rankColumn.right, lessThan(l.side.left), reason: 'ratio $r');
-        expect(l.status.top, greaterThan(l.grid.bottom), reason: 'ratio $r');
+        // The board sits inside the body, not necessarily at its bottom (it is centred up and down).
+        expect(l.grid.bottom, lessThanOrEqualTo(l.side.bottom + eps), reason: 'ratio $r');
+        expect(l.grid.top, greaterThanOrEqualTo(l.side.top - eps), reason: 'ratio $r');
+      }
+    });
+
+    test('a bigger screen gives a bigger board, bigger cards and bigger text, never smaller', () {
+      LuckyCardLayout? previous;
+      for (final height in [360.0, 390.0, 430.0, 600.0, 768.0, 1024.0]) {
+        final l = LuckyCardLayout.of(Size(height * 1.9, height));
+        if (previous != null) {
+          expect(l.designBoard.width, greaterThanOrEqualTo(previous.designBoard.width), reason: 'board at $height');
+          expect(l.cardSize.width, greaterThanOrEqualTo(previous.cardSize.width), reason: 'card at $height');
+          expect(l.designCardFont, greaterThanOrEqualTo(previous.designCardFont), reason: 'text at $height');
+        }
+        previous = l;
       }
     });
   });
@@ -341,13 +438,14 @@ void main() {
       expect(checked, greaterThan(300));
     });
 
-    test('the sizes scale with the height, nothing is a fixed number of dp', () {
+    test('the canvas and its units scale with the height (the design clamps its own body and panel)', () {
       final a = LuckyCardLayout.of(const Size(1000, 500));
       final b = LuckyCardLayout.of(const Size(2000, 1000));
       expect(b.scale, closeTo(a.scale * 2, 1e-9));
-      expect(b.cardSide, closeTo(a.cardSide * 2, 1e-6));
-      expect(b.grid.width, closeTo(a.grid.width * 2, 1e-6));
-      expect(b.side.height, closeTo(a.side.height * 2, 1e-6));
+      // The design clamps its padding (6 to 10 dp) and its panel (244 to 360 dp), so the body does not
+      // double: what still scales with the height is the canvas, and the sizes the design takes from it.
+      expect(b.canvasSize.height, closeTo(a.canvasSize.height * 2, 1e-6));
+      expect(b.dp(100), closeTo(a.dp(100) * 2, 1e-6));
     });
 
     test('a zero, tiny or huge screen does not throw and gives finite numbers', () {
@@ -377,34 +475,63 @@ void main() {
       expect(LuckyCardLayout.cacheWidth(70, 1), 70);
       expect(LuckyCardLayout.cacheWidth(0, 2), 1);
       final small = LuckyCardLayout.of(const Size(640, 360));
-      expect(LuckyCardLayout.cacheWidth(small.cardSide, 3), lessThan(300), reason: 'against a 565 px file');
+      expect(LuckyCardLayout.cacheWidth(small.cardSize.width, 3), lessThan(300), reason: 'against a 549 px file');
     });
 
-    test('the wheel is about 250 dp across on the smallest phone and 444 dp on a 4:3 tablet', () {
-      expect(LuckyCardLayout.of(const Size(640, 360)).wheelDiameter, closeTo(250, 1));
-      expect(LuckyCardLayout.of(const Size(1024, 768)).wheelDiameter, closeTo(444, 1));
+    test('the wheel is about 239 dp across on the smallest phone and 404 dp on a 4:3 tablet', () {
+      // Both grew with the grid reclaiming the removed status strip's 90 units (confirmed by
+      // hand: at 640x360, grid.height/1.06 = 280.53, under grid.width = 316, so still
+      // height-limited; at 1024x768 the grid is now tall enough that grid.width = 448 is the
+      // smaller of the two, so the wheel is width-limited there for the first time).
+      expect(LuckyCardLayout.of(const Size(640, 360)).wheelDiameter, closeTo(239.13, 1));
+      expect(LuckyCardLayout.of(const Size(1024, 768)).wheelDiameter, closeTo(403.7, 1));
     });
 
-    test('the side column of the smallest phone: 48 dp chips and buttons, the five chips fill the column, the results have room', () {
+    test('the bet panel of the smallest phone, worked out by hand from the design', () {
+      // 640 x 360: the panel is 244 dp, from 389.6 to 633.6 across and 54 to 353.6 down. Its padding is 2.4%
+      // of 360 = 8.64 and its border 2, so the rows span 222.72 dp, from x 400.24 and y 64.64 to 342.96;
+      // the gap between rows is 2.2% of 360 = 7.92.
       final l = LuckyCardLayout.of(const Size(640, 360));
-      expect(l.chip(0).width, closeTo(48.24, 0.01));
-      expect(l.chip(0).top, closeTo(l.side.top, eps));
-      expect(l.chip(4).bottom, closeTo(l.side.bottom, eps));
-      expect(l.actionButton(0).width, closeTo(48.24, 0.01));
-      expect(l.actionButton(2).right, closeTo(l.side.right, eps));
-      expect(l.actionButton(0).bottom, closeTo(l.side.bottom, eps));
-      expect(l.exitHit.height, closeTo(48.24, 0.01));
-      expect(l.resultCurrent.height, greaterThanOrEqualTo(36));
-      expect(l.resultTile(0).height, greaterThanOrEqualTo(l.resultTileIcon + l.dp(2) + kLuckyCardMinReadableDp * 1.1 + l.dp(8)),
-          reason: 'an icon, a gap and a line of 11 dp text, with the rim');
-      expect(l.resultTile(0).width, greaterThanOrEqualTo(46));
+      expect(l.side.left, closeTo(389.6, 0.01));
+      expect(l.panelInner.width, closeTo(222.72, 0.01));
+      expect(l.panelInner.top, closeTo(64.64, 0.01));
+      expect(l.panelInner.bottom, closeTo(342.96, 0.01));
+      // The two totals: (222.72 - 7) / 2 = 107.86 wide, 10 + 11 x 1.2 + 21.6 x 1.1 = 46.96 tall.
+      expect(l.totalBetCell.width, closeTo(107.86, 0.01));
+      expect(l.totalBetCell.height, closeTo(46.96, 0.01));
+      // The results: 119.52 down, 14 + 2 x 36 + 4 = 90 tall; five cards across, (222.72 - 14 - 16) / 5 = 38.54
+      // wide and 36 (10% of 360) tall.
+      expect(l.resultsPanel.top, closeTo(119.52, 0.01));
+      expect(l.resultsPanel.height, closeTo(90, 0.01));
+      expect(l.resultTile(0).width, closeTo(38.54, 0.01));
+      expect(l.resultTile(0).height, closeTo(36, 0.01));
+      // The chips: the row is 209.52 + 7.92 = 217.44 down, a chip is drawn 35.84 across (5.6% of the 640 width)
+      // and its tap area is (222.72 - 6) / 5 = 43.34 wide by 48 tall, the written exception.
+      expect(l.chipRail.top, closeTo(217.44, 0.01));
+      expect(l.designChipSize, closeTo(35.84, 0.01));
+      expect(l.chip(0).width, closeTo(43.34, 0.01));
+      expect(l.chip(0).height, closeTo(48, eps));
+      // The buttons: (222.72 - 14) / 3 = 69.57 wide, 48 tall, on the bottom edge, with 25.52 dp to spare over the chips.
+      expect(l.actionButton(0).width, closeTo(69.57, 0.01));
+      expect(l.actionButton(0).height, closeTo(48, eps));
+      expect(l.actionButton(0).top - l.chipRail.bottom, closeTo(25.52, 0.01));
+      expect(l.designBallHit, closeTo(kLuckyCardMinTapDp, eps), reason: 'the 48 dp floor, not the design\'s own smaller value');
+      expect(l.resultTile(0).height, greaterThanOrEqualTo(LuckyCardLayout.designTileLetterFont + LuckyCardLayout.designTileBonusFont),
+          reason: 'the letter beside the suit, and a line of 11 dp text under them');
+      expect(l.resultTile(0).width, greaterThanOrEqualTo(38));
     });
 
-    test('the pieces of the smallest phone are the sizes the spec worked out', () {
+    test('the pieces of the smallest phone are the sizes worked out from the design', () {
       final l = LuckyCardLayout.of(const Size(640, 360));
-      expect(l.cardSide, closeTo(66.2, 0.1));
-      expect(l.gridCell(0, 1).height, closeTo(66.2, 0.1));
-      expect(math.min(l.suitHeader(0).width, l.suitHeader(0).height), greaterThanOrEqualTo(48));
+      // Worked by hand in 'on a 640 x 360 phone the board is limited by its width' above.
+      expect(l.cardSize.width, closeTo(71.38, 0.05));
+      expect(l.cardSize.height, closeTo(72.55, 0.05));
+      expect(l.gridCell(0, 1).height, closeTo(72.55, 0.05));
+      // The cards, the badges and the bars are at least 48 dp across; only the suit bars are under
+      // 48 dp tall (24.55 dp), which is the written exception the user chose on 2026-10-23.
+      expect(l.cardSize.width, greaterThanOrEqualTo(48));
+      expect(l.suitHeader(0).width, greaterThanOrEqualTo(48));
+      expect(l.suitHeader(0).height, lessThan(48));
     });
   });
 }

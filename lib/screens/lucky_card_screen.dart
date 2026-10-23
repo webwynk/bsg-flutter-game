@@ -5,7 +5,8 @@
 //
 // What it does, and nothing more:
 //   * builds the game's own objects (the API service, the round sync, the provider) over
-//     the shared AuthProvider's balance, through [AuthLuckyCardWallet];
+//     the shared AuthProvider's balance, through [AuthLuckyCardWallet], and the player's
+//     history provider (nothing of it is registered in main.dart);
 //   * forces landscape, preloads the pictures behind a short loading screen, then starts the
 //     provider;
 //   * lays out the top bar, the board (or, once betting closes, the wheel), the rank
@@ -13,7 +14,11 @@
 //     with the coins and the win popup over everything;
 //   * asks "EXIT GAME / Do you want to exit?" for the EXIT button and the back gesture, as
 //     Triple Chance does; chips that were never sent are given back when the screen closes;
-//   * opens the Info dialog from the INFO button;
+//   * opens the Info dialog from the INFO button, and the History dialog from the HISTORY
+//     button: it lists every round the player bet on since logging in. It is read from the
+//     database each time the dialog opens, from the login time the shared AuthProvider keeps
+//     (`sessionStartAt`, read only), so leaving with EXIT and coming back keeps the list and
+//     logging out and in starts an empty one;
 //   * handles the app going to the background. `main.dart` logs the player out after 20
 //     seconds away and settles only Triple Chance's bet, so this screen settles its own: on
 //     every return it sends a bet whose cutoff passed while the app was away, and on a
@@ -33,6 +38,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
 import '../models/lucky_card_board.dart';
+import '../providers/lucky_card_history_provider.dart';
 import '../providers/lucky_card_provider.dart';
 import '../services/lucky_card_api_service.dart';
 import '../services/lucky_card_auth_wallet.dart';
@@ -48,6 +54,7 @@ import '../widgets/lucky_card/lucky_card_board_view.dart';
 import '../widgets/lucky_card/lucky_card_canvas.dart';
 import '../widgets/lucky_card/lucky_card_controls_binding.dart';
 import '../widgets/lucky_card/lucky_card_exit_dialog.dart';
+import '../widgets/lucky_card/lucky_card_history_dialog.dart';
 import '../widgets/lucky_card/lucky_card_info_dialog.dart';
 import '../widgets/lucky_card/lucky_card_layout.dart';
 import '../widgets/lucky_card/lucky_card_messages.dart';
@@ -66,10 +73,31 @@ class LuckyCardScreenSetup {
     this.setOrientation = true,
     this.sound,
     this.endSession,
+    this.history,
+    this.ownsHistory = false,
+    this.sessionStart,
+    this.auth,
   });
 
   final LuckyCardProvider provider;
   final LuckyCardArt art;
+
+  /// The player's history. When null the screen makes its own (over the real database read)
+  /// and disposes it; a test hands in one over a scripted read.
+  final LuckyCardHistoryProvider? history;
+
+  /// True when the screen must dispose a [history] it was given. A history the screen made
+  /// itself is always disposed with it.
+  final bool ownsHistory;
+
+  /// Where "since logging in" starts, when a test wants to say it directly. By default it is
+  /// the shared AuthProvider's `sessionStartAt`, read when HISTORY is tapped.
+  final DateTime? Function()? sessionStart;
+
+  /// The shared AuthProvider. The real app leaves this null and the screen takes it from the
+  /// widget tree; a test hands in a stand-in (the real one cannot be built without Supabase), to
+  /// prove the screen reads `sessionStartAt` from it.
+  final AuthProvider? auth;
 
   /// The sound gate; the real app lets the screen make one over Triple Chance's sounds.
   final LuckyCardSound? sound;
@@ -101,6 +129,9 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
   late final LuckyCardProvider _provider;
   late final LuckyCardArt _art;
   late final bool _ownsProvider;
+  late final LuckyCardHistoryProvider _history;
+  late final bool _ownsHistory;
+  late final DateTime? Function() _sessionStart;
   late final LuckyCardSound _sound;
   LuckyCardSoundDirector? _director;
   late final Future<void> Function()? _endSession;
@@ -126,9 +157,14 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
     _provider = setup.provider;
     _art = setup.art;
     _ownsProvider = setup.ownsProvider;
+    _history = setup.history ?? LuckyCardHistoryProvider();
+    _ownsHistory = setup.history == null || setup.ownsHistory;
     _sound = setup.sound ?? LuckyCardSound();
     _endSession = setup.endSession;
+    _auth = setup.auth;
     if (widget.setup == null) _auth = context.read<AuthProvider>();
+    // Read when HISTORY is tapped, not now: with no login (a test) the list is empty.
+    _sessionStart = setup.sessionStart ?? () => _auth?.sessionStartAt;
     _provider.onProblem = _onProblem;
     _sound.enterGame();
     if (setup.setOrientation) {
@@ -189,6 +225,7 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
     _sound.leaveGame();
     _provider.leave();
     if (_ownsProvider) _provider.dispose();
+    if (_ownsHistory) _history.dispose();
     super.dispose();
   }
 
@@ -238,6 +275,18 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
         onTab: (_) => _sound.buttonClick(),
       );
 
+  /// The HISTORY button: opens the list of this login's rounds with the notification sound, as
+  /// Triple Chance's history does; tapping a line makes the same sound as its detail popup does there.
+  /// The dialog reads the database itself and closes by itself when betting closes.
+  void _showHistory() => LuckyCardHistoryDialog.show(
+        context,
+        provider: _provider,
+        history: _history,
+        since: _sessionStart(),
+        onOpen: _sound.notification,
+        onRow: _sound.notification,
+      );
+
   /// The SOUND button: mutes or unmutes Lucky Card's own sounds (haptics are not affected).
   void _toggleSound() {
     _sound.toggle();
@@ -246,8 +295,16 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
 
   // ── What goes wrong (App Step 8c, spec §17AG) ───────────────────────────
 
-  /// A refused tap: a short line in the status strip, or nothing.
+  /// A refused tap: a card at its largest stake gets Triple Chance's kind of snackbar at the bottom
+  /// (the user's decision of 2026-10-23); anything else a short line in the header, or nothing.
   void _refusal(Set<LuckyCardBoardIssue> issues) {
+    if (luckyCardRefusalIsLimit(issues)) {
+      final messenger = ScaffoldMessenger.of(context);
+      messenger
+        ..clearSnackBars()
+        ..showSnackBar(luckyCardLimitSnackBar());
+      return;
+    }
     final line = luckyCardRefusalLine(issues);
     if (line != null) _notice.show(line);
   }
@@ -340,6 +397,9 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
   Widget _game(BuildContext context) {
     final provider = _provider;
     final art = _art;
+    // The phone's own insets (a notch, a cut-out, the system bars), read here above the SafeArea
+    // that is about to consume them.
+    final insets = MediaQuery.paddingOf(context);
     final canvas = SafeArea(
       child: LuckyCardBoardBinding(
         provider: provider,
@@ -364,10 +424,17 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
           topBar: (context, layout) => LuckyCardTopBarBinding(
             provider: provider,
             layout: layout,
+            art: art,
+            // The bar is painted edge to edge, under a notch or camera cut-out too.
+            bleed: insets,
             soundOn: !_sound.muted,
             onExit: _requestExit,
             onToggleSound: _toggleSound,
             onInfo: _showInfo,
+            onHistory: _showHistory,
+            // The reference design has no strip under the board: the header carries the
+            // round's status and, for a moment, a refused tap's warning.
+            notice: _notice,
           ),
           grid: (context, layout) => LuckyCardRegionSwap(
             provider: provider,
@@ -388,7 +455,6 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
             // the two dings are what is heard.
             reveal: (context) => LuckyCardRevealColumn(provider: provider, layout: layout, art: art),
           ),
-          status: (context, layout) => LuckyCardStatusBinding(provider: provider, layout: layout, notice: _notice),
           side: (context, layout) => LuckyCardSideColumn(
             provider: provider,
             layout: layout,

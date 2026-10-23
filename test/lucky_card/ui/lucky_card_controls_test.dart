@@ -105,7 +105,7 @@ Color faceTop(WidgetTester tester, String k) {
       .widgetList<DecoratedBox>(find.descendant(of: key(k), matching: find.byType(DecoratedBox)))
       .map((d) => d.decoration)
       .whereType<BoxDecoration>()
-      .firstWhere((d) => d.gradient is LinearGradient && (d.gradient as LinearGradient).colors.length == 2);
+      .firstWhere((d) => d.gradient is LinearGradient && (d.gradient as LinearGradient).colors.length >= 2);
   return (box.gradient as LinearGradient).colors.first;
 }
 
@@ -117,14 +117,15 @@ void main() {
       expect([for (final c in LuckyCardControl.values) luckyCardControlLabel(c)], ['DOUBLE', 'REBET', 'CLEAR', 'REMOVE']);
     });
 
-    test('DOUBLE is gold, REBET purple, CLEAR and REMOVE red', () {
-      expect(LuckyCardButtonLook.of(LuckyCardControl.doubleBet), same(LuckyCardButtonLook.gold));
-      expect(LuckyCardButtonLook.of(LuckyCardControl.rebet), same(LuckyCardButtonLook.purple));
-      expect(LuckyCardButtonLook.of(LuckyCardControl.clear), same(LuckyCardButtonLook.red));
-      expect(LuckyCardButtonLook.of(LuckyCardControl.remove), same(LuckyCardButtonLook.red));
-      expect(LuckyCardButtonLook.gold.top, const Color(0xFFFFD700));
-      expect(LuckyCardButtonLook.purple.bottom, const Color(0xFF3A0060));
-      expect(LuckyCardButtonLook.red.top, const Color(0xFF8B0000));
+    test('DOUBLE is lime/gold, REBET purple, CLEAR pink, REMOVE cyan', () {
+      expect(LuckyCardButtonLook.of(LuckyCardControl.doubleBet), same(LuckyCardButtonLook.doubleLook));
+      expect(LuckyCardButtonLook.of(LuckyCardControl.rebet), same(LuckyCardButtonLook.rebetLook));
+      expect(LuckyCardButtonLook.of(LuckyCardControl.clear), same(LuckyCardButtonLook.clearLook));
+      expect(LuckyCardButtonLook.of(LuckyCardControl.remove), same(LuckyCardButtonLook.removeLook));
+      expect(LuckyCardButtonLook.doubleLook.top, const Color(0xFFB6FF3B));
+      expect(LuckyCardButtonLook.rebetLook.bottom, const Color(0xFF45168F));
+      expect(LuckyCardButtonLook.clearLook.top, const Color(0xFFFF5FD2));
+      expect(LuckyCardButtonLook.removeLook.top, const Color(0xFF3EE8FF));
     });
 
     test('every button has its own spoken words', () {
@@ -153,8 +154,11 @@ void main() {
           expect(r.top, closeTo(want.top, 0.01), reason: '${chip.amount} top');
           expect(r.width, closeTo(want.width, 0.01));
           expect(r.height, closeTo(want.height, 0.01));
-          expect(r.width, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'chip ${chip.amount}');
-          expect(r.height, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'chip ${chip.amount}');
+          // A chip is 48 dp tall and a fifth of the row wide: 43 dp on the smallest phone (the written
+          // exception of 2026-10-23), 48 dp or more from a 270 dp panel.
+          expect(r.width, greaterThanOrEqualTo(42.8), reason: 'chip ${chip.amount}');
+          if (l.side.width >= 270) expect(r.width, greaterThanOrEqualTo(kLuckyCardMinTapDp - 0.001), reason: 'chip ${chip.amount}');
+          expect(r.height, greaterThanOrEqualTo(kLuckyCardMinTapDp - 0.001), reason: 'chip ${chip.amount}');
         }
         for (var i = 0; i < 3; i++) {
           final r = tester.getRect(key('button-${defaultButtons[i].control.name}'));
@@ -188,7 +192,8 @@ void main() {
         ];
         for (var i = 0; i < rects.length; i++) {
           for (var j = i + 1; j < rects.length; j++) {
-            expect(rects[i].overlaps(rects[j]), isFalse, reason: '$i and $j on ${d.name}');
+            final common = rects[i].intersect(rects[j]);
+            expect(common.width > 0.01 && common.height > 0.01, isFalse, reason: '$i and $j on ${d.name}');
           }
         }
       }
@@ -212,11 +217,12 @@ void main() {
   });
 
   group('the chip rail', () {
-    testWidgets('five chips, 5 at the top to 500 at the bottom, each with its own picture', (tester) async {
+    testWidgets('five chips in one row, 5 at the left to 500 at the right, each with its own picture', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene());
-      final tops = [for (final c in LuckyCardChip.values) tester.getRect(chipKey(c)).top];
-      expect(tops, [...tops]..sort());
-      expect(tops.toSet().length, 5);
+      final lefts = [for (final c in LuckyCardChip.values) tester.getRect(chipKey(c)).left];
+      expect(lefts, [...lefts]..sort());
+      expect(lefts.toSet().length, 5);
+      expect({for (final c in LuckyCardChip.values) tester.getRect(chipKey(c)).top.toStringAsFixed(3)}.length, 1, reason: 'one row');
       for (final chip in LuckyCardChip.values) {
         final image = tester.widget<Image>(find.descendant(of: chipKey(chip), matching: find.byType(Image)));
         final file = ((image.image as ResizeImage).imageProvider as FileImage).file.path.replaceAll('\\', '/');
@@ -232,8 +238,9 @@ void main() {
         final face = key('chip-face-${chip.amount}');
         final size = tester.getSize(face);
         final selected = chip == LuckyCardChip.fifty;
-        final share = size.width / l.chip(chip.index).width;
-        expect(share, closeTo(selected ? LuckyCardChipRail.selectedShare : LuckyCardChipRail.restingShare, 0.001), reason: '${chip.amount}');
+        // The chip in hand is drawn at the design's chip size; the others a little smaller.
+        final share = size.width / l.designChipSize;
+        expect(share, closeTo(selected ? 1.0 : LuckyCardChipRail.restingShare / LuckyCardChipRail.selectedShare, 0.001), reason: '${chip.amount}');
         final decoration = tester.widget<AnimatedContainer>(face).decoration as BoxDecoration;
         expect((decoration.boxShadow ?? const []).isNotEmpty, selected, reason: 'glow on ${chip.amount}');
       }
@@ -244,7 +251,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       final l = LuckyCardLayout.of(const Size(844, 390));
       for (final chip in LuckyCardChip.values) {
-        expect(tester.getSize(key('chip-face-${chip.amount}')).width / l.chip(chip.index).width, closeTo(LuckyCardChipRail.restingShare, 0.001));
+        expect(tester.getSize(key('chip-face-${chip.amount}')).width / l.designChipSize, closeTo(LuckyCardChipRail.restingShare / LuckyCardChipRail.selectedShare, 0.001));
       }
     });
 
@@ -305,7 +312,7 @@ void main() {
       for (final dpr in [1.0, 2.0, 3.0]) {
         const size = Size(844, 390);
         await pumpAtSize(tester, size, scene(), devicePixelRatio: dpr);
-        final need = (LuckyCardLayout.of(size).chip(0).width * dpr).ceil();
+        final need = (LuckyCardLayout.of(size).designChipSize * 1.06 * dpr).ceil();
         for (final chip in LuckyCardChip.values) {
           final image = tester.widget<Image>(find.descendant(of: chipKey(chip), matching: find.byType(Image)));
           final width = (image.image as ResizeImage).width!;
@@ -337,15 +344,15 @@ void main() {
       expect(label('button-rebet').data, 'REBET');
       expect(label('button-clear').data, 'CLEAR');
       expect(label('button-remove').data, 'REMOVE');
-      expect(faceTop(tester, 'button-rebet'), const Color(0xFF6A0DAD));
-      expect(faceTop(tester, 'button-clear'), const Color(0xFF8B0000));
-      expect(faceTop(tester, 'button-remove'), const Color(0xFF8B0000));
+      expect(faceTop(tester, 'button-rebet'), const Color(0xFFC79BFF));
+      expect(faceTop(tester, 'button-clear'), const Color(0xFFFF5FD2));
+      expect(faceTop(tester, 'button-remove'), const Color(0xFF3EE8FF));
       expect(label('button-rebet').style!.color, const Color(0xFFFFFFFF));
 
       await pumpAtSize(tester, const Size(844, 390), scene());
       expect(label('button-doubleBet').data, 'DOUBLE');
-      expect(faceTop(tester, 'button-doubleBet'), const Color(0xFFFFD700));
-      expect(label('button-doubleBet').style!.color, const Color(0xFF350000), reason: 'dark on gold');
+      expect(faceTop(tester, 'button-doubleBet'), const Color(0xFFB6FF3B));
+      expect(label('button-doubleBet').style!.color, const Color(0xFFFFFFFF));
     });
 
     testWidgets('three looks of dimming: open, nothing to act on, and betting closed', (tester) async {

@@ -24,6 +24,7 @@ import '../../providers/lucky_card_provider.dart';
 import 'lucky_card_art.dart';
 import 'lucky_card_layout.dart';
 import 'lucky_card_messages.dart';
+import 'lucky_card_palette.dart';
 import 'lucky_card_panel.dart';
 import 'lucky_card_readouts.dart';
 import 'lucky_card_status_strip.dart';
@@ -40,10 +41,35 @@ LuckyCardStatusMode luckyCardStatusModeOf(LuckyCardProvider provider) {
       : LuckyCardStatusMode.noMoreSteady;
 }
 
-/// The Info button works only while betting is open and nothing is playing.
+/// The Info and History buttons work only while betting is open and nothing is playing.
 bool luckyCardInfoEnabledOf(LuckyCardProvider provider) => !provider.isLocked && !provider.isSequenceRunning;
 
-/// What the top bar shows.
+/// The words in the middle of the header, and whether they are a warning (drawn in red).
+///
+/// This is exactly the rule the strip under the board used before the header took the job
+/// over (the reference design has no such strip): a refusal line is shown while betting is
+/// open, a line about the balance is important enough to be shown even once it has closed,
+/// and otherwise the round's own status is shown.
+({String text, Color color, bool isFlashing}) luckyCardHeaderStatus({
+  required LuckyCardStatusMode mode,
+  String? notice,
+  bool noticeImportant = false,
+}) {
+  final closed = mode != LuckyCardStatusMode.placeChips;
+  final showNotice = notice != null && (!closed || noticeImportant);
+  return (
+    text: showNotice ? notice : luckyCardStatusText(mode),
+    // A refusal or balance notice is amber, "no more play" is red, otherwise the bar's own
+    // cream -- the same three-way distinction the strip under the board used to draw, colour
+    // for colour the same meaning.
+    color: showNotice ? kDesignNoticeText : (closed ? kDesignAlertText : kDesignStatusText),
+    // The last five seconds fade the line in and out, whatever it says, as the strip did.
+    isFlashing: mode == LuckyCardStatusMode.noMoreFlashing,
+  );
+}
+
+/// What the top bar shows, apart from its status words (kept out of this snapshot
+/// deliberately: see [_LuckyCardHeaderStatusSlot]).
 @immutable
 class LuckyCardTopBarSnapshot {
   const LuckyCardTopBarSnapshot({required this.balance, required this.countdown, required this.infoEnabled});
@@ -143,48 +169,73 @@ class _LuckyCardSelectorState<T> extends State<LuckyCardSelector<T>> {
   Widget build(BuildContext context) => widget.builder(context, _value);
 }
 
-/// The top bar, linked to the provider. The three callbacks and [soundOn] come from
+/// The top bar, linked to the provider. The four callbacks and [soundOn] come from
 /// the screen.
 class LuckyCardTopBarBinding extends StatelessWidget {
   const LuckyCardTopBarBinding({
     super.key,
     required this.provider,
     required this.layout,
+    required this.art,
     required this.soundOn,
+    this.bleed = EdgeInsets.zero,
     this.onExit,
     this.onToggleSound,
     this.onInfo,
+    this.onHistory,
+    this.notice,
   });
 
   final LuckyCardProvider provider;
   final LuckyCardLayout layout;
+  final LuckyCardArt art;
   final bool soundOn;
+
+  /// The phone's safe-area insets, which the bar's paint reaches into (see [LuckyCardTopBar.bleed]).
+  final EdgeInsets bleed;
   final VoidCallback? onExit;
   final VoidCallback? onToggleSound;
   final VoidCallback? onInfo;
+  final VoidCallback? onHistory;
+
+  /// The one-line refusal or warning (App Step 8c). The design has no strip under the board,
+  /// so the header shows these in place of the round's status for as long as they last.
+  final LuckyCardNotice? notice;
 
   @override
   Widget build(BuildContext context) {
+    // Built once here, not inside the selector's own builder below: its Element then
+    // persists across every balance/countdown-driven rebuild of this whole header, so a chip
+    // placed or the countdown ticking does not touch it, exactly as the separate strip under
+    // the board never used to either (see _LuckyCardHeaderStatusSlot).
+    final statusWidget = _LuckyCardHeaderStatusSlot(provider: provider, layout: layout, notice: notice);
     return LuckyCardSelector<LuckyCardTopBarSnapshot>(
       provider: provider,
       select: LuckyCardTopBarSnapshot.of,
       builder: (context, s) => LuckyCardTopBar(
         layout: layout,
+        art: art,
+        bleed: bleed,
         balance: s.balance,
         countdown: s.countdown,
         soundOn: soundOn,
         infoEnabled: s.infoEnabled,
+        statusWidget: statusWidget,
         onExit: onExit,
         onToggleSound: onToggleSound,
         onInfo: onInfo,
+        onHistory: onHistory,
       ),
     );
   }
 }
 
-/// The status strip, linked to the provider and to the one-line [notice] (App Step 8c).
-class LuckyCardStatusBinding extends StatelessWidget {
-  const LuckyCardStatusBinding({super.key, required this.provider, required this.layout, this.notice});
+/// The header's status words, read and redrawn independently of everything else in the bar:
+/// the round's own status mode, or a refusal/balance notice while one is showing. Its own
+/// [LuckyCardSelector] means a chip placed (which only moves the balance) leaves this exact
+/// widget instance untouched, the same discipline the old separate strip under the board had.
+class _LuckyCardHeaderStatusSlot extends StatelessWidget {
+  const _LuckyCardHeaderStatusSlot({required this.provider, required this.layout, this.notice});
 
   final LuckyCardProvider provider;
   final LuckyCardLayout layout;
@@ -196,19 +247,25 @@ class LuckyCardStatusBinding extends StatelessWidget {
       provider: provider,
       select: luckyCardStatusModeOf,
       builder: (context, mode) {
+        Widget line(({String text, Color color, bool isFlashing}) status) => LuckyCardStatusLine(
+              key: const ValueKey('top-status'),
+              text: status.text,
+              size: layout.designStatusFont,
+              color: status.color,
+              flashing: status.isFlashing,
+            );
         final notice = this.notice;
-        if (notice == null) return LuckyCardStatusStrip(layout: layout, mode: mode);
+        if (notice == null) return line(luckyCardHeaderStatus(mode: mode));
         return ListenableBuilder(
           listenable: notice,
-          builder: (context, _) =>
-              LuckyCardStatusStrip(layout: layout, mode: mode, notice: notice.text, noticeImportant: notice.important),
+          builder: (context, _) => line(luckyCardHeaderStatus(mode: mode, notice: notice.text, noticeImportant: notice.important)),
         );
       },
     );
   }
 }
 
-/// PLAY, WIN, the limits and the results, placed in the side zone.
+/// TOTAL BET, WIN and the results, placed in the side zone.
 class LuckyCardSideReadouts extends StatelessWidget {
   const LuckyCardSideReadouts({super.key, required this.provider, required this.layout, required this.art});
 
@@ -224,15 +281,19 @@ class LuckyCardSideReadouts extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         Positioned.fromRect(
-          rect: inSide(layout.limitsPanel),
-          child: LuckyCardLimitsPanel(key: const ValueKey('limits'), layout: layout),
-        ),
-        Positioned.fromRect(
-          rect: inSide(layout.playCell),
+          rect: inSide(layout.totalBetCell),
           child: LuckyCardSelector<int>(
             provider: provider,
             select: (p) => p.total,
-            builder: (context, play) => LuckyCardAmountCell(key: const ValueKey('play'), layout: layout, label: 'PLAY', value: luckyCardGrouped(play)),
+            builder: (context, total) => LuckyCardTotalCell(
+              key: const ValueKey('total-bet'),
+              layout: layout,
+              label: 'Play',
+              value: luckyCardGrouped(total),
+              fill: kDesignTotalBetFill,
+              labelColor: kDesignTotalBetLabel,
+              under: kDesignTotalBetUnder,
+            ),
           ),
         ),
         Positioned.fromRect(
@@ -240,13 +301,14 @@ class LuckyCardSideReadouts extends StatelessWidget {
           child: LuckyCardSelector<int>(
             provider: provider,
             select: (p) => p.lastOutcome?.payout ?? 0,
-            builder: (context, win) => LuckyCardAmountCell(
+            builder: (context, win) => LuckyCardTotalCell(
               key: const ValueKey('win'),
               layout: layout,
-              label: 'WIN',
+              label: 'Win',
               value: luckyCardWinText(win),
-              valueColor: win > 0 ? kLuckyCardWin : kLuckyCardCream,
-              highlighted: win > 0,
+              fill: kDesignWinFill,
+              labelColor: kDesignWinLabel,
+              under: kDesignWinUnder,
             ),
           ),
         ),

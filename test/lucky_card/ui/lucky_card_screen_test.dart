@@ -139,7 +139,7 @@ void main() {
       await rig.world.run(const Duration(seconds: 2));
       await settle(tester);
       expect(find.byType(CircularProgressIndicator), findsNothing);
-      for (final k in ['top-balance', 'top-countdown', 'top-exit', 'top-sound', 'top-info', 'suit-hearts', 'rank-J', 'play', 'win', 'limits', 'result-latest', 'chip-5', 'chip-500', 'button-doubleBet', 'button-clear', 'button-remove']) {
+      for (final k in ['top-balance', 'top-countdown', 'top-exit', 'top-sound', 'top-info', 'suit-hearts', 'rank-J', 'total-bet', 'win', 'result-latest', 'chip-5', 'chip-500', 'button-doubleBet', 'button-clear', 'button-remove']) {
         expect(key(k), findsOneWidget, reason: k);
       }
       expect(find.text('PLACE YOUR CHIPS'), findsOneWidget);
@@ -233,24 +233,24 @@ void main() {
   });
 
   group('playing through the real widgets', () {
-    testWidgets('chip, suit bar, DOUBLE and CLEAR move the board, PLAY and the balance together', (tester) async {
+    testWidgets('chip, suit bar, DOUBLE and CLEAR move the board, TOTAL BET and the balance together', (tester) async {
       final rig = BetRig(tester);
       await openGame(tester, rig);
       await tester.tap(key('chip-10'));
       await tester.tap(key('suit-hearts'));
       await tester.pump();
-      expect(textIn(tester, 'play'), '30');
+      expect(textIn(tester, 'total-bet'), '30');
       expect(textIn(tester, 'top-balance'), '970');
       expect(rig.provider.total, 30);
 
       await tester.tap(key('button-doubleBet'));
       await tester.pump();
-      expect(textIn(tester, 'play'), '60');
+      expect(textIn(tester, 'total-bet'), '60');
       expect(textIn(tester, 'top-balance'), '940');
 
       await tester.tap(key('button-clear'));
       await tester.pump();
-      expect(textIn(tester, 'play'), '0');
+      expect(textIn(tester, 'total-bet'), '0');
       expect(textIn(tester, 'top-balance'), '1,000');
       await rig.finish();
     });

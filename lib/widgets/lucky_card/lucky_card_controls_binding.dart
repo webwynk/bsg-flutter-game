@@ -25,6 +25,7 @@ import '../../models/lucky_card_board.dart';
 import '../../providers/lucky_card_provider.dart';
 import 'lucky_card_action_buttons.dart';
 import 'lucky_card_art.dart';
+import 'lucky_card_bet_panel.dart';
 import 'lucky_card_chip_rail.dart';
 import 'lucky_card_layout.dart';
 import 'lucky_card_readouts.dart';
@@ -186,8 +187,8 @@ class LuckyCardActionButtonsBinding extends StatelessWidget {
   }
 }
 
-/// The whole side column: PLAY | WIN, the limits, the results, the chip rail and the
-/// three buttons.
+/// The whole bet panel: its frame, TOTAL BET | WIN, the results, the chip row and the three
+/// buttons.
 class LuckyCardSideColumn extends StatelessWidget {
   const LuckyCardSideColumn({
     super.key,
@@ -212,6 +213,7 @@ class LuckyCardSideColumn extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
+        const Positioned.fill(child: LuckyCardBetPanelFrame()),
         Positioned.fill(child: LuckyCardSideReadouts(provider: provider, layout: layout, art: art)),
         Positioned.fromRect(
           rect: layout.within(side, layout.chipRail),

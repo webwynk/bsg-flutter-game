@@ -39,14 +39,13 @@ void main() {
       expect(luckyCardSuitLabel(150000), '150000');
     });
 
-    test('a rank disc says nothing at 0, the number below 100,000, and whole thousands with a K from 100,000', () {
+    test('a rank badge says nothing at 0 and the total in full otherwise, never with a K (the user, 2026-10-23)', () {
       expect(luckyCardRankLabel(0), '');
       expect(luckyCardRankLabel(30), '30');
       expect(luckyCardRankLabel(99999), '99999');
-      expect(luckyCardRankLabel(100000), '100K');
-      expect(luckyCardRankLabel(100999), '100K', reason: 'rounded down');
-      expect(luckyCardRankLabel(123500), '123K');
-      expect(luckyCardRankLabel(200000), '200K');
+      expect(luckyCardRankLabel(100000), '100000');
+      expect(luckyCardRankLabel(123500), '123500');
+      expect(luckyCardRankLabel(200000), '200000');
     });
   });
 

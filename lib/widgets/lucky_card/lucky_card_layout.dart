@@ -2,24 +2,23 @@
 // screen alone. Pure arithmetic: no widget, no image, no state, so it is tested
 // directly at every device shape.
 //
-// The rules are those decided on 2026-10-06 (spec §17M, Option B, a flexible
+// The screen follows the reference design (`reference-design/royal-cards-standalone/`, the phone
+// files), decided 2026-10-23 and built slice by slice: the header, the card board, then the bet
+// panel at the right. Its rules, kept from the earlier design (spec §17M, Option B, a flexible
 // canvas, and §12.2, very responsive on every phone and tablet):
 //
-//   * The design is 1000 units high. A "unit" is a thousandth of the canvas
-//     height; every size below is written in units and turned into dp by the
-//     scale, so nothing is a fixed number of pixels.
-//   * The canvas takes the screen's shape, but only between 1.6 : 1 and 2.4 : 1.
-//     A squarer screen (a 4:3 tablet) gets a 1.6 : 1 canvas, centred; a wider one
-//     a 2.4 : 1 canvas. The background is painted over the whole screen, so what
-//     is left over reads as background, not as bars.
-//   * Inside the canvas the zones keep one structure. Extra width goes first to
-//     the cells (up to 230 units wide), then to the side column (up to 880), and
-//     the rest to the outer margins, which keeps the content centred.
+//   * The canvas takes the screen's shape, but only between 1.6 : 1 and 2.4 : 1. A squarer screen
+//     (a 4:3 tablet) gets a 1.6 : 1 canvas, centred; a wider one a 2.4 : 1 canvas. The background
+//     is painted over the whole screen, so what is left over reads as background, not as bars.
+//   * Every size is the design's own CSS `clamp(min, share, max)`: a share of the canvas's height
+//     or width held between a smallest and a largest value in dp (see [_design]), so nothing is
+//     a fixed number of pixels. A few smallest values are raised for the readable-text and
+//     tap-target rules (spec §12.1), each written next to the number it changes.
+//   * The wheel, the reveal card and the win popup (not in the design) are still laid out in
+//     "units", a thousandth of the canvas height, turned into dp by [scale].
 //
-// The zones follow the diagram of spec §7.3. This file fixes the three zones the
-// board needs (the grid, the rank column, the status strip) and the two it
-// leaves room for (the top bar and the side column); what goes inside the last
-// two is decided in App Step 7.
+// The zones are the header bar, the grid (the four suit bars over the 12 cards), the rank column
+// and the bet panel; what goes inside each is decided by its widgets from the rects below.
 //
 // Belongs to Lucky Card only.
 
@@ -37,14 +36,7 @@ class LuckyCardLayout {
     required this.screen,
     required this.canvasRect,
     required this.scale,
-    required double canvasWidthUnits,
-    required double boardLeftUnits,
-    required double cellWidthUnits,
-    required double sideWidthUnits,
-  })  : _canvasWidthUnits = canvasWidthUnits,
-        _boardLeft = boardLeftUnits,
-        _cellW = cellWidthUnits,
-        _sideW = sideWidthUnits;
+  });
 
   // ── The rules, in units ─────────────────────────────────────────────────
 
@@ -52,31 +44,11 @@ class LuckyCardLayout {
   static const double minRatio = 1.6;
   static const double maxRatio = 2.4;
 
-  static const double _margin = 20;
-  static const double _gap = 20;
-  // 134 units is 48 dp on the shortest phone (360 dp tall): the top bar holds
-  // buttons whose tap area must be 48 dp, and a tap area cannot reach outside its
-  // parent (App Step 7a, spec §17W).
-  static const double _topBarH = 134;
-  static const double _statusH = 70;
-  static const double _rankW = 260;
-  static const double _cellMinW = 170;
-  static const double _cellMaxW = 230;
-  // 560 = the chip rail (134) + its gap (8) + three 134-unit buttons side by side
-  // with two gaps of 8 (418): every button is 48 dp wide on the smallest phone.
-  static const double _sideMinW = 560;
-  static const double _sideMaxW = 880;
-
   /// Rows in the grid: the suit header, then Jacks, Queens and Kings.
   static const int gridRows = 4;
 
   /// Columns in the grid, one per suit.
   static const int gridColumns = 4;
-
-  static const double _mainTop = _topBarH + _margin;
-  static const double _mainBottom = designHeight - _margin;
-  static const double _gridH = _mainBottom - _mainTop - _statusH - _gap;
-  static const double _rowPitch = _gridH / gridRows;
 
   /// Works out the layout for a screen of this size.
   factory LuckyCardLayout.of(Size screen) {
@@ -97,23 +69,11 @@ class LuckyCardLayout {
       canvasH = h;
     }
     final scale = canvasH / designHeight;
-    final wu = canvasW / scale;
-
-    final availW = wu - 2 * _margin - 2 * _gap;
-    final cellW = ((availW - _rankW - _sideMinW) / 4).clamp(_cellMinW, _cellMaxW).toDouble();
-    final boardW = gridColumns * cellW;
-    final sideW = (availW - boardW - _rankW).clamp(_sideMinW, _sideMaxW).toDouble();
-    final contentW = boardW + _rankW + sideW + 2 * _gap;
-    final left = (wu - contentW) / 2;
 
     return LuckyCardLayout._(
       screen: Size(w, h),
       canvasRect: Rect.fromLTWH((w - canvasW) / 2, (h - canvasH) / 2, canvasW, canvasH),
       scale: scale,
-      canvasWidthUnits: wu,
-      boardLeftUnits: left,
-      cellWidthUnits: cellW,
-      sideWidthUnits: sideW,
     );
   }
 
@@ -128,10 +88,6 @@ class LuckyCardLayout {
   /// dp per unit.
   final double scale;
 
-  final double _canvasWidthUnits;
-  final double _boardLeft;
-  final double _cellW;
-  final double _sideW;
 
   /// The canvas as its own coordinate space: every rect below is in dp from the
   /// canvas's top-left corner.
@@ -152,218 +108,330 @@ class LuckyCardLayout {
   static int cacheWidth(double dp, double devicePixelRatio) =>
       math.max((dp * devicePixelRatio).ceil(), 1);
 
-  Rect _r(double l, double t, double w, double h) => Rect.fromLTWH(l * scale, t * scale, w * scale, h * scale);
+  /// The zone the header sits in: exactly the header bar ([designHeaderBar]), flush with the
+  /// top and both sides of the canvas.
+  Rect get topBar => designHeaderBar;
 
-  double get _rankLeft => _boardLeft + gridColumns * _cellW + _gap;
-  double get _sideLeft => _rankLeft + _rankW + _gap;
+  // ── The body, from the reference design ─────────────────────────────────
+  //
+  // Under the header the design has one row: the betting board at the left and the bet
+  // panel at the right. Every proportion here was read out of the phone files of
+  // `reference-design/royal-cards-standalone/` (the same in all seven):
+  //
+  //   * the body is padded by 1% of the width (6 to 10 dp) on the left, right and bottom,
+  //     and starts 6 dp under the header;
+  //   * the panel is 38% of the width (244 to 360 dp) and the gap between the board and it
+  //     is 1.2% of the width (6 to 10 dp);
+  //   * the board is the largest box of shape 1.48 : 1 that fits what is left, centred;
+  //   * inside it, a grid of 5 columns (four cards of 458 parts, then the rank badge of 481)
+  //     and 4 rows (the suit bars of 157 parts, then three rows of cards of 464 parts), with
+  //     a gap of 1% of the board's width between every two.
+  //
+  // The cards, bars and badges are drawn filling their cells (the design's own
+  // `object-fit: fill`): the cells have the same shape as the pictures (458 : 464 against the
+  // cards' 549 : 556, 458 : 157 against the bars' 821 : 281, 481 : 464 against the badges'
+  // 878 : 846), so nothing is squeezed.
 
-  /// The top bar: the whole width, 134 units high (exit, balance, the countdown,
-  /// sound, info).
-  Rect get topBar => _r(0, 0, _canvasWidthUnits, _topBarH);
+  /// The padding round the body, and the gap between the board and the panel.
+  double get designBodyPad => (canvasSize.width * 0.01).clamp(6.0, 10.0).toDouble();
+  double get designBodyGapX => (canvasSize.width * 0.012).clamp(6.0, 10.0).toDouble();
 
-  /// The grid: the suit headers and the 12 cards.
-  Rect get grid => _r(_boardLeft, _mainTop, gridColumns * _cellW, _gridH);
+  /// The gap between the header and the body.
+  static const double designBodyGapY = 6;
 
-  /// The column of the three rank selectors, level with the grid.
-  Rect get rankColumn => _r(_rankLeft, _mainTop, _rankW, _gridH);
+  /// The body: everything under the header, inside its padding.
+  Rect get designBody => Rect.fromLTRB(
+        designBodyPad,
+        designHeaderBar.bottom + designBodyGapY,
+        canvasSize.width - designBodyPad,
+        canvasSize.height - designBodyPad,
+      );
 
-  /// The status strip under the grid and the rank column ("PLACE YOUR CHIPS").
-  Rect get status => _r(_boardLeft, _mainTop + _gridH + _gap, gridColumns * _cellW + _gap + _rankW, _statusH);
+  /// The bet panel's width.
+  double get designAsideWidth => (canvasSize.width * 0.38).clamp(244.0, 360.0).toDouble();
 
-  /// The side column, the full height of the main area (play and win, limits,
-  /// results, chips, controls, countdown).
-  Rect get side => _r(_sideLeft, _mainTop, _sideW, _mainBottom - _mainTop);
+  /// The side column (the bet panel): the full height of the body, at its right.
+  Rect get side => Rect.fromLTRB(designBody.right - designAsideWidth, designBody.top, designBody.right, designBody.bottom);
 
-  /// One grid cell: [column] 0 to 3 (hearts, spades, diamonds, clubs), [row] 0 to
-  /// 3 (the suit header, then jack, queen, king).
-  Rect gridCell(int column, int row) {
-    assert(column >= 0 && column < gridColumns && row >= 0 && row < gridRows);
-    return _r(_boardLeft + column * _cellW, _mainTop + row * _rowPitch, _cellW, _rowPitch);
+  /// What is left of the body for the board, before the board's own shape is fitted.
+  Rect get designSection => Rect.fromLTRB(designBody.left, designBody.top, side.left - designBodyGapX, designBody.bottom);
+
+  /// The board: the largest box of shape 1.48 : 1 that fits the section, centred in it.
+  Rect get designBoard {
+    final s = designSection;
+    final w = math.max(math.min(s.width, s.height * 1.48), 0.0);
+    final h = math.max(math.min(s.height, s.width * 0.675), 0.0);
+    return Rect.fromCenter(center: s.center, width: w, height: h);
   }
 
-  /// The tap area of a suit's header: its name and its bar.
+  /// The gap between two cells of the board.
+  double get designBoardGap => designBoard.width * 0.01;
+
+  /// The columns' and rows' shares of the board, in the design's own "fr" parts.
+  static const List<double> _columnParts = [458, 458, 458, 458, 481];
+  static const List<double> _rowParts = [157, 464, 464, 464];
+
+  /// One cell of the board: [column] 0 to 4 (the four suits, then the rank badges), [row] 0 to 3
+  /// (the suit bars, then the jack, queen and king rows).
+  Rect _cell(int column, int row) {
+    final board = designBoard;
+    final gap = designBoardGap;
+    final unitW = (board.width - 4 * gap) / 2313;
+    final unitH = (board.height - 3 * gap) / 1549;
+    var left = board.left + column * gap;
+    for (var c = 0; c < column; c++) {
+      left += _columnParts[c] * unitW;
+    }
+    var top = board.top + row * gap;
+    for (var r = 0; r < row; r++) {
+      top += _rowParts[r] * unitH;
+    }
+    return Rect.fromLTWH(left, top, _columnParts[column] * unitW, _rowParts[row] * unitH);
+  }
+
+  /// The grid: the four suit bars over the 12 cards.
+  Rect get grid => Rect.fromLTRB(_cell(0, 0).left, _cell(0, 0).top, _cell(3, 3).right, _cell(3, 3).bottom);
+
+  /// The column of the three rank badges, level with the grid.
+  Rect get rankColumn => Rect.fromLTRB(_cell(4, 0).left, _cell(4, 0).top, _cell(4, 3).right, _cell(4, 3).bottom);
+
+  /// One grid cell: [column] 0 to 3 (hearts, spades, diamonds, clubs), [row] 0 to
+  /// 3 (the suit bar, then jack, queen, king).
+  Rect gridCell(int column, int row) {
+    assert(column >= 0 && column < gridColumns && row >= 0 && row < gridRows);
+    return _cell(column, row);
+  }
+
+  /// The tap area of a suit's bar: its whole cell, which the bar picture fills.
   Rect suitHeader(int column) => gridCell(column, 0);
 
   /// The tap area of a card: [column] is its suit, [rankRow] 0 to 2 (jack, queen,
-  /// king).
+  /// king). The card picture fills it.
   Rect cardCell(int column, int rankRow) => gridCell(column, rankRow + 1);
 
-  /// The side of the square a card picture is drawn in, centred in its cell.
-  double get cardSide => dp(math.min(_cellW, _rowPitch));
+  /// The tap area of a rank badge, level with its row of cards. The badge picture fills it.
+  Rect rankSelector(int rankRow) => _cell(4, rankRow + 1);
 
-  /// The square a card picture is drawn in.
-  Rect cardImage(int column, int rankRow) =>
-      Rect.fromCenter(center: cardCell(column, rankRow).center, width: cardSide, height: cardSide);
+  /// The empty cell at the top of the rank column, level with the suit bars.
+  Rect get rankHeaderSlot => _cell(4, 0);
 
-  /// The tap area of a rank selector, level with its row of cards.
-  Rect rankSelector(int rankRow) => _r(_rankLeft, _mainTop + (rankRow + 1) * _rowPitch, _rankW, _rowPitch);
+  /// Where each picture is drawn. The design draws every picture filling its cell, so these
+  /// are the cells themselves (the old layout fitted a smaller picture inside a bigger cell).
+  Rect cardImage(int column, int rankRow) => cardCell(column, rankRow);
+  Rect suitBar(int column) => suitHeader(column);
+  Rect rankPicture(int rankRow) => rankSelector(rankRow);
 
-  /// The empty slot at the top of the rank column, level with the suit headers.
-  Rect get rankHeaderSlot => _r(_rankLeft, _mainTop, _rankW, _rowPitch);
+  /// The size of a card's cell, and so of its picture. Not square: 458 parts wide by 464 high
+  /// (a card is 549 x 556).
+  Size get cardSize => _cell(0, 1).size;
 
-  // ── The names and pictures of the suit headers and rank selectors ───────
+  // ── The text on the board ───────────────────────────────────────────────
+  //
+  // The design sizes its board text as a share of the board's own width (CSS `cqw`):
+  // the card plate's words 3.4%, a suit bar's name 2.1%, a rank badge's name 2.4%.
 
-  /// Width over height of the suit-bar picture (the supplied file, 1232 x 508).
-  static const double barAspect = 1232 / 508;
+  double get designCardFont => designBoard.width * 0.034;
+  double get designBarFont => designBoard.width * 0.021;
+  double get designBadgeFont => designBoard.width * 0.024;
 
-  /// Width over height of the rank-selector picture (952 x 497).
-  static const double selectorAspect = 952 / 497;
-
-  /// A picture is drawn this share of the width of the cell it sits in.
+  /// A picture is drawn this share of the width of the cell it sits in (the reveal card).
   static const double _pictureShare = 0.96;
 
-  /// The size of the suit and rank names above the bars and selectors.
-  static const double _labelUnits = 34;
-  static const double _labelGapUnits = 6;
+  /// How wide to decode each picture: exactly the width its cell draws it.
+  int cardCacheWidth(double devicePixelRatio) => cacheWidth(_cell(0, 1).width, devicePixelRatio);
+  int barCacheWidth(double devicePixelRatio) => cacheWidth(_cell(0, 0).width, devicePixelRatio);
+  int selectorCacheWidth(double devicePixelRatio) => cacheWidth(_cell(4, 1).width, devicePixelRatio);
 
-  double get labelFontSize => fontSize(_labelUnits);
+  // ── The header, from the reference design ───────────────────────────────
+  //
+  // Every size in the design is a share of the screen's SHORT side with its own smallest
+  // and largest value in dp; only the outer padding comes from the width. The shares were
+  // read from all seven phone files of `reference-design/royal-cards-standalone/`, where
+  // they are identical, so the header is followed by measurement rather than by eye.
+  //
+  // The header is a row, as the design's is, so the balance pill can be exactly as wide as
+  // the figure inside it needs; the widget lays that row out. What is fixed here is the bar
+  // it goes in and the size of each piece. The bar always fits inside the [topBar] zone, so
+  // the board below it is not moved by the header.
 
-  /// One name above one picture, the pair centred up and down in [cell].
-  ({Rect label, Rect picture}) _stacked(Rect cell, double aspect) {
-    final labelH = labelFontSize * 1.2;
-    // On a screen smaller than the supported minimum the pair may not fit the
-    // cell's height: the picture then shrinks, keeping its shape.
-    final room = math.max(cell.height - labelH - dp(_labelGapUnits), 0.0);
-    final pictureH = math.min(cell.width * _pictureShare / aspect, room);
-    final width = pictureH * aspect;
-    final total = labelH + dp(_labelGapUnits) + pictureH;
-    final top = cell.top + math.max((cell.height - total) / 2, 0);
-    return (
-      label: Rect.fromLTWH(cell.left, top, cell.width, labelH),
-      picture: Rect.fromLTWH(cell.center.dx - width / 2, top + labelH + dp(_labelGapUnits), width, pictureH),
+  /// A size from the design: [share] of the canvas's height, never below [minDp] nor above
+  /// [maxDp]. These are the design's own CSS `clamp(min, share, max)` values.
+  double _design(double share, double minDp, double maxDp) =>
+      (canvasSize.height * share).clamp(minDp, maxDp).toDouble();
+
+  /// The height of the header bar itself.
+  ///
+  /// The design's own smallest value is 46 dp, under the 48 dp spec §12.1 requires for a tap
+  /// target; a hit area cannot safely grow past the bar's own height without overflowing the
+  /// fixed-height row it sits in, so the floor here is raised to 48 instead (never shorter
+  /// than the design asks, only ever possibly a touch taller on the smallest phones). The
+  /// [topBar] zone is exactly this bar, so nothing else is pushed by the raised floor.
+  double get designHeaderHeight => _design(0.13, kLuckyCardMinTapDp, 56);
+
+  /// A round button as it is DRAWN. Its tap area, [designBallHit], is never smaller than
+  /// 48 dp (spec §12.1) and, because of [designHeaderHeight]'s own floor above, never taller
+  /// than the bar it sits in either.
+  ///
+  /// Shrunk from the design's own 0.11 share after the user saw the buttons crowding the
+  /// header on a narrow phone (2026-10-23): a smaller ball leaves the gaps the design drew
+  /// between the pieces, instead of eating into them.
+  double get designBallSize => _design(0.095, 34, 42);
+  double get designBallHit => math.max(designBallSize, kLuckyCardMinTapDp);
+
+  /// The sunken pill holding the coin and the balance, and the coin inside it.
+  double get designPillHeight => _design(0.094, 32, 38);
+  double get designCoinSize => _design(0.072, 24, 30);
+
+  /// The coin picture is decoded at the size it is drawn.
+  int coinCacheWidth(double devicePixelRatio) => cacheWidth(designCoinSize, devicePixelRatio);
+
+  /// The countdown's ring.
+  double get designCountdownSize => _design(0.116, 40, 48);
+
+  /// The gap between the header's pieces, and the padding inside its two ends.
+  double get designHeaderGap => (canvasSize.width * 0.009).clamp(5.0, 8.0).toDouble();
+  double get designHeaderPad => 4;
+
+  /// The balance figure, the countdown's own digits, and the line of words in the middle.
+  double get designBalanceFont => _design(0.05, 16, 21);
+  double get designCountdownFont => _design(0.05, 17, 21);
+  double get designStatusFont => (canvasSize.width * 0.02).clamp(13.0, 17.0).toDouble();
+
+  /// The header bar: flush with the top and both sides of the canvas (the user asked,
+  /// 2026-10-23, to drop the design's own margin there), [designHeaderHeight] tall.
+  Rect get designHeaderBar => Rect.fromLTWH(0, 0, canvasSize.width, designHeaderHeight);
+
+  // ── The bet panel, from the reference design ────────────────────────────
+  //
+  // The panel (the design's `<aside>`) is a purple box with a gold border. Inside, from the top:
+  // PLAY and WIN side by side, the results (the ten latest rounds in two rows of five), the five
+  // chips in a row, then, pushed to the bottom, the three buttons. Every size is the design's own
+  // `clamp(min, share, max)` (shares of the canvas height, see [_design]), except where a floor
+  // had to be raised for the readable-text and tap-target rules (spec §12.1), and the results,
+  // which are the user's own layout (2026-10-23): the design shows one row of nine.
+
+  /// The gold border, the padding inside it and the gap between the panel's rows.
+  static const double designPanelBorder = 2;
+  double get designPanelPad => _design(0.024, 7, 10);
+  double get designPanelGap => _design(0.022, 6, 10);
+  static const double designPanelRadius = 18;
+
+  /// What is left inside the border and the padding: where the four rows go.
+  Rect get panelInner => side.deflate(designPanelBorder + designPanelPad);
+
+  /// The gap between TOTAL BET and WIN, and between the three buttons.
+  static const double designCellGap = 7;
+
+  /// The label over a total (the design's 9 to 10 dp, raised to the 11 dp floor) and the
+  /// figure under it, whose line is 1.1 times its size; the cell pads 5 dp above and below.
+  double get designTotalLabelFont => kLuckyCardMinReadableDp;
+  double get designTotalValueFont => _design(0.06, 19, 26);
+  static const double designTotalLabelLine = 1.2;
+  static const double designTotalValueLine = 1.1;
+  double get designTotalHeight => 10 + designTotalLabelFont * designTotalLabelLine + designTotalValueFont * designTotalValueLine;
+
+  double get _totalWidth => (panelInner.width - designCellGap) / 2;
+
+  /// PLAY (what is on the board) and WIN (what the last round paid), side by side.
+  Rect get totalBetCell => Rect.fromLTWH(panelInner.left, panelInner.top, _totalWidth, designTotalHeight);
+  Rect get winCell => Rect.fromLTWH(panelInner.left + _totalWidth + designCellGap, panelInner.top, _totalWidth, designTotalHeight);
+
+  /// The results box: the ten latest rounds in two rows of five, the newest first (top left),
+  /// inside a padding of 7 dp and 4 dp apart (the user's decision of 2026-10-23, replacing the
+  /// design's LAST RESULT line over a single row of nine).
+  static const double designResultsPad = 7;
+  static const double designTileGap = 4;
+  static const int designResultColumns = 5;
+  static const int designResultRows = 2;
+  static const int designResultTiles = designResultColumns * designResultRows;
+
+  /// A result card: tall enough for the rank letter and the suit picture side by side, and the
+  /// bonus under them, each at least 11 dp.
+  double get designTileHeight => _design(0.1, 36, 44);
+
+  /// The text and picture in a result card: the rank letter and the suit picture side by side,
+  /// then the bonus under them.
+  static const double designTileLetterFont = 14;
+  static const double designTileIcon = 14;
+  static const double designTileBonusFont = 12;
+
+  Rect get resultsPanel => Rect.fromLTWH(
+        panelInner.left,
+        totalBetCell.bottom + designPanelGap,
+        panelInner.width,
+        2 * designResultsPad + designResultRows * designTileHeight + (designResultRows - 1) * designTileGap,
+      );
+
+  /// Result card [index], 0 to 9: row by row from the top left, 0 the newest round.
+  Rect resultTile(int index) {
+    assert(index >= 0 && index < designResultTiles);
+    final width = (resultsPanel.width - 2 * designResultsPad - (designResultColumns - 1) * designTileGap) / designResultColumns;
+    final column = index % designResultColumns;
+    final row = index ~/ designResultColumns;
+    return Rect.fromLTWH(
+      resultsPanel.left + designResultsPad + column * (width + designTileGap),
+      resultsPanel.top + designResultsPad + row * (designTileHeight + designTileGap),
+      width,
+      designTileHeight,
     );
   }
 
-  /// The name above a suit's bar ("Hearts"), inside its header.
-  Rect suitLabel(int column) => _stacked(suitHeader(column), barAspect).label;
-
-  /// The suit's bar picture, inside its header.
-  Rect suitBar(int column) => _stacked(suitHeader(column), barAspect).picture;
-
-  /// The name above a rank's selector ("Jacks"), inside its row.
-  Rect rankLabel(int rankRow) => _stacked(rankSelector(rankRow), selectorAspect).label;
-
-  /// The rank's selector picture, inside its row.
-  Rect rankPicture(int rankRow) => _stacked(rankSelector(rankRow), selectorAspect).picture;
-
-  // ── The top bar's pieces ────────────────────────────────────────────────
-
-  /// A top-bar button is drawn this size and has a tap area as tall as the bar.
-  static const double _barButton = 100;
-  static const double _barHit = 134;
-
-  double get _wu => _canvasWidthUnits;
-
-  /// The tap areas: each is the full height of the bar and 134 units wide (48 dp
-  /// on the shortest phone). Exit is at the left, sound and info at the right.
-  Rect get exitHit => _r(_margin, 0, _barHit, _topBarH);
-  Rect get infoHit => _r(_wu - _margin - _barHit, 0, _barHit, _topBarH);
-  Rect get soundHit => _r(_wu - _margin - 2 * _barHit - 6, 0, _barHit, _topBarH);
-
-  Rect _drawn(Rect hit) => Rect.fromCenter(center: hit.center, width: dp(_barButton), height: dp(_barButton));
-
-  /// The buttons as drawn, centred in their tap areas.
-  Rect get exitButton => _drawn(exitHit);
-  Rect get soundButton => _drawn(soundHit);
-  Rect get infoButton => _drawn(infoHit);
-
-  /// The balance, to the right of the exit button.
-  Rect get balanceBox => _r(_margin + _barHit + 16, (_topBarH - 100) / 2, 380, 100);
-
-  /// The countdown, in the middle of the bar.
-  Rect get countdownBox => _r(_wu / 2 - 180, (_topBarH - 118) / 2, 360, 118);
-
-  // ── The side column ─────────────────────────────────────────────────────
-  //
-  // At the left, the chip rail: five chips of 134 units (48 dp on the shortest
-  // phone) one above the other, spread over the column's whole height. Beside it,
-  // from the top: PLAY and WIN side by side, the limits, the results (the latest
-  // and the nine before it), and at the bottom the three buttons side by side.
-  // Three buttons stacked would take 422 of the 826 units; side by side they take
-  // 134 and leave the results room to be read.
-
-  static const double _railW = 134;
-  static const double _railGap = 8;
-  static const double _chipSize = 134;
-  static const double _playH = 100;
-  static const double _limitsH = 92;
-  static const double _blockGap = 10;
-  static const double _buttonH = 134;
-  static const double _buttonGap = 8;
-  static const double _resultPad = 6;
-  static const double _resultCurrentH = 110;
-  static const double _resultGap = 6;
-
-  /// Chips in the rail, and buttons under the results.
+  /// The chips: the design draws each [designChipSize] across (12% of the height, no more than
+  /// 5.6% of the width, 34 to 52 dp), spread along the row. Each one's tap area is its fifth
+  /// of the row (3 dp in from each end) by 48 dp tall; on the smallest phone that is about
+  /// 44 dp across, a written exception to the 48 dp rule (the user, 2026-10-23).
   static const int chipCount = 5;
-  static const int actionButtonCount = 3;
+  static const double designChipRowPadTop = 4;
+  static const double designChipRowPadSide = 3;
+  double get designChipSize => math.min(_design(0.12, 34, 52), canvasSize.width * 0.056).clamp(34.0, 52.0).toDouble();
 
-  /// The gap between two chips: they fill the column from top to bottom.
-  static const double _chipGap = (_mainBottom - _mainTop - chipCount * _chipSize) / (chipCount - 1);
+  /// The row the five chips share.
+  Rect get chipRail => Rect.fromLTWH(
+        panelInner.left,
+        resultsPanel.bottom + designPanelGap,
+        panelInner.width,
+        designChipRowPadTop + kLuckyCardMinTapDp,
+      );
 
-  double get _rightX => _sideLeft + _railW + _railGap;
-  double get _rightW => _sideW - _railW - _railGap;
-  double get _resultsTop => _mainTop + _playH + _blockGap + _limitsH + _blockGap;
-  static const double _buttonsTop = _mainBottom - _buttonH;
-
-  /// The whole chip rail.
-  Rect get chipRail => _r(_sideLeft, _mainTop, _railW, _mainBottom - _mainTop);
-
-  /// Chip [index] (0 is the 5 chip, 4 the 500 chip); its tap area is its own square.
+  /// Chip [index] (0 is the 5 chip, 4 the 500 chip): its tap area.
   Rect chip(int index) {
     assert(index >= 0 && index < chipCount);
-    return _r(_sideLeft, _mainTop + index * (_chipSize + _chipGap), _chipSize, _chipSize);
-  }
-
-  /// PLAY (the stake) and WIN (the last payout), side by side.
-  Rect get playCell => _r(_rightX, _mainTop, (_rightW - 8) / 2, _playH);
-  Rect get winCell => _r(_rightX + (_rightW - 8) / 2 + 8, _mainTop, (_rightW - 8) / 2, _playH);
-
-  /// The MIN and MAX limits.
-  Rect get limitsPanel => _r(_rightX, _mainTop + _playH + _blockGap, _rightW, _limitsH);
-
-  double get _resultsH => _buttonsTop - _blockGap - _resultsTop;
-
-  /// The results: the latest on top, the nine before it in a 3 x 3 grid.
-  Rect get resultsPanel => _r(_rightX, _resultsTop, _rightW, _resultsH);
-  Rect get resultCurrent => _r(_rightX + _resultPad, _resultsTop + _resultPad, _rightW - 2 * _resultPad, _resultCurrentH);
-
-  /// Tile [index] of the 3 x 3 grid, 0 to 8, left to right and top to bottom.
-  Rect resultTile(int index) {
-    assert(index >= 0 && index < 9);
-    final gridTop = _resultsTop + _resultPad + _resultCurrentH + _resultGap;
-    final gridH = _resultsH - 2 * _resultPad - _resultCurrentH - _resultGap;
-    final tileH = (gridH - 2 * _resultGap) / 3;
-    final tileW = (_rightW - 2 * _resultPad - 2 * _resultGap) / 3;
-    final row = index ~/ 3, col = index % 3;
-    return _r(
-      _rightX + _resultPad + col * (tileW + _resultGap),
-      gridTop + row * (tileH + _resultGap),
-      tileW,
-      tileH,
+    final slot = (chipRail.width - 2 * designChipRowPadSide) / chipCount;
+    return Rect.fromLTWH(
+      chipRail.left + designChipRowPadSide + index * slot,
+      chipRail.top + designChipRowPadTop,
+      slot,
+      kLuckyCardMinTapDp,
     );
   }
+
+  /// The three buttons, side by side along the bottom: the design's 40 to 48 dp tall, held at
+  /// the 48 dp tap floor.
+  static const int actionButtonCount = 3;
+  double get designButtonHeight => math.max(_design(0.116, 40, 48), kLuckyCardMinTapDp);
+  double get designButtonFont => math.min(_design(0.042, 12, 17), canvasSize.width * 0.0195).clamp(12.0, 17.0).toDouble();
 
   /// Button [index], left to right: 0 Double (Rebet), 1 Clear, 2 Remove.
   Rect actionButton(int index) {
     assert(index >= 0 && index < actionButtonCount);
-    final w = (_rightW - (actionButtonCount - 1) * _buttonGap) / actionButtonCount;
-    return _r(_rightX + index * (w + _buttonGap), _buttonsTop, w, _buttonH);
+    final width = (panelInner.width - (actionButtonCount - 1) * designCellGap) / actionButtonCount;
+    return Rect.fromLTWH(
+      panelInner.left + index * (width + designCellGap),
+      panelInner.bottom - designButtonHeight,
+      width,
+      designButtonHeight,
+    );
   }
 
   /// [rect] (in canvas coordinates) as seen from inside [zone]: what a widget placed
   /// in a zone's builder needs.
   Rect within(Rect zone, Rect rect) => rect.shift(-zone.topLeft);
 
-  /// The suit icon in the latest result, and in a tile of the grid (square sides, dp).
-  double get resultCurrentIcon => resultCurrent.height * 0.72;
-  double get resultTileIcon => math.min(resultTile(0).height * 0.46, resultTile(0).width * 0.42);
+  /// A chip is decoded at the size it is drawn, the largest it ever is (raised 6%).
+  int chipCacheWidth(double devicePixelRatio) => cacheWidth(designChipSize * 1.06, devicePixelRatio);
 
-  /// A chip is decoded at the width of its tap area, the largest it is drawn.
-  int chipCacheWidth(double devicePixelRatio) => cacheWidth(chip(0).width, devicePixelRatio);
-
-  /// Every suit icon is decoded once, at the larger of the two sizes.
-  int resultIconCacheWidth(double devicePixelRatio) => cacheWidth(resultCurrentIcon, devicePixelRatio);
+  /// Every suit icon is decoded once, at the size it is drawn in a result card.
+  int resultIconCacheWidth(double devicePixelRatio) => cacheWidth(designTileIcon, devicePixelRatio);
 
   // ── The wheel ───────────────────────────────────────────────────────────
 
@@ -416,9 +484,6 @@ class LuckyCardLayout {
   }
 
   /// How wide to decode the pictures: each at exactly the width it is drawn.
-  int cardCacheWidth(double devicePixelRatio) => cacheWidth(cardSide, devicePixelRatio);
-  int barCacheWidth(double devicePixelRatio) => cacheWidth(suitBar(0).width, devicePixelRatio);
-  int selectorCacheWidth(double devicePixelRatio) => cacheWidth(rankPicture(0).width, devicePixelRatio);
   int revealCacheWidth(double devicePixelRatio) => cacheWidth(revealCard.width, devicePixelRatio);
   int winPopupCacheWidth(double devicePixelRatio) => cacheWidth(winPopup.width, devicePixelRatio);
 
@@ -427,7 +492,6 @@ class LuckyCardLayout {
         'topBar': topBar,
         'grid': grid,
         'rankColumn': rankColumn,
-        'status': status,
         'side': side,
       };
 }

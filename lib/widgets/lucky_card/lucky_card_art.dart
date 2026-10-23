@@ -25,12 +25,12 @@ class LuckyCardArtKey {
 
   static const String _own = 'assets/lucky_card/images';
 
-  /// The picture of one card (565 x 571).
+  /// The picture of one card (549 x 556).
   factory LuckyCardArtKey.card(LuckyCard card) => LuckyCardArtKey._(
         '$_own/${card.suit.dbValue}-${card.rank.dbValue.toLowerCase()}-card.webp',
       );
 
-  /// A suit's bar, with its emblem on the top edge (1231 x 507).
+  /// A suit's bar: its emblem in a hexagon at the left and an empty red plate at the right (821 x 281).
   factory LuckyCardArtKey.suitBar(LuckyCardSuit suit) =>
       LuckyCardArtKey._('$_own/${suit.dbValue}-bar.webp');
 
@@ -38,7 +38,7 @@ class LuckyCardArtKey {
   factory LuckyCardArtKey.suitIcon(LuckyCardSuit suit) =>
       LuckyCardArtKey._('$_own/${suit.dbValue}-icon.webp');
 
-  /// A rank's selector, with its J, Q or K on the green disc (951 x 496).
+  /// A rank's badge: its J, Q or K on top of an empty purple oval plate (878 x 846).
   factory LuckyCardArtKey.rankSelector(LuckyCardRank rank) =>
       LuckyCardArtKey._('$_own/${rank.dbValue.toLowerCase()}-selector.webp');
 
@@ -54,6 +54,9 @@ class LuckyCardArtKey {
   /// read-only by the win popup.
   static const LuckyCardArtKey winPopup = LuckyCardArtKey._('assets/images/win-popup.webp');
   static const LuckyCardArtKey winText = LuckyCardArtKey._('assets/images/win-text.webp');
+
+  /// The BSG coin (Triple Chance's, used read-only), drawn in the header beside the balance.
+  static const LuckyCardArtKey coin = LuckyCardArtKey._('assets/images/bsg_coin.webp');
 
   /// The in-game background: a red theatre stage (1003 x 564, spec §17B).
   static const LuckyCardArtKey background = LuckyCardArtKey._('$_own/bg-lobby-lucky-card.webp');
@@ -71,7 +74,7 @@ class LuckyCardArtKey {
   String toString() => 'LuckyCardArtKey($assetPath)';
 
   /// Every picture the screen uses: 12 cards, 4 bars, 4 symbols, 3 selectors, 5 chips,
-  /// the 2 win-popup pictures and the background.
+  /// the 2 win-popup pictures, the coin and the background.
   static List<LuckyCardArtKey> get all => [
         for (final card in LuckyCard.all) LuckyCardArtKey.card(card),
         for (final suit in LuckyCardSuit.values) LuckyCardArtKey.suitBar(suit),
@@ -80,13 +83,15 @@ class LuckyCardArtKey {
         for (final chip in LuckyCardChip.values) LuckyCardArtKey.chip(chip),
         winPopup,
         winText,
+        coin,
         background,
       ];
 }
 
 /// Where the one empty area of a picture sits, as fractions of the picture
-/// (measured from the supplied files on 2026-10-06, spec §17O). The live number
-/// is drawn in it, centred.
+/// (taken from the reference design's own placement of its text on the new pictures,
+/// 2026-10-23; the old values were measured from the old pictures, spec §17O). The live
+/// number or name is drawn in it, centred.
 @immutable
 class LuckyCardSlot {
   const LuckyCardSlot(this.centerX, this.centerY, this.width, this.height);
@@ -109,18 +114,19 @@ class LuckyCardSlot {
       );
 }
 
-/// The empty areas of the three pictures that carry a live number.
+/// The empty areas of the three pictures that carry a live number or name.
 abstract final class LuckyCardSlots {
-  /// The red ribbon along the bottom of every card.
-  static const LuckyCardSlot cardRibbon = LuckyCardSlot(0.50, 0.87, 0.72, 0.15);
+  /// The red plate along the bottom of every card: from 10% to 90% of its width, from 68%
+  /// down for 25% of its height.
+  static const LuckyCardSlot cardPlate = LuckyCardSlot(0.50, 0.805, 0.80, 0.25);
 
-  /// The red panel of a suit bar, below the emblem that sits on its top edge.
-  static const LuckyCardSlot suitPanel = LuckyCardSlot(0.50, 0.64, 0.60, 0.40);
+  /// The red plate of a suit bar, to the right of its hexagon: from 36% to 94% of the bar's
+  /// width, the whole height.
+  static const LuckyCardSlot suitPlate = LuckyCardSlot(0.65, 0.50, 0.58, 1.00);
 
-  /// The cream disc of a rank selector (a circle: its width is the diameter, as a
-  /// fraction of the picture's width; the height fraction is its share of the
-  /// picture's height).
-  static const LuckyCardSlot rankDisc = LuckyCardSlot(0.74, 0.50, 0.39, 0.72);
+  /// The purple oval plate of a rank badge, under its letter: from 14% to 86% of its width,
+  /// from 49% down for 32% of its height.
+  static const LuckyCardSlot rankPlate = LuckyCardSlot(0.50, 0.65, 0.72, 0.32);
 }
 
 /// Gives a picture for a key, decoded no wider than [cacheWidth] pixels.

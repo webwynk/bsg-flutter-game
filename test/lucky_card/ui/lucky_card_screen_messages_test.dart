@@ -11,7 +11,7 @@ import 'package:best_smart_game/screens/lucky_card_screen.dart';
 import 'package:best_smart_game/services/lucky_card_round_sync.dart';
 import 'package:best_smart_game/services/lucky_card_sound.dart';
 import 'package:best_smart_game/utils/app_exit.dart';
-import 'package:best_smart_game/widgets/lucky_card/lucky_card_status_strip.dart';
+import 'package:best_smart_game/widgets/lucky_card/lucky_card_palette.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -74,11 +74,14 @@ Future<Session> openGame(WidgetTester tester, BetRig rig, {Size size = phone}) a
   return session;
 }
 
-String stripText(WidgetTester tester) =>
-    tester.widget<Text>(find.descendant(of: find.byType(LuckyCardStatusStrip), matching: find.byType(Text))).data!;
+// The status words moved into the header (the reference design, 2026-10-23): the strip under
+// the board no longer exists, and key 'top-status' is LuckyCardStatusLine, built in
+// lucky_card_top_bar.dart from lucky_card_readouts_binding.dart's luckyCardHeaderStatus().
+Finder get _statusLine => find.descendant(of: find.byKey(const ValueKey('top-status')), matching: find.byType(Text));
 
-Color stripColor(WidgetTester tester) =>
-    tester.widget<Text>(find.descendant(of: find.byType(LuckyCardStatusStrip), matching: find.byType(Text))).style!.color!;
+String stripText(WidgetTester tester) => tester.widget<Text>(_statusLine).data!;
+
+Color stripColor(WidgetTester tester) => tester.widget<Text>(_statusLine).style!.color!;
 
 String balanceText(WidgetTester tester) =>
     tester.widgetList<Text>(find.descendant(of: key('top-balance'), matching: find.byType(Text))).map((t) => t.data!).last;
@@ -111,14 +114,14 @@ void main() {
       await tester.tap(key('suit-hearts'));
       await tester.pump();
       expect(stripText(tester), 'NOT ENOUGH COINS');
-      expect(stripColor(tester), LuckyCardStatusStrip.noticeColor);
+      expect(stripColor(tester), kDesignNoticeText);
       expect(balanceText(tester), '3', reason: 'nothing was taken');
 
       await tester.pump(const Duration(milliseconds: 1800));
       expect(stripText(tester), 'NOT ENOUGH COINS');
       await tester.pump(const Duration(milliseconds: 400));
       expect(stripText(tester), 'PLACE YOUR CHIPS');
-      expect(stripColor(tester), kCream);
+      expect(stripColor(tester), kDesignStatusText, reason: 'the design\'s own white, not the old cream');
       await rig.finish();
     });
 
@@ -136,7 +139,7 @@ void main() {
       await rig.finish();
     });
 
-    testWidgets('a card at the limit says so, with the real number', (tester) async {
+    testWidgets('a card at the limit shows a snackbar at the bottom for 3 seconds, and the header keeps its words', (tester) async {
       final rig = BetRig(tester, startBalance: 200000);
       await openGame(tester, rig);
       final p = rig.provider;
@@ -149,7 +152,24 @@ void main() {
       await tester.tap(key('chip-500'));
       await tester.tap(key('j_hearts'));
       await tester.pump();
-      expect(stripText(tester), 'CARD AT 50,000 LIMIT');
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('CARD PLAY LIMIT REACHED'), findsOneWidget);
+      expect(find.text('Max 50,000 / card'), findsOneWidget);
+      expect(stripText(tester), 'PLACE YOUR CHIPS', reason: 'the header keeps the round\'s own words');
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('CARD PLAY LIMIT REACHED'), findsNothing, reason: 'it goes by itself');
+
+      // A second tap on the full card shows it again, once.
+      await tester.tap(key('j_hearts'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('CARD PLAY LIMIT REACHED'), findsOneWidget);
+      await tester.tap(key('j_hearts'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('CARD PLAY LIMIT REACHED'), findsOneWidget, reason: 'one snackbar, not a pile');
+      await tester.pump(const Duration(seconds: 4));
       await rig.finish();
     });
 
@@ -433,7 +453,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
       expect(rig.provider.balanceSyncFailed, isTrue);
       expect(stripText(tester), kLuckyCardBalanceLineForTest);
-      expect(stripColor(tester), LuckyCardStatusStrip.noticeColor);
+      expect(stripColor(tester), kDesignNoticeText);
       await tester.pump(const Duration(seconds: 5));
       expect(stripText(tester), kLuckyCardBalanceLineForTest, reason: 'still there at 5 seconds');
       await tester.pump(const Duration(seconds: 2));
@@ -545,5 +565,4 @@ void main() {
   });
 }
 
-const Color kCream = Color(0xFFF5E6C4);
 const String kLuckyCardBalanceLineForTest = 'BALANCE NOT CONFIRMED - IT WILL UPDATE NEXT ROUND';

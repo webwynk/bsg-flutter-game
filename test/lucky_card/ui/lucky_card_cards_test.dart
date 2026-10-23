@@ -86,7 +86,7 @@ void main() {
 
           // Centred on the ribbon of the card picture.
           final picture = layout.cardImage(c.suit.index, c.rank.index).shift(layout.canvasRect.topLeft);
-          final ribbon = LuckyCardSlots.cardRibbon.within(picture);
+          final ribbon = LuckyCardSlots.cardPlate.within(picture);
           expect(tester.getCenter(textIn(c)).dx, closeTo(ribbon.center.dx, 0.6), reason: '${c.key} text across');
           expect(tester.getCenter(textIn(c)).dy, closeTo(ribbon.center.dy, 0.6), reason: '${c.key} text down');
         }
@@ -104,10 +104,10 @@ void main() {
         final layout = LuckyCardLayout.of(d.size);
         for (final c in LuckyCard.all) {
           final image = tester.widget<Image>(find.descendant(of: cell(c), matching: find.byType(Image)));
-          expect(image.width, closeTo(layout.cardSide, 0.001), reason: c.key);
-          expect(image.height, closeTo(layout.cardSide, 0.001), reason: c.key);
+          expect(image.width, closeTo(layout.cardSize.width, 0.001), reason: c.key);
+          expect(image.height, closeTo(layout.cardSize.height, 0.001), reason: c.key);
           final provider = image.image as ResizeImage;
-          expect(provider.width, LuckyCardLayout.cacheWidth(layout.cardSide, 2), reason: c.key);
+          expect(provider.width, LuckyCardLayout.cacheWidth(layout.cardSize.width, 2), reason: c.key);
         }
       });
     }
@@ -141,9 +141,9 @@ void main() {
 
       final rect = tester.getRect(cell(qs));
       final layout = LuckyCardLayout.of(const Size(915, 412));
-      expect(rect.width, greaterThan(layout.cardSide), reason: 'the cell is wider than the picture here');
+      expect(rect.width, closeTo(layout.cardSize.width, 0.01), reason: 'the picture fills the cell (the design draws it so)');
       await tester.tapAt(rect.centerLeft + const Offset(2, 0));
-      expect(tapped, [jh, qs], reason: 'a tap in the margin of the cell still counts');
+      expect(tapped, [jh, qs], reason: 'a tap at the very edge of the cell still counts');
     });
 
     testWidgets('that changes a card pulses it, and nothing is reported as refused', (tester) async {

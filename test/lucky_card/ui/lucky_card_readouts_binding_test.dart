@@ -10,6 +10,7 @@ import 'package:best_smart_game/providers/lucky_card_provider.dart';
 import 'package:best_smart_game/services/lucky_card_round_sync.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_art.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_canvas.dart';
+import 'package:best_smart_game/widgets/lucky_card/lucky_card_palette.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_panel.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_layout.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_readouts.dart';
@@ -58,13 +59,12 @@ Widget scene(
       grid: (context, layout) => LuckyCardWheelBinding(provider: provider, layout: layout),
       topBar: (context, layout) => LuckyCardTopBarBinding(
         provider: provider,
-        layout: layout,
+        layout: layout, art: const FileLuckyCardArt(),
         soundOn: soundOn,
         onExit: presses == null ? null : () => presses.exit++,
         onToggleSound: presses == null ? null : () => presses.sound++,
         onInfo: presses == null ? null : () => presses.info++,
       ),
-      status: (context, layout) => LuckyCardStatusBinding(provider: provider, layout: layout),
       side: (context, layout) => LuckyCardSideReadouts(provider: provider, layout: layout, art: art),
     );
 
@@ -74,19 +74,25 @@ List<String> textsIn(WidgetTester tester, String k) => [
       for (final t in tester.widgetList<Text>(find.descendant(of: key(k), matching: find.byType(Text)))) t.data!,
     ];
 
-String balanceText(WidgetTester tester) => textsIn(tester, 'top-balance').single;
+// The coin now carries its own "$" mark (the reference design), so top-balance holds two
+// texts; the number is the last one, exactly as play/win already read theirs.
+String balanceText(WidgetTester tester) => textsIn(tester, 'top-balance').last;
 String countdownText(WidgetTester tester) => textsIn(tester, 'top-countdown').single;
-String playText(WidgetTester tester) => textsIn(tester, 'play').last;
+String playText(WidgetTester tester) => textsIn(tester, 'total-bet').last;
 String winText(WidgetTester tester) => textsIn(tester, 'win').last;
-String statusText(WidgetTester tester) =>
-    tester.widget<Text>(find.descendant(of: find.byType(LuckyCardStatusStrip), matching: find.byType(Text))).data!;
+
+// The status words moved into the header (the reference design, 2026-10-23): key 'top-status'
+// is LuckyCardStatusLine, built in lucky_card_top_bar.dart.
+Finder get _statusLine => find.descendant(of: key('top-status'), matching: find.byType(Text));
+
+String statusText(WidgetTester tester) => tester.widget<Text>(_statusLine).data!;
 
 /// True while the Info button is dimmed (disabled).
 bool infoDimmed(WidgetTester tester) =>
     find.descendant(of: key('top-info'), matching: find.byType(Opacity)).evaluate().isNotEmpty;
 
 double statusOpacity(WidgetTester tester) => tester
-    .widget<Opacity>(find.descendant(of: find.byType(LuckyCardStatusStrip), matching: find.byType(Opacity)).last)
+    .widget<Opacity>(find.descendant(of: key('top-status'), matching: find.byType(Opacity)).last)
     .opacity;
 
 /// What the results panel shows, latest first: "Q4X" style (rank then bonus label).
@@ -189,9 +195,8 @@ void main() {
       expect(p.cardRevealed, isTrue);
       final payout = 10 * 10 * bonus;
       expect(winText(tester), '+$payout');
-      final winCell = tester.widget<LuckyCardAmountCell>(key('win'));
-      expect(winCell.highlighted, isTrue, reason: 'a win lights its cell');
-      expect(winCell.valueColor, kLuckyCardWin);
+      final winCell = tester.widget<LuckyCardTotalCell>(key('win'));
+      expect(winCell.fill, kDesignWinFill, reason: 'the WIN cell is the green of the design');
       expect(balanceText(tester), luckyCardGrouped(880 + payout));
       expect(resultsShown(tester).first, '${winner.rank.dbValue}${luckyCardBonusLabel(bonus)}', reason: 'the latest tile is the winner');
       expect(resultsShown(tester), resultsExpected(p));
@@ -282,6 +287,11 @@ void main() {
           scheduledAt: DateTime.utc(2026, 10, 6),
         );
 
+    // The status mode is deliberately NOT part of this snapshot (lucky_card_readouts_binding.dart's
+    // _LuckyCardHeaderStatusSlot reads it through its own, separate selector instead): folding
+    // it in here would make a chip placed (which only moves the balance) also rebuild the
+    // status words, exactly the "redraws only what changed" regression found and fixed
+    // 2026-10-23 (see "a chip redraws PLAY..." below).
     test('the top bar changes when the balance, the countdown or Info changes, and only then', () {
       const base = LuckyCardTopBarSnapshot(balance: 100, countdown: 40, infoEnabled: true);
       expect(base, const LuckyCardTopBarSnapshot(balance: 100, countdown: 40, infoEnabled: true));
@@ -326,17 +336,14 @@ void main() {
         await pumpAtSize(tester, d.size, scene(rig.provider));
         await rig.open();
         final l = LuckyCardLayout.of(d.size);
+        // The header's own pieces are placed by its row layout, not by fixed rects here
+        // (proven in lucky_card_top_bar_history_test.dart); only the side column is checked
+        // against the layout's own rects.
         final expected = {
-          'top-balance': l.balanceBox,
-          'top-countdown': l.countdownBox,
-          'top-exit': l.exitHit,
-          'top-sound': l.soundHit,
-          'top-info': l.infoHit,
-          'play': l.playCell,
+          'total-bet': l.totalBetCell,
           'win': l.winCell,
-          'limits': l.limitsPanel,
-          'result-latest': l.resultCurrent,
-          for (var i = 0; i < 9; i++) 'result-$i': l.resultTile(i),
+          'result-latest': l.resultTile(0),
+          for (var i = 0; i < 9; i++) 'result-$i': l.resultTile(i + 1),
         };
         for (final e in expected.entries) {
           final got = tester.getRect(key(e.key));
@@ -346,9 +353,6 @@ void main() {
           expect(got.width, closeTo(want.width, 0.01), reason: '${e.key} width');
           expect(got.height, closeTo(want.height, 0.01), reason: '${e.key} height');
         }
-        final strip = tester.getRect(find.byType(LuckyCardStatusStrip));
-        expect(strip.topLeft, l.status.shift(l.canvasRect.topLeft).topLeft);
-        expect(strip.size, l.status.size);
         await rig.finish();
       });
     }
@@ -360,18 +364,18 @@ void main() {
       await pumpAtSize(tester, phone, scene(rig.provider));
       await rig.open();
       Widget? widgetOf(String k) => tester.widget(key(k));
-      final play = widgetOf('play');
+      final play = widgetOf('total-bet');
       final win = widgetOf('win');
       final results = widgetOf('result-latest');
-      final strip = tester.widget(find.byType(LuckyCardStatusStrip));
+      final strip = tester.widget(key('top-status'));
       final countdown = widgetOf('top-countdown');
 
       await rig.world.run(const Duration(seconds: 3));
       expect(identical(widgetOf('top-countdown'), countdown), isFalse, reason: 'the countdown moved');
-      expect(identical(widgetOf('play'), play), isTrue, reason: 'PLAY did not');
+      expect(identical(widgetOf('total-bet'), play), isTrue, reason: 'PLAY did not');
       expect(identical(widgetOf('win'), win), isTrue, reason: 'WIN did not');
       expect(identical(widgetOf('result-latest'), results), isTrue, reason: 'the results did not');
-      expect(identical(tester.widget(find.byType(LuckyCardStatusStrip)), strip), isTrue, reason: 'the words did not');
+      expect(identical(tester.widget(key('top-status')), strip), isTrue, reason: 'the words did not');
       await rig.finish();
     });
 
@@ -379,20 +383,20 @@ void main() {
       final rig = BetRig(tester);
       await pumpAtSize(tester, phone, scene(rig.provider));
       await rig.open();
-      final play = tester.widget(key('play'));
+      final play = tester.widget(key('total-bet'));
       final win = tester.widget(key('win'));
       final results = tester.widget(key('result-latest'));
-      final strip = tester.widget(find.byType(LuckyCardStatusStrip));
+      final strip = tester.widget(key('top-status'));
       final balance = tester.widget(key('top-balance'));
 
       rig.provider.selectChip(LuckyCardChip.fifty);
       rig.provider.tapCard(winner);
       await tester.pump();
-      expect(identical(tester.widget(key('play')), play), isFalse);
+      expect(identical(tester.widget(key('total-bet')), play), isFalse);
       expect(identical(tester.widget(key('top-balance')), balance), isFalse);
       expect(identical(tester.widget(key('win')), win), isTrue);
       expect(identical(tester.widget(key('result-latest')), results), isTrue);
-      expect(identical(tester.widget(find.byType(LuckyCardStatusStrip)), strip), isTrue);
+      expect(identical(tester.widget(key('top-status')), strip), isTrue);
       await rig.finish();
     });
   });

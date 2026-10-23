@@ -44,7 +44,6 @@ class LuckyCardCanvas extends StatelessWidget {
     this.topBar,
     this.grid,
     this.rankColumn,
-    this.status,
     this.side,
     this.overlay,
   });
@@ -56,7 +55,6 @@ class LuckyCardCanvas extends StatelessWidget {
   final LuckyCardZoneBuilder? topBar;
   final LuckyCardZoneBuilder? grid;
   final LuckyCardZoneBuilder? rankColumn;
-  final LuckyCardZoneBuilder? status;
   final LuckyCardZoneBuilder? side;
 
   /// Drawn over everything, across the whole screen (not just the canvas): the
@@ -89,7 +87,6 @@ class LuckyCardCanvas extends StatelessWidget {
                       _zone(layout.topBar, topBar, layout),
                       _zone(layout.grid, grid, layout),
                       _zone(layout.rankColumn, rankColumn, layout),
-                      _zone(layout.status, status, layout),
                       _zone(layout.side, side, layout),
                     ],
                   ),

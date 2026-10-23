@@ -13,7 +13,6 @@ const _zoneKeys = {
   'topBar': Key('zone-topBar'),
   'grid': Key('zone-grid'),
   'rankColumn': Key('zone-rankColumn'),
-  'status': Key('zone-status'),
   'side': Key('zone-side'),
 };
 
@@ -31,7 +30,6 @@ Widget fullCanvas({Widget? background}) => LuckyCardCanvas(
       topBar: probe('topBar', Colors.brown),
       grid: probe('grid', Colors.green),
       rankColumn: probe('rankColumn', Colors.indigo),
-      status: probe('status', Colors.orange),
       side: probe('side', Colors.purple),
     );
 
@@ -154,7 +152,6 @@ void main() {
                 child: const ColoredBox(color: Color(0xFF3949AB)),
               ),
           ]),
-          status: (context, l) => const ColoredBox(color: Color(0xFFEF6C00)),
           side: (context, l) => const ColoredBox(color: Color(0xFF6A1B9A)),
         );
 
