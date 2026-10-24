@@ -10,6 +10,7 @@ import '../services/round_sync_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_exit.dart';
 import '../widgets/dialogs/action_dialog.dart';
+import '../widgets/dialogs/popup_scale.dart';
 import '../widgets/wheel/wheel_widget.dart';
 import '../widgets/panels/left_tab_strip.dart';
 import '../widgets/controls/right_panel.dart';
@@ -519,6 +520,7 @@ class _GameScreenState extends State<GameScreen> {
       message: message,
       barrierDismissible: true,
       autoDismissAfter: const Duration(seconds: 5),
+      scale: popupScaleFor(MediaQuery.of(context).size),
     );
   }
 
@@ -548,6 +550,7 @@ class _GameScreenState extends State<GameScreen> {
       message: 'This round is taking longer than expected to resolve. Your balance will update automatically once it\'s ready.',
       barrierDismissible: true,
       autoDismissAfter: const Duration(seconds: 5),
+      scale: popupScaleFor(MediaQuery.of(context).size),
     );
   }
 
@@ -598,6 +601,7 @@ class _GameScreenState extends State<GameScreen> {
       title: title,
       message: message,
       barrierDismissible: false,
+      scale: popupScaleFor(MediaQuery.of(context).size),
       onPressed: () async {
         // Order matters: refund/clear the board FIRST, while auth still has
         // a real, non-null user -- logging out first would silently defeat

@@ -15,6 +15,12 @@ import '../../theme/app_colors.dart';
 /// [barrierDismissible] also gates the system back button/gesture (via the
 /// inner PopScope), not just tapping outside -- a dialog that must not be
 /// skippable (e.g. connection-lost, account-blocked) needs both closed.
+///
+/// [scale] draws the card that many times bigger, about its centre (the layout
+/// size, text, buttons and what they do are unchanged). The default, 1.0, is
+/// the phone-sized card every caller got before; Triple Chance's game screen
+/// passes `popupScaleFor(screen)` so the card is in proportion to a tablet or
+/// desktop layout. Lucky Card and the login screen pass nothing.
 void showActionDialog(
   BuildContext context, {
   required IconData icon,
@@ -24,6 +30,7 @@ void showActionDialog(
   String buttonLabel = 'OK',
   bool barrierDismissible = true,
   Duration? autoDismissAfter,
+  double scale = 1.0,
 }) {
   bool isClosed = false;
   SoundService().playNotification();
@@ -45,7 +52,9 @@ void showActionDialog(
 
       return PopScope(
         canPop: barrierDismissible,
-        child: Center(
+        child: Transform.scale(
+          scale: scale,
+          child: Center(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: BackdropFilter(
@@ -155,6 +164,7 @@ void showActionDialog(
               ),
             ),
           ),
+        ),
         ),
       );
     },

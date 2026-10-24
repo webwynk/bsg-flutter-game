@@ -14,6 +14,7 @@ import 'screens/game_screen.dart';
 import 'theme/app_colors.dart';
 import 'utils/app_exit.dart';
 import 'widgets/dialogs/action_dialog.dart';
+import 'widgets/dialogs/popup_scale.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'constants.dart';
@@ -208,6 +209,7 @@ class _AwaySessionGuardState extends State<_AwaySessionGuard> with WidgetsBindin
       title: 'YOU WERE AWAY',
       message: 'You were away for a while, so for your safety you have been logged out.',
       barrierDismissible: false,
+      scale: popupScaleFor(MediaQuery.of(navContext).size),
       onPressed: () async {
         _awayPopupShowing = false;
         await auth.logout();
