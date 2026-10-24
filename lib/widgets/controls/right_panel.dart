@@ -499,8 +499,9 @@ class _ActionColumn extends StatelessWidget {
 ///
 /// 3D redesign, Phase 1: only how the button is painted. It has a glossy raised
 /// face (lighter top, darker bottom, a shine band), a solid edge under it plus a
-/// soft drop shadow, a press-down effect, and a 13pt label that shrinks to fit
-/// instead of overflowing on a narrow panel.
+/// soft drop shadow, a press-down effect, and an 18pt Oswald label (the app's
+/// number / display font, via AppTextStyles.number) that shrinks to fit instead
+/// of overflowing on a narrow panel.
 class _ActionBtn extends StatelessWidget {
   final (String, List<Color>, Color, Color) data;
   final VoidCallback onTap;
@@ -619,7 +620,8 @@ class _ActionBtn extends StatelessWidget {
                             fit: BoxFit.scaleDown,
                             child: Text(
                               data.$1,
-                              style: AppTextStyles.button(size: 13, color: data.$3).copyWith(
+                              style: AppTextStyles.number(size: 18, color: data.$3).copyWith(
+                                fontWeight: FontWeight.w600,
                                 letterSpacing: 1.5,
                                 shadows: [
                                   Shadow(
