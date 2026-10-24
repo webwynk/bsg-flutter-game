@@ -9,6 +9,7 @@ import '../../models/spin_result_model.dart';
 import '../../models/bet_model.dart';
 import '../../theme/app_colors.dart';
 import '../../services/sound_service.dart';
+import '../dialogs/popup_scale.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INFO DIALOG  ·  Entry point
@@ -24,7 +25,8 @@ class InfoDialog extends StatefulWidget {
       barrierLabel: 'Info',
       barrierColor: Colors.black.withValues(alpha: 0.75),
       transitionDuration: const Duration(milliseconds: 280),
-      pageBuilder: (_, __, ___) => const InfoDialog(),
+      // Drawn bigger on tablet and desktop-sized screens (see ScaledPopup).
+      pageBuilder: (_, __, ___) => const ScaledPopup(child: InfoDialog()),
       transitionBuilder: (ctx, anim, _, child) {
         final curved =
             CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
@@ -578,8 +580,8 @@ class _HistoryTab extends StatelessWidget {
       barrierLabel: 'HistoryDetail',
       barrierColor: Colors.black.withValues(alpha: 0.75),
       transitionDuration: const Duration(milliseconds: 280),
-      pageBuilder: (_, __, ___) =>
-          _HistoryDetailDialog(record: record, serialNo: serialNo),
+      pageBuilder: (_, __, ___) => ScaledPopup(
+          child: _HistoryDetailDialog(record: record, serialNo: serialNo)),
       transitionBuilder: (ctx, anim, _, child) {
         final curved =
             CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
