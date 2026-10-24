@@ -10,8 +10,8 @@ import 'tablet_chip_row.dart';
 /// Top to bottom: play / win / balance, the history grid (taller cells than
 /// the phone), the chips in a row, then the action buttons and the countdown
 /// box. (The status message is the pill above the wheel, not a bar here.)
-/// Tablet phases that follow arrange the buttons as a 2 x 2 block and enlarge
-/// the countdown box.
+/// The four buttons are a 2 x 2 block and the countdown box fills the rest of
+/// the panel's height.
 class TabletRightPanel extends StatelessWidget {
   final VoidCallback onSpin;
   const TabletRightPanel({super.key, required this.onSpin});
@@ -31,7 +31,7 @@ class TabletRightPanel extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(8, 4, 8, 10),
-              child: RightPanelParts.actions(onSpin),
+              child: RightPanelParts.actions(onSpin, twoByTwo: true),
             ),
           ),
         ],

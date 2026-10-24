@@ -46,8 +46,12 @@ class RightPanelParts {
   static Widget history({double cellHeight = 12, double fontSize = 8.5}) =>
       _HistoryGrid(cellHeight: cellHeight, fontSize: fontSize);
 
-  /// The four action buttons stacked over the countdown box.
-  static Widget actions(VoidCallback onSpin) => _ActionColumn(onSpin: onSpin);
+  /// The four action buttons and the countdown box. By default the buttons
+  /// are stacked over a small countdown box (the phone); with [twoByTwo] they
+  /// are a 2 x 2 block over a countdown box that fills the rest of the height
+  /// (the tablet).
+  static Widget actions(VoidCallback onSpin, {bool twoByTwo = false}) =>
+      _ActionColumn(onSpin: onSpin, twoByTwo: twoByTwo);
 }
 
 class _PanelHeader extends StatefulWidget {
@@ -444,7 +448,11 @@ class _VerticalChips extends StatelessWidget {
 
 class _ActionColumn extends StatelessWidget {
   final VoidCallback onSpin;
-  const _ActionColumn({required this.onSpin});
+  /// False on the phone: the four buttons stacked, over a small countdown box.
+  /// True on the tablet: the buttons as a 2 x 2 block, over a countdown box
+  /// that fills the rest of the height.
+  final bool twoByTwo;
+  const _ActionColumn({required this.onSpin, this.twoByTwo = false});
 
   static const _btns = [
     ('INFO',   [Color(0xFF4169E1), Color(0xFF000080)], Colors.white, Color(0xFF7B9BFF)),
@@ -476,32 +484,53 @@ class _ActionColumn extends StatelessWidget {
           Color(0xFFCC88FF),
         );
 
+        // The four buttons. They are the same on the phone and the tablet;
+        // only how they are arranged below differs.
+        // INFO — disabled when countdown ≤ 5 or spinning, but not dim
+        final infoBtn = _ActionBtn(_btns[0],
+            isEnabled: !isButtonsLocked,
+            dimWhenDisabled: false,
+            onTap: () => _showInfo(context, game));
+        // DOUBLE / REBET — toggles based on game state. REBET stays
+        // labeled REBET even when unaffordable -- only its enabled
+        // state depends on balance, never which button shows.
+        final doubleBtn = showRebet
+            ? _ActionBtn(rebetBtn, isEnabled: !isButtonsLocked && canAffordRebet,
+                onTap: () => game.rebet(auth))
+            : _ActionBtn(_btns[1], isEnabled: hasBets && !isButtonsLocked,
+                onTap: () => game.doDouble(auth));
+        // CLEAR — only when board has bets
+        final clearBtn = _ActionBtn(_btns[2], isEnabled: hasBets && !isButtonsLocked,
+            onTap: () => game.clearBets(auth));
+        // REMOVE — only when board has bets; deselects the chip to enter remove mode
+        final removeBtn = _ActionBtn(_btns[3], isEnabled: hasBets && !isButtonsLocked,
+            onTap: () => game.deselectChip());
+
+        if (twoByTwo) {
+          // Tablet: INFO and DOUBLE / REBET on one row, CLEAR and REMOVE on
+          // the next, then a countdown box that takes the rest of the height.
+          return Column(
+            children: [
+              SizedBox(
+                height: 52,
+                child: Row(children: [infoBtn, const SizedBox(width: 8), doubleBtn]),
+              ),
+              SizedBox(
+                height: 52,
+                child: Row(children: [clearBtn, const SizedBox(width: 8), removeBtn]),
+              ),
+              const SizedBox(height: 8),
+              Expanded(child: _CountdownBox(onSpin: onSpin, fill: true, digitSize: 56)),
+            ],
+          );
+        }
+
         return Column(
           children: [
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  // INFO — disabled when countdown ≤ 5 or spinning, but not dim
-                  _ActionBtn(_btns[0],
-                      isEnabled: !isButtonsLocked,
-                      dimWhenDisabled: false,
-                      onTap: () => _showInfo(context, game)),
-                  // DOUBLE / REBET — toggles based on game state. REBET stays
-                  // labeled REBET even when unaffordable -- only its enabled
-                  // state depends on balance, never which button shows.
-                  showRebet
-                      ? _ActionBtn(rebetBtn, isEnabled: !isButtonsLocked && canAffordRebet,
-                          onTap: () => game.rebet(auth))
-                      : _ActionBtn(_btns[1], isEnabled: hasBets && !isButtonsLocked,
-                          onTap: () => game.doDouble(auth)),
-                  // CLEAR — only when board has bets
-                  _ActionBtn(_btns[2], isEnabled: hasBets && !isButtonsLocked,
-                      onTap: () => game.clearBets(auth)),
-                  // REMOVE — only when board has bets; deselects the chip to enter remove mode
-                  _ActionBtn(_btns[3], isEnabled: hasBets && !isButtonsLocked,
-                      onTap: () => game.deselectChip()),
-                ],
+                children: [infoBtn, doubleBtn, clearBtn, removeBtn],
               ),
             ),
             const SizedBox(height: 6),
@@ -724,7 +753,12 @@ class _PressDepthState extends State<_PressDepth> {
 
 class _CountdownBox extends StatefulWidget {
   final VoidCallback onSpin;
-  const _CountdownBox({required this.onSpin});
+  /// When true the box fills all the height it is given (the tablet); when
+  /// false it is only as tall as its content (the phone).
+  final bool fill;
+  /// Font size of the number (28 on the phone).
+  final double digitSize;
+  const _CountdownBox({required this.onSpin, this.fill = false, this.digitSize = 28});
 
   @override
   State<_CountdownBox> createState() => _CountdownBoxState();
@@ -752,6 +786,11 @@ class _CountdownBoxState extends State<_CountdownBox> with SingleTickerProviderS
     super.dispose();
   }
 
+  /// Places the number window in the box's column: as is when the box is only
+  /// as tall as its content (the phone), or stretched to all the spare height
+  /// when the box fills its space (the tablet).
+  Widget _windowSlot(Widget window) => widget.fill ? Expanded(child: window) : window;
+
   @override
   Widget build(BuildContext context) {
     return Consumer<GameProvider>(
@@ -769,6 +808,7 @@ class _CountdownBoxState extends State<_CountdownBox> with SingleTickerProviderS
         // red color and pulse when low) is unchanged.
         return Container(
           width: double.infinity,
+          height: widget.fill ? double.infinity : null,
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [Color(0xFF6A2A0C), Color(0xFF3A1206), Color(0xFF1C0603), Color(0xFF0D0302)],
@@ -793,6 +833,7 @@ class _CountdownBoxState extends State<_CountdownBox> with SingleTickerProviderS
           child: ClipRRect(
             borderRadius: BorderRadius.circular(6.5),
             child: Stack(
+              fit: widget.fill ? StackFit.expand : StackFit.loose,
               children: [
                 // Soft dark band along the bottom (the plate curving away).
                 Positioned(
@@ -813,8 +854,9 @@ class _CountdownBoxState extends State<_CountdownBox> with SingleTickerProviderS
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // The pressed-in number window.
-                      Container(
+                      // The pressed-in number window (when the box fills its
+                      // space, the window takes all the height not used by the label).
+                      _windowSlot(Container(
                         margin: const EdgeInsets.symmetric(horizontal: 7),
                         padding: const EdgeInsets.symmetric(vertical: 3),
                         decoration: BoxDecoration(
@@ -868,7 +910,7 @@ class _CountdownBoxState extends State<_CountdownBox> with SingleTickerProviderS
                                 child: Text(
                                   game.isSpinning ? '00' : game.countdown.toString().padLeft(2, '0'),
                                   style: GoogleFonts.oswald(
-                                    fontSize: 28,
+                                    fontSize: widget.digitSize,
                                     fontWeight: FontWeight.w700,
                                     height: 1.1,
                                     color: isLow ? AppColors.dangerRed : AppColors.goldBright,
@@ -887,7 +929,7 @@ class _CountdownBoxState extends State<_CountdownBox> with SingleTickerProviderS
                             ),
                           ],
                         ),
-                      ),
+                      )),
                       const SizedBox(height: 3),
                       Text(
                         'SECONDS LEFT',
