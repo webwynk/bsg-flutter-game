@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/game_provider.dart';
 import '../controls/exit_corner_button.dart';
-import '../controls/right_panel.dart';
 import '../panels/left_tab_strip.dart';
 import '../wheel/wheel_widget.dart';
 import 'scaled_box.dart';
+import 'tablet_right_panel.dart';
 import 'tablet_status_pill.dart';
 
 /// The Triple Chance game layout for tablet-sized screens (see `isTabletScreen`).
@@ -17,8 +17,9 @@ import 'tablet_status_pill.dart';
 ///  - left: the three mode tabs and their number grids (the phone widget, drawn bigger),
 ///  - centre: the wheel (the phone widget, drawn bigger), the status pill above it
 ///    and the exit key at its top-right corner,
-///  - right: the control panel (the phone widget, drawn bigger).
-/// Later tablet phases rearrange the right panel (chip row, 2 x 2 buttons).
+///  - right: the tablet control panel (`TabletRightPanel`: the phone panel's
+///    parts, with the chips in a row), drawn bigger.
+/// Later tablet phases arrange the action buttons as a 2 x 2 block.
 ///
 /// Zone widths follow the screen shape: a wide screen (width/height >= 1.5,
 /// e.g. 16:10) gets 20% left and 30% right; a squarer one (e.g. 4:3) gets
@@ -128,7 +129,7 @@ class TabletGameLayout extends StatelessWidget {
                 designWidth: right / kRight,
                 designHeight: h / kRight,
                 scale: kRight,
-                child: RightControlPanel(onSpin: onSpin, showStatusHeader: false),
+                child: TabletRightPanel(onSpin: onSpin),
               ),
             ),
           ],

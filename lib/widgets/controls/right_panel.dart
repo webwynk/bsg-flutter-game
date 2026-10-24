@@ -12,11 +12,7 @@ import '../overlays/info_dialog.dart';
 
 class RightControlPanel extends StatelessWidget {
   final VoidCallback onSpin;
-  /// Whether the top bar with the "Place your chips" / "No More Play" message
-  /// is shown. Always true on the phone; the tablet screen turns it off
-  /// because it shows that message in its own pill above the wheel.
-  final bool showStatusHeader;
-  const RightControlPanel({super.key, required this.onSpin, this.showStatusHeader = true});
+  const RightControlPanel({super.key, required this.onSpin});
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +20,7 @@ class RightControlPanel extends StatelessWidget {
       decoration: AppDecorations.rightPanel,
       child: Column(
         children: [
-          if (showStatusHeader) _PanelHeader(),
+          _PanelHeader(),
           _StatsPanel(),
           _HistoryGrid(),
           _ControlArea(onSpin: onSpin),
@@ -33,6 +29,25 @@ class RightControlPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Pieces of the control panel that the tablet layout (`TabletRightPanel`)
+/// arranges in its own positions. They are the very same widgets the phone
+/// panel uses; only their visibility changed, so the phone panel and the
+/// tablet panel show the same numbers and behave the same way.
+class RightPanelParts {
+  RightPanelParts._();
+
+  /// Play, win and balance.
+  static Widget stats() => _StatsPanel();
+
+  /// The last ten results, three rows (red, green, black). The tablet passes
+  /// a taller [cellHeight] and bigger [fontSize] than the phone's 12 and 8.5.
+  static Widget history({double cellHeight = 12, double fontSize = 8.5}) =>
+      _HistoryGrid(cellHeight: cellHeight, fontSize: fontSize);
+
+  /// The four action buttons stacked over the countdown box.
+  static Widget actions(VoidCallback onSpin) => _ActionColumn(onSpin: onSpin);
 }
 
 class _PanelHeader extends StatefulWidget {
@@ -227,6 +242,12 @@ class _StatsPanel extends StatelessWidget {
 }
 
 class _HistoryGrid extends StatelessWidget {
+  /// Height of one digit cell and the digit's font size; the phone's values
+  /// are the defaults.
+  final double cellHeight;
+  final double fontSize;
+  const _HistoryGrid({this.cellHeight = 12, this.fontSize = 8.5});
+
   @override
   Widget build(BuildContext context) {
     return Consumer<GameProvider>(
@@ -262,11 +283,11 @@ class _HistoryGrid extends StatelessWidget {
                   return Expanded(
                     child: Column(
                       children: [
-                        _DigitCell(spin?.red, const Color(0xFFffbbbb)),
+                        _DigitCell(spin?.red, const Color(0xFFffbbbb), cellHeight, fontSize),
                         const SizedBox(height: 1),
-                        _DigitCell(spin?.green, const Color(0xFFaaffcc)),
+                        _DigitCell(spin?.green, const Color(0xFFaaffcc), cellHeight, fontSize),
                         const SizedBox(height: 1),
-                        _DigitCell(spin?.black, Colors.white),
+                        _DigitCell(spin?.black, Colors.white, cellHeight, fontSize),
                       ],
                     ),
                   );
@@ -283,12 +304,14 @@ class _HistoryGrid extends StatelessWidget {
 class _DigitCell extends StatelessWidget {
   final int? digit;
   final Color textColor;
-  const _DigitCell(this.digit, this.textColor);
+  final double height;
+  final double fontSize;
+  const _DigitCell(this.digit, this.textColor, this.height, this.fontSize);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 12,
+      height: height,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: digit != null ? const Color(0xFF1E0400) : Colors.transparent,
@@ -299,7 +322,7 @@ class _DigitCell extends StatelessWidget {
         style: TextStyle(
           fontFamily: 'Oswald',
           fontWeight: FontWeight.bold,
-          fontSize: 8.5,
+          fontSize: fontSize,
           color: digit != null ? textColor : Colors.white24,
         ),
       ),
