@@ -263,6 +263,8 @@ class _GameScreenState extends State<GameScreen> {
 
   Future<bool?> _showExitConfirmation(BuildContext context) {
     bool isClosed = false;
+    // Drawn bigger on tablet and desktop-sized screens (1.0 on a phone).
+    final scale = popupScaleFor(MediaQuery.of(context).size);
     SoundService().playNotification();
     return showGeneralDialog<bool>(
       context: context,
@@ -278,7 +280,9 @@ class _GameScreenState extends State<GameScreen> {
           }
         });
 
-        return Center(
+        return Transform.scale(
+          scale: scale,
+          child: Center(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: BackdropFilter(
@@ -445,6 +449,7 @@ class _GameScreenState extends State<GameScreen> {
                 ),
               ),
             ),
+          ),
           ),
         );
       },
@@ -624,6 +629,8 @@ class _GameScreenState extends State<GameScreen> {
 
   void _showInsufficientCoinsDialog(BuildContext context) {
     bool isClosed = false;
+    // Drawn bigger on tablet and desktop-sized screens (1.0 on a phone).
+    final scale = popupScaleFor(MediaQuery.of(context).size);
     SoundService().playNotification();
     showGeneralDialog(
       context: context,
@@ -639,7 +646,9 @@ class _GameScreenState extends State<GameScreen> {
           }
         });
 
-        return Center(
+        return Transform.scale(
+          scale: scale,
+          child: Center(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: BackdropFilter(
@@ -754,6 +763,7 @@ class _GameScreenState extends State<GameScreen> {
                 ),
               ),
             ),
+          ),
           ),
         );
       },
