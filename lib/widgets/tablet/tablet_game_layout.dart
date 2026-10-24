@@ -35,15 +35,36 @@ class TabletGameLayout extends StatelessWidget {
   static const double _panelDesignWidth = 236.0;
   static const double _wheelDesignSize = 390.0;
 
+  /// The share of the screen width taken by the left tab zone and by the right
+  /// panel zone: 20% / 30% on a wide screen (width/height at least 1.5, e.g.
+  /// 16:10), 22% / 32% on a squarer one (e.g. 4:3).
+  static (double, double) zoneFractions(Size screen) {
+    final bool wide = screen.width / screen.height >= 1.5;
+    return (wide ? 0.20 : 0.22, wide ? 0.30 : 0.32);
+  }
+
+  /// Where the wheel's centre is, as a fraction of the screen width (the
+  /// middle of the zone between the left tabs and the right panel). The coin
+  /// fountain starts there.
+  static double wheelCenterX(Size screen) {
+    final (l, r) = zoneFractions(screen);
+    return l + (1 - l - r) / 2;
+  }
+
+  /// How much bigger than on the phone the win popup and the coin fountain are
+  /// drawn on this screen: the screen width over the phone design's 844,
+  /// between 1.0 and 1.5.
+  static double overlayScale(Size screen) => (screen.width / 844).clamp(1.0, 1.5).toDouble();
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double w = constraints.maxWidth;
         final double h = constraints.maxHeight;
-        final bool wide = w / h >= 1.5;
-        final double left = w * (wide ? 0.20 : 0.22);
-        final double right = w * (wide ? 0.30 : 0.32);
+        final (leftFraction, rightFraction) = zoneFractions(Size(w, h));
+        final double left = w * leftFraction;
+        final double right = w * rightFraction;
         final double centre = w - left - right;
 
         final double kLeft = left / _stripDesignWidth;

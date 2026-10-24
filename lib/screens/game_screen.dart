@@ -14,7 +14,9 @@ import '../widgets/wheel/wheel_widget.dart';
 import '../widgets/panels/left_tab_strip.dart';
 import '../widgets/controls/right_panel.dart';
 import '../widgets/controls/exit_corner_button.dart';
+import '../widgets/tablet/tablet_coin_fountain.dart';
 import '../widgets/tablet/tablet_game_layout.dart';
+import '../widgets/tablet/tablet_result_overlay.dart';
 import '../utils/device_type.dart';
 import '../widgets/overlays/coin_fountain.dart';
 import '../widgets/overlays/result_overlay.dart';
@@ -1005,6 +1007,10 @@ class _GameScreenState extends State<GameScreen> {
               Consumer<GameProvider>(
                 builder: (_, game, __) {
                   if (!game.showCoinFx) return const SizedBox.shrink();
+                  // Tablet-sized screens use their own centring and size.
+                  if (isTabletScreen(MediaQuery.of(context).size)) {
+                    return const TabletCoinFountain();
+                  }
                   final w = MediaQuery.of(context).size.width;
                   return CoinFountain(
                     autoPlay: true,
@@ -1018,7 +1024,9 @@ class _GameScreenState extends State<GameScreen> {
               Consumer<GameProvider>(
                 builder: (_, game, __) =>
                   (game.lastResult != null && game.lastResult!.won)
-                    ? const ResultOverlay()
+                    ? (isTabletScreen(MediaQuery.of(context).size)
+                        ? const TabletResultOverlay()
+                        : const ResultOverlay())
                     : const SizedBox.shrink(),
               ),
 
