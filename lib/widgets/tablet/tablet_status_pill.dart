@@ -13,7 +13,10 @@ import '../../theme/app_text_styles.dart';
 /// [scale] sizes the pill for the screen (1.0 is the 1280-wide design).
 class TabletStatusPill extends StatefulWidget {
   final double scale;
-  const TabletStatusPill({super.key, this.scale = 1.0});
+  /// Whether the pill has its gold border. True on the tablet; the desktop top
+  /// bar uses it without a border.
+  final bool bordered;
+  const TabletStatusPill({super.key, this.scale = 1.0, this.bordered = true});
 
   @override
   State<TabletStatusPill> createState() => _TabletStatusPillState();
@@ -72,7 +75,9 @@ class _TabletStatusPillState extends State<TabletStatusPill> with SingleTickerPr
               end: Alignment.bottomCenter,
             ),
             borderRadius: BorderRadius.circular(12 * s),
-            border: Border.all(color: AppColors.goldPrimary, width: 2 * s),
+            border: widget.bordered
+                ? Border.all(color: AppColors.goldPrimary, width: 2 * s)
+                : null,
             boxShadow: [
               BoxShadow(color: const Color(0xFF120000), offset: Offset(0, 4 * s)),
               BoxShadow(

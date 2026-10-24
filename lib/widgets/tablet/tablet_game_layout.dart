@@ -26,7 +26,11 @@ import 'tablet_status_pill.dart';
 /// 22% and 32%.
 class TabletGameLayout extends StatelessWidget {
   final VoidCallback onSpin;
-  const TabletGameLayout({super.key, required this.onSpin});
+  /// Key of the wheel, owned by `GameScreen`, so the wheel keeps its state
+  /// (a spin in progress, the landed result) if the window is resized and
+  /// another layout takes over.
+  final Key? wheelKey;
+  const TabletGameLayout({super.key, required this.onSpin, this.wheelKey});
 
   // The phone widgets' own design sizes: the closed tab strip is 158 wide
   // (3 tabs of 50 + 8 padding), the right panel is 236 wide on an 844-wide
@@ -93,7 +97,7 @@ class TabletGameLayout extends StatelessWidget {
                           onTap: () {
                             if (game.isDrawerOpen) game.closeDrawer();
                           },
-                          child: const WheelWidget(),
+                          child: WheelWidget(key: wheelKey),
                         ),
                       );
                     },

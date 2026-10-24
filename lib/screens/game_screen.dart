@@ -14,6 +14,7 @@ import '../widgets/wheel/wheel_widget.dart';
 import '../widgets/panels/left_tab_strip.dart';
 import '../widgets/controls/right_panel.dart';
 import '../widgets/controls/exit_corner_button.dart';
+import '../widgets/desktop/desktop_game_layout.dart';
 import '../widgets/tablet/tablet_coin_fountain.dart';
 import '../widgets/tablet/tablet_game_layout.dart';
 import '../widgets/tablet/tablet_result_overlay.dart';
@@ -43,6 +44,10 @@ class _GameScreenState extends State<GameScreen> {
   // for, so it's shown once per distinct disconnection rather than once per
   // rebuild (RoundSyncService can notify repeatedly while still down).
   bool _connectionDialogShowing = false;
+  // The wheel's key. The same wheel is used by the phone, tablet and desktop
+  // layouts; keeping one key lets it keep its state (a spin in progress, the
+  // landed result) when a resized window switches from one layout to another.
+  final GlobalKey _wheelKey = GlobalKey();
 
   @override
   void initState() {
@@ -930,8 +935,10 @@ class _GameScreenState extends State<GameScreen> {
               // Tablet-sized screens get the tablet arrangement of the same
               // parts; every other screen gets the phone layout below,
               // unchanged. All game logic stays in this State.
-              if (isTabletScreen(MediaQuery.of(context).size))
-                TabletGameLayout(onSpin: _handleSpin)
+              if (isDesktopScreen(MediaQuery.of(context).size))
+                DesktopGameLayout(onSpin: _handleSpin, wheelKey: _wheelKey)
+              else if (isTabletScreen(MediaQuery.of(context).size))
+                TabletGameLayout(onSpin: _handleSpin, wheelKey: _wheelKey)
               else
               Stack(
                 fit: StackFit.expand,
@@ -949,7 +956,7 @@ class _GameScreenState extends State<GameScreen> {
                             onTap: () {
                               if (game.isDrawerOpen) game.closeDrawer();
                             },
-                            child: const WheelWidget(),
+                            child: WheelWidget(key: _wheelKey),
                           ),
                         );
                       },

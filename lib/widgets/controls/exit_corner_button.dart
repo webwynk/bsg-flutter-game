@@ -11,7 +11,10 @@ import 'package:flutter/material.dart';
 /// a shine band, a gold rim) and sinks 2px while held. The visible button is
 /// 30x30; the tappable area is 40x40 (5px of invisible padding on every side).
 class ExitCornerButton extends StatefulWidget {
-  const ExitCornerButton({super.key});
+  /// Whether the button has its thin gold rim. True everywhere except the
+  /// desktop top bar, whose elements have no borders.
+  final bool bordered;
+  const ExitCornerButton({super.key, this.bordered = true});
 
   @override
   State<ExitCornerButton> createState() => _ExitCornerButtonState();
@@ -52,7 +55,9 @@ class _ExitCornerButtonState extends State<ExitCornerButton> {
                     end: Alignment.bottomCenter,
                   ),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFFFE27A), width: 1.5),
+                  border: widget.bordered
+                      ? Border.all(color: const Color(0xFFFFE27A), width: 1.5)
+                      : null,
                   boxShadow: [
                     BoxShadow(
                       color: const Color(0xFF3A0610),

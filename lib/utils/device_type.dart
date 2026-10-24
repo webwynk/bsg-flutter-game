@@ -11,6 +11,13 @@ import 'package:flutter/widgets.dart';
 bool isTabletScreen(Size screen) =>
     math.min(screen.width, screen.height) >= 600 && math.max(screen.width, screen.height) >= 800;
 
+/// True for a screen big enough for the desktop arrangement of the Triple
+/// Chance game screen (all three boards on screen at once): at least 1280dp
+/// wide and 720dp high, in logical pixels. Checked before [isTabletScreen], so
+/// a big tablet or an emulator window of this size gets the desktop layout.
+/// Same threshold the Lucky Card screen uses for its own desktop arrangement.
+bool isDesktopScreen(Size screen) => screen.width >= 1280 && screen.height >= 720;
+
 /// True only for a phone-sized Android/iOS device.
 ///
 /// Two conditions, not one: the OS check alone would still say true on a
