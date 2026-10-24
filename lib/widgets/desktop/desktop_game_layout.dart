@@ -7,6 +7,7 @@ import '../wheel/wheel_widget.dart';
 import 'desktop_doubles_board.dart';
 import 'desktop_singles_board.dart';
 import 'desktop_top_bar.dart';
+import 'desktop_triples_board.dart';
 
 /// The Triple Chance game layout for desktop-sized screens (see
 /// `isDesktopScreen`): laptops and desktops running the web build or the
@@ -17,8 +18,9 @@ import 'desktop_top_bar.dart';
 /// One screen, designed at [designWidth] x [designHeight], drawn scaled to fit
 /// the window (the larger the window, the bigger everything; the background
 /// behind it fills any leftover edges). Built so far: the top bar, the wheel,
-/// the chip tray, the Singles row, the Doubles board and the four action
-/// buttons. The Triples board and the results follow in later desktop phases.
+/// the chip tray, the three boards (Singles, Doubles, Triples) and the four
+/// action buttons. The results table and the PLAY / WIN box follow in later
+/// desktop phases.
 class DesktopGameLayout extends StatelessWidget {
   final VoidCallback onSpin;
   /// Key of the wheel, owned by `GameScreen`, so the wheel keeps its state
@@ -67,6 +69,9 @@ class DesktopGameLayout extends StatelessWidget {
 
                 // The Doubles board, left of the wheel.
                 const Positioned(left: 10, top: 74, width: 380, child: DesktopDoublesBoard()),
+
+                // The Triples board, right of the wheel.
+                const Positioned(left: 890, top: 74, width: 380, child: DesktopTriplesBoard()),
 
                 // The Singles row under the wheel, then the chip tray.
                 const Positioned(left: 430, top: 508, width: 410, child: DesktopSinglesBoard()),
