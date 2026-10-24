@@ -14,7 +14,9 @@ import '../widgets/wheel/wheel_widget.dart';
 import '../widgets/panels/left_tab_strip.dart';
 import '../widgets/controls/right_panel.dart';
 import '../widgets/controls/exit_corner_button.dart';
+import '../widgets/desktop/desktop_coin_fountain.dart';
 import '../widgets/desktop/desktop_game_layout.dart';
+import '../widgets/desktop/desktop_result_overlay.dart';
 import '../widgets/tablet/tablet_coin_fountain.dart';
 import '../widgets/tablet/tablet_game_layout.dart';
 import '../widgets/tablet/tablet_result_overlay.dart';
@@ -1014,7 +1016,11 @@ class _GameScreenState extends State<GameScreen> {
               Consumer<GameProvider>(
                 builder: (_, game, __) {
                   if (!game.showCoinFx) return const SizedBox.shrink();
-                  // Tablet-sized screens use their own centring and size.
+                  // Desktop-sized windows burst from the desktop wheel's centre;
+                  // tablet-sized screens use their own centring and size.
+                  if (isDesktopScreen(MediaQuery.of(context).size)) {
+                    return const DesktopCoinFountain();
+                  }
                   if (isTabletScreen(MediaQuery.of(context).size)) {
                     return const TabletCoinFountain();
                   }
@@ -1031,9 +1037,11 @@ class _GameScreenState extends State<GameScreen> {
               Consumer<GameProvider>(
                 builder: (_, game, __) =>
                   (game.lastResult != null && game.lastResult!.won)
-                    ? (isTabletScreen(MediaQuery.of(context).size)
-                        ? const TabletResultOverlay()
-                        : const ResultOverlay())
+                    ? (isDesktopScreen(MediaQuery.of(context).size)
+                        ? const DesktopResultOverlay()
+                        : isTabletScreen(MediaQuery.of(context).size)
+                            ? const TabletResultOverlay()
+                            : const ResultOverlay())
                     : const SizedBox.shrink(),
               ),
 

@@ -45,6 +45,24 @@ class DesktopGameLayout extends StatelessWidget {
   static double scaleFor(Size window) =>
       math.min(window.width / designWidth, window.height / designHeight);
 
+  /// Where the wheel's centre is on a window of this size, as fractions of the
+  /// window's width and height: the layout is scaled and centred, so this
+  /// follows it (and the coin fountain starts there).
+  static Offset wheelCenterFraction(Size window) {
+    final s = scaleFor(window);
+    final left = (window.width - designWidth * s) / 2;
+    final top = (window.height - designHeight * s) / 2;
+    return Offset(
+      (left + _wheelCenter.dx * s) / window.width,
+      (top + _wheelCenter.dy * s) / window.height,
+    );
+  }
+
+  /// How much bigger than on the phone the win popup and the coin fountain are
+  /// drawn on a window of this size: 1.5 (the tablet's largest) times however
+  /// much the layout itself is enlarged, so they stay in proportion to it.
+  static double overlayScale(Size window) => 1.5 * scaleFor(window);
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
