@@ -5,7 +5,9 @@ import '../tablet/scaled_box.dart';
 import '../tablet/tablet_chip_row.dart';
 import '../wheel/wheel_widget.dart';
 import 'desktop_doubles_board.dart';
+import 'desktop_results_table.dart';
 import 'desktop_singles_board.dart';
+import 'desktop_stats_box.dart';
 import 'desktop_top_bar.dart';
 import 'desktop_triples_board.dart';
 
@@ -18,9 +20,9 @@ import 'desktop_triples_board.dart';
 /// One screen, designed at [designWidth] x [designHeight], drawn scaled to fit
 /// the window (the larger the window, the bigger everything; the background
 /// behind it fills any leftover edges). Built so far: the top bar, the wheel,
-/// the chip tray, the three boards (Singles, Doubles, Triples) and the four
-/// action buttons. The results table and the PLAY / WIN box follow in later
-/// desktop phases.
+/// the chip tray, the three boards (Singles, Doubles, Triples), the four
+/// action buttons, the results table and the PLAY / WIN box. The desktop coin
+/// fountain and win popup follow in a later desktop phase.
 class DesktopGameLayout extends StatelessWidget {
   final VoidCallback onSpin;
   /// Key of the wheel, owned by `GameScreen`, so the wheel keeps its state
@@ -72,6 +74,10 @@ class DesktopGameLayout extends StatelessWidget {
 
                 // The Triples board, right of the wheel.
                 const Positioned(left: 890, top: 74, width: 380, child: DesktopTriplesBoard()),
+
+                // The results table and the PLAY / WIN box, bottom left.
+                const Positioned(left: 10, top: 534, width: 380, height: 100, child: DesktopResultsTable()),
+                const Positioned(left: 10, top: 646, width: 380, height: 62, child: DesktopStatsBox()),
 
                 // The Singles row under the wheel, then the chip tray.
                 const Positioned(left: 430, top: 508, width: 410, child: DesktopSinglesBoard()),
