@@ -1,8 +1,10 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../controls/right_panel.dart';
 import '../tablet/scaled_box.dart';
 import '../tablet/tablet_chip_row.dart';
 import '../wheel/wheel_widget.dart';
+import 'desktop_singles_board.dart';
 import 'desktop_top_bar.dart';
 
 /// The Triple Chance game layout for desktop-sized screens (see
@@ -13,9 +15,9 @@ import 'desktop_top_bar.dart';
 ///
 /// One screen, designed at [designWidth] x [designHeight], drawn scaled to fit
 /// the window (the larger the window, the bigger everything; the background
-/// behind it fills any leftover edges). Built so far: the top bar, the wheel
-/// and the chip tray. The three boards, the buttons and the results follow in
-/// later desktop phases.
+/// behind it fills any leftover edges). Built so far: the top bar, the wheel,
+/// the chip tray, the Singles row and the four action buttons. The Doubles and
+/// Triples boards and the results follow in later desktop phases.
 class DesktopGameLayout extends StatelessWidget {
   final VoidCallback onSpin;
   /// Key of the wheel, owned by `GameScreen`, so the wheel keeps its state
@@ -62,8 +64,12 @@ class DesktopGameLayout extends StatelessWidget {
                   ),
                 ),
 
-                // The chip tray under the wheel.
+                // The Singles row under the wheel, then the chip tray.
+                const Positioned(left: 430, top: 508, width: 410, child: DesktopSinglesBoard()),
                 const Positioned(left: 450, top: 614, width: 370, height: 92, child: _ChipTray()),
+
+                // The four action buttons, bottom right.
+                Positioned(left: 890, top: 572, width: 380, height: 128, child: RightPanelParts.desktopButtons()),
 
                 const Positioned(left: 0, top: 0, right: 0, child: DesktopTopBar()),
               ],

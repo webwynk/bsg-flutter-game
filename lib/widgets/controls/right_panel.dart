@@ -52,6 +52,10 @@ class RightPanelParts {
   /// (the tablet).
   static Widget actions(VoidCallback onSpin, {bool twoByTwo = false}) =>
       _ActionColumn(onSpin: onSpin, twoByTwo: twoByTwo);
+
+  /// The desktop screen's four buttons: DOUBLE UP, REPEAT, CLEAR and REMOVE as
+  /// a 2 x 2 block (see `_DesktopButtonBlock`).
+  static Widget desktopButtons() => const _DesktopButtonBlock();
 }
 
 class _PanelHeader extends StatefulWidget {
@@ -543,6 +547,80 @@ class _ActionColumn extends StatelessWidget {
 
   void _showInfo(BuildContext context, GameProvider game) {
     InfoDialog.show(context);
+  }
+}
+
+/// The four action buttons of the desktop screen as a 2 x 2 block: DOUBLE UP
+/// and REPEAT on top, CLEAR and REMOVE below. (INFO is the icon in the desktop
+/// top bar.) They are the phone's buttons and follow the phone's rules, and
+/// make the same calls:
+///  - DOUBLE UP (the phone's DOUBLE): usable when there are bets,
+///    `game.doDouble(auth)`.
+///  - REPEAT (the phone's REBET): usable when `game.canRebet` and the player
+///    can afford it, `game.rebet(auth)`. The phone shows it in place of DOUBLE;
+///    here both are always visible, and since `canRebet` needs an empty board
+///    while DOUBLE UP needs bets, only one of them is usable at a time.
+///  - CLEAR: usable when there are bets, `game.clearBets(auth)`.
+///  - REMOVE: usable when there are bets, `game.deselectChip()`.
+/// All are locked in the last 5 seconds and while spinning.
+class _DesktopButtonBlock extends StatelessWidget {
+  const _DesktopButtonBlock();
+
+  static const _doubleUp = (
+    'DOUBLE UP',
+    [Color(0xFFFFD700), Color(0xFF8B6914)],
+    Color(0xFF350000),
+    AppColors.goldBright,
+  );
+  static const _repeat = (
+    'REPEAT',
+    [Color(0xFF6A0DAD), Color(0xFF3A0060)],
+    Colors.white,
+    Color(0xFFCC88FF),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer2<GameProvider, AuthProvider>(
+      builder: (_, game, auth, __) {
+        final hasBets = game.board.total > 0;
+        final isLocked = game.countdown <= 5 || game.isSpinning;
+        final canRepeat = game.canRebet && game.canAffordRebet(auth);
+        return Column(
+          children: [
+            SizedBox(
+              height: 58,
+              child: Row(
+                children: [
+                  _ActionBtn(_doubleUp,
+                      isEnabled: hasBets && !isLocked,
+                      onTap: () => game.doDouble(auth)),
+                  const SizedBox(width: 14),
+                  _ActionBtn(_repeat,
+                      isEnabled: canRepeat && !isLocked,
+                      onTap: () => game.rebet(auth)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 58,
+              child: Row(
+                children: [
+                  _ActionBtn(_ActionColumn._btns[2],
+                      isEnabled: hasBets && !isLocked,
+                      onTap: () => game.clearBets(auth)),
+                  const SizedBox(width: 14),
+                  _ActionBtn(_ActionColumn._btns[3],
+                      isEnabled: hasBets && !isLocked,
+                      onTap: () => game.deselectChip()),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 
