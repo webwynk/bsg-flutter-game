@@ -6,7 +6,12 @@ import '../../theme/app_colors.dart';
 import 'grids.dart';
 
 class LeftAccordionPanel extends StatelessWidget {
-  const LeftAccordionPanel({super.key});
+  /// Width of the area left of the right control panel (the tabs plus any
+  /// open grid may use all of it). Null on the phone: it is then worked out as
+  /// the screen width minus the right panel's 28%. The tablet screen passes its
+  /// own value, because its right panel is not 28% wide.
+  final double? areaWidth;
+  const LeftAccordionPanel({super.key, this.areaWidth});
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +23,7 @@ class LeftAccordionPanel extends StatelessWidget {
         final double screenWidth = MediaQuery.of(context).size.width;
         final double rightPanelWidth = screenWidth * 0.28;
         // Total width available for the entire LeftAccordionPanel and the Wheel
-        final double totalLeftAreaWidth = screenWidth - rightPanelWidth;
+        final double totalLeftAreaWidth = areaWidth ?? (screenWidth - rightPanelWidth);
         // The three mode tabs each take 45px + 5px margin = 50px each -> 150px total.
         // We add some padding (4 left + 4 right = 8). Total static width ≈ 158px.
         final double tabsWidth = (45.0 + 5.0) * 3 + 8.0;

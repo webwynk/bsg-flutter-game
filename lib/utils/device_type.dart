@@ -1,5 +1,15 @@
 import 'dart:io' show Platform;
+import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
+
+/// True for a screen big enough for the tablet arrangement of the Triple
+/// Chance game screen: at least 600dp on the shorter side (Android's own
+/// tablet breakpoint; the biggest phones are about 430dp) and at least 800dp
+/// on the longer side (so an odd near-square screen stays on the phone
+/// arrangement). Landscape or portrait does not matter. Same rule the Lucky
+/// Card screen uses for its own tablet arrangement.
+bool isTabletScreen(Size screen) =>
+    math.min(screen.width, screen.height) >= 600 && math.max(screen.width, screen.height) >= 800;
 
 /// True only for a phone-sized Android/iOS device.
 ///

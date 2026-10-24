@@ -14,6 +14,8 @@ import '../widgets/wheel/wheel_widget.dart';
 import '../widgets/panels/left_tab_strip.dart';
 import '../widgets/controls/right_panel.dart';
 import '../widgets/controls/exit_corner_button.dart';
+import '../widgets/tablet/tablet_game_layout.dart';
+import '../utils/device_type.dart';
 import '../widgets/overlays/coin_fountain.dart';
 import '../widgets/overlays/result_overlay.dart';
 import '../models/play_limits_config.dart';
@@ -923,6 +925,12 @@ class _GameScreenState extends State<GameScreen> {
               ),
   
               // ── Main game layout ────────────────────────────────────
+              // Tablet-sized screens get the tablet arrangement of the same
+              // parts; every other screen gets the phone layout below,
+              // unchanged. All game logic stays in this State.
+              if (isTabletScreen(MediaQuery.of(context).size))
+                TabletGameLayout(onSpin: _handleSpin)
+              else
               Stack(
                 fit: StackFit.expand,
                 children: [

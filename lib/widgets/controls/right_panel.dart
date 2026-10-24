@@ -12,7 +12,11 @@ import '../overlays/info_dialog.dart';
 
 class RightControlPanel extends StatelessWidget {
   final VoidCallback onSpin;
-  const RightControlPanel({super.key, required this.onSpin});
+  /// Whether the top bar with the "Place your chips" / "No More Play" message
+  /// is shown. Always true on the phone; the tablet screen turns it off
+  /// because it shows that message in its own pill above the wheel.
+  final bool showStatusHeader;
+  const RightControlPanel({super.key, required this.onSpin, this.showStatusHeader = true});
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +24,7 @@ class RightControlPanel extends StatelessWidget {
       decoration: AppDecorations.rightPanel,
       child: Column(
         children: [
-          _PanelHeader(),
+          if (showStatusHeader) _PanelHeader(),
           _StatsPanel(),
           _HistoryGrid(),
           _ControlArea(onSpin: onSpin),
