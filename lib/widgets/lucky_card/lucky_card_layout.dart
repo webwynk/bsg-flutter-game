@@ -37,7 +37,7 @@
 // ([resultsBar]) and under that one bar holding the five chips and the three buttons in a row
 // ([actionBar]). [LuckyCardLayout.of] only makes it when told so (`desktopPlatform`); the real Lucky
 // Card screen always tells it yes, so in the app it is chosen by screen size alone (>= 1280 x 720 dp),
-// like Triple Chance. Without the flag (a test) the screen asks the platform ([luckyCardRunsOnDesktop]).
+// like Triple Chance. Without the flag (a test) the screen is never the desktop one.
 //
 // Belongs to Lucky Card only.
 

@@ -64,7 +64,6 @@ import '../widgets/lucky_card/lucky_card_history_dialog.dart';
 import '../widgets/lucky_card/lucky_card_info_dialog.dart';
 import '../widgets/lucky_card/lucky_card_layout.dart';
 import '../widgets/lucky_card/lucky_card_messages.dart';
-import '../widgets/lucky_card/lucky_card_platform.dart';
 import '../widgets/lucky_card/lucky_card_readouts_binding.dart';
 import '../widgets/lucky_card/lucky_card_region_swap.dart';
 import '../widgets/lucky_card/lucky_card_reveal_binding.dart';
@@ -94,8 +93,8 @@ class LuckyCardScreenSetup {
   /// always on screen at the left, the board dimmed while betting is closed, the results row and the
   /// chips-and-buttons bar). The real app's default setup ([_defaultSetup]) passes true, so the choice
   /// is by screen size alone, like Triple Chance, on every platform (including an Android emulator on
-  /// a desktop). Null means "ask the platform" ([luckyCardRunsOnDesktop]: Windows, macOS, Linux and the
-  /// web say yes, Android and iOS no), which is what a test that leaves it unset sees.
+  /// a desktop). Null (only a test that leaves it unset) means false: the phone and tablet
+  /// arrangements however big the screen is.
   final bool? desktopPlatform;
 
   /// The player's history. When null the screen makes its own (over the real database read)
@@ -178,7 +177,7 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
     _ownsHistory = setup.history == null || setup.ownsHistory;
     _sound = setup.sound ?? LuckyCardSound();
     _endSession = setup.endSession;
-    _desktopPlatform = setup.desktopPlatform ?? luckyCardRunsOnDesktop();
+    _desktopPlatform = setup.desktopPlatform ?? false;
     _auth = setup.auth;
     if (widget.setup == null) _auth = context.read<AuthProvider>();
     // Read when HISTORY is tapped, not now: with no login (a test) the list is empty.
