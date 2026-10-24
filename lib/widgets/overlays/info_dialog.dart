@@ -1481,20 +1481,12 @@ class _RuleCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.goldPrimary.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(8),
-          border: Border(
-            left: BorderSide(
-                color: AppColors.goldGlow.withValues(alpha: 0.55),
-                width: 3),
-            top: BorderSide(
-                color: AppColors.goldPrimary.withValues(alpha: 0.12),
-                width: 0.5),
-            bottom: BorderSide(
-                color: AppColors.goldPrimary.withValues(alpha: 0.12),
-                width: 0.5),
-            right: BorderSide(
-                color: AppColors.goldPrimary.withValues(alpha: 0.12),
-                width: 0.5),
-          ),
+          // Issue #125: one even border on all four sides. The old border had a
+          // bright 3 px left side and faint thin other sides; Flutter cannot
+          // round the corners of a border whose sides differ in color (debug
+          // builds raised an error, release builds drew square corners).
+          border: Border.all(
+              color: AppColors.goldPrimary.withValues(alpha: 0.3), width: 1),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
