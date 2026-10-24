@@ -1,5 +1,5 @@
 // Tests for lib/providers/lucky_card_provider.dart, part 2b (App Step 3b-2b): the
-// last-10 history strip, a round that never resolves, late joiners, and leaving
+// last-12 history strip, a round that never resolves, late joiners, and leaving
 // at every stage of the sequence.
 //
 // The simulated round `cycle` is won by card 11 with a 4X bonus; a bet of 10 on
@@ -20,12 +20,12 @@ List<int> numbersOf(LuckyCardProvider p) => p.history.map((r) => r.roundNumber).
 
 void main() {
   group('the history strip', () {
-    testWidgets('opened mid-round: the last 10 drawn rounds, newest first, the current round not among them', (tester) async {
+    testWidgets('opened mid-round: the last 12 drawn rounds, newest first, the current round not among them', (tester) async {
       final rig = BetRig(tester);
       await rig.open();
       await rig.world.run(const Duration(seconds: 1));
       final p = rig.provider;
-      expect(numbersOf(p), [for (var n = cycle - 1; n > cycle - 11; n--) n]);
+      expect(numbersOf(p), [for (var n = cycle - 1; n > cycle - 13; n--) n]);
       expect(p.history.first.winningCard, SimulatedLuckyCardServer.winnerOf(cycle - 1));
       expect(p.history.first.bonusMultiplier, SimulatedLuckyCardServer.bonusOf(cycle - 1));
       await rig.finish();
@@ -43,8 +43,8 @@ void main() {
       expect(p.history.first.roundNumber, cycle);
       expect(p.history.first.winningCard, winner);
       expect(p.history.first.bonusMultiplier, bonus);
-      expect(p.history.length, 10);
-      expect(numbersOf(p), [for (var n = cycle; n > cycle - 10; n--) n]);
+      expect(p.history.length, 12);
+      expect(numbersOf(p), [for (var n = cycle; n > cycle - 12; n--) n]);
       await rig.finish();
     });
 
@@ -57,7 +57,7 @@ void main() {
       expect(p.stage, LuckyCardStage.spinning);
       expect(p.history.any((r) => r.roundNumber == cycle), isFalse, reason: 'the server already lists it');
       expect(p.history.first.roundNumber, cycle - 1);
-      expect(numbersOf(p), [for (var n = cycle - 1; n > cycle - 11; n--) n], reason: 'one more is asked for, so the strip is full without the hidden round');
+      expect(numbersOf(p), [for (var n = cycle - 1; n > cycle - 13; n--) n], reason: 'one more is asked for, so the strip is full without the hidden round');
       await rig.finish();
     });
 
@@ -69,7 +69,7 @@ void main() {
       await landWheelAt(rig, rig.world.cyclePosition + 0.1);
       expect(numbersOf(p).where((n) => n == cycle).length, 1);
       expect(p.history.first.roundNumber, cycle);
-      expect(p.history.length, 10);
+      expect(p.history.length, 12);
       await rig.finish();
     });
 
@@ -85,7 +85,7 @@ void main() {
       expect(numbersOf(p), [cycle], reason: 'only the revealed round so far');
 
       await rig.world.run(const Duration(seconds: 3));
-      expect(numbersOf(p), [for (var n = cycle; n > cycle - 10; n--) n]);
+      expect(numbersOf(p), [for (var n = cycle; n > cycle - 12; n--) n]);
       await rig.finish();
     });
 
@@ -103,14 +103,14 @@ void main() {
       await rig.finish();
     });
 
-    testWidgets('two rounds in a row: newest first, no duplicates, never more than 10', (tester) async {
+    testWidgets('two rounds in a row: newest first, no duplicates, never more than 12', (tester) async {
       final rig = BetRig(tester);
       await rig.open();
       final p = rig.provider;
       await landWheelAt(rig, 95.0);
       await rig.runIntoNextCycle(94.0);
       await landWheelAt(rig, 95.0);
-      expect(numbersOf(p), [for (var n = cycle + 1; n > cycle - 9; n--) n]);
+      expect(numbersOf(p), [for (var n = cycle + 1; n > cycle - 11; n--) n]);
       expect(p.history.first.bonusMultiplier, SimulatedLuckyCardServer.bonusOf(cycle + 1));
       await rig.finish();
     });

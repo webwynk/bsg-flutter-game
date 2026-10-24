@@ -13,23 +13,12 @@
 
 import 'package:flutter/widgets.dart';
 
-/// The screen behind everything: a dark red room, brightest up and to the left.
-/// (`radial-gradient(ellipse at 35% 25%, #5a0f18, #2a070c 55%, #160407)`.)
-const List<Color> kDesignBackdrop = [Color(0xFF5A0F18), Color(0xFF2A070C), Color(0xFF160407)];
-const Alignment kDesignBackdropCenter = Alignment(-0.3, -0.5);
-
 /// The header bar: a gold rim around a deep red bar, lit from above.
 const Color kDesignBarRim = Color(0xFFF2C14E);
 const List<Color> kDesignBarFill = [Color(0xFFA3192A), Color(0xFF6E0B17), Color(0xFF4D0710)];
 
 /// The hard shadow under the bar, which gives it its thickness.
 const Color kDesignBarUnder = Color(0xFF2A0408);
-
-/// The pale gold the design's own round buttons were rimmed in. The header no longer draws
-/// this (the user asked it removed, 2026-10-23: a ring on every small button crowded a narrow
-/// phone, and the bar's own rim already frames the row). Kept as a measured value from the
-/// design, not drawn by anything currently.
-const Color kDesignButtonRim = Color(0xFFFFE08A);
 
 /// The four round buttons: the light, the middle and the dark of each ball, then the
 /// hard shadow under it.
@@ -49,9 +38,7 @@ const Color kDesignRulesUnder = Color(0xFF08471D);
 const List<Color> kDesignBalanceWell = [Color(0xFF24030A), Color(0xFF3D0610)];
 const Color kDesignBalanceText = Color(0xFFFFE58A);
 
-/// The countdown: a gold ring that empties as the round runs, around a purple disc.
-const Color kDesignRing = Color(0xFFFFD34D);
-const Color kDesignRingSpent = Color(0x59000000);
+/// The countdown: the number on a purple disc.
 const List<Color> kDesignCountdownDisc = [Color(0xFF5B2AA8), Color(0xFF2E0F63)];
 const Color kDesignCountdownText = Color(0xFFFFFFFF);
 const Color kDesignCountdownShadow = Color(0xFF12052B);
@@ -71,9 +58,7 @@ const Color kDesignAlertText = Color(0xFFFF6A5C);
 const Color kDesignNoticeText = Color(0xFFFFA500);
 
 /// The light along the top edge of a raised piece, and the shade along its bottom.
-const Color kDesignGlossTop = Color(0x73FFFFFF);
 const Color kDesignGlossTopSoft = Color(0x47FFFFFF);
-const Color kDesignGlossBottom = Color(0x40000000);
 
 /// The soft shadow the whole bar casts on the room behind it.
 const Color kDesignDropShadow = Color(0x73000000);
@@ -94,7 +79,7 @@ RadialGradient designBallGradient(List<Color> fill) => RadialGradient(
 const List<Color> kDesignPanelFill = [Color(0xFF3B1466), Color(0xFF24093F)];
 const Color kDesignPanelUnder = Color(0xFF12041F);
 
-/// TOTAL BET (blue) and WIN (green): the face, the label, the hard shadow under the cell and under
+/// PLAY (blue) and WIN (green): the face, the label, the hard shadow under the cell and under
 /// its figure.
 const List<Color> kDesignTotalBetFill = [Color(0xFF4F8DFF), Color(0xFF2459E0), Color(0xFF1A44B8)];
 const Color kDesignTotalBetLabel = Color(0xFFDBE8FF);
@@ -104,23 +89,24 @@ const List<Color> kDesignWinFill = [Color(0xFF4FDC7A), Color(0xFF1FA34A), Color(
 const Color kDesignWinLabel = Color(0xFFDDFFE7);
 const Color kDesignWinUnder = Color(0xFF0A5424);
 
-/// The sunken box holding the results, then its cards.
-/// The newest round is green (recent box: green background, white letter and bonus).
-/// The nine rounds before it are white cards with dark letters and amber/purple bonus.
+/// The sunken box holding the results, then its history cards (spec §17BO).
 const List<Color> kDesignResultsFill = [Color(0xFF1A0630), Color(0xFF2A0D4A)];
 
-const List<Color> kDesignTileFill = [Color(0xFF4FDC7A), Color(0xFF1FA34A)];
-const Color kDesignTileUnder = Color(0xFF0A5424);
-const Color kDesignTileLetter = Color(0xFFFFFFFF);
-const Color kDesignTileBonus = Color(0xFFFFFFFF);
-const Color kDesignTileNoBonus = Color(0xFFDDFFE7);
+/// The history cards. The frames are the user's two pictures (cream for the older rounds, dark
+/// green for the newest). On the cream card the rank letter is red for hearts and diamonds and
+/// black for spades and clubs; on the green card it is white with a thin dark outline and the suit
+/// picture sits on a small cream patch, so every suit stays readable (the user's decision of
+/// 2026-10-24).
+const Color kDesignHistoryRed = Color(0xFFD4141C);
+const Color kDesignHistoryBlack = Color(0xFF1D1A17);
+const Color kDesignHistoryLatestLetter = Color(0xFFFFFFFF);
+const Color kDesignHistoryLatestOutline = Color(0xFF063D1B);
+const Color kDesignHistoryPatch = Color(0xFFF6EEDC);
 
-const List<Color> kDesignOldTileFill = [Color(0xFFFFFFFF), Color(0xFFFFFFFF)];
-const Color kDesignOldTileEdge = Color(0xFFD6CBE6);
-const Color kDesignOldTileUnder = Color(0xFF7A5AA8);
-const Color kDesignOldTileLetter = Color(0xFF24093F);
-const Color kDesignOldTileBonus = Color(0xFFB45F00);
-const Color kDesignOldTileNoBonus = Color(0xFF8A7AA8);
+/// The red bubble with the round's bonus ("N", "2X" to "10X"): a red gradient, a gold ring, white writing.
+const List<Color> kDesignHistoryBubbleFill = [Color(0xFFFF5A52), Color(0xFFC4161C)];
+const Color kDesignHistoryBubbleRing = Color(0xFFFFD34D);
+const Color kDesignHistoryBubbleText = Color(0xFFFFFFFF);
 
 // ── The action buttons (bottom of bet panel) ────────────────────────────
 

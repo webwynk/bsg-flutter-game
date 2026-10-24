@@ -1,6 +1,6 @@
 // The three buttons under the results: DOUBLE (or REBET), CLEAR and REMOVE, side by
-// side, as in Triple Chance's right panel (colours included): DOUBLE gold, REBET
-// purple, CLEAR and REMOVE red.
+// side, in the reference design's gradient looks (lucky_card_palette.dart): DOUBLE lime to orange, REBET
+// purple, CLEAR pink, REMOVE cyan.
 //
 // One button does one thing: when tapped it calls its action and answers with the
 // board's receipt; if the action could not do all it was asked (not enough coins, a
@@ -196,7 +196,7 @@ class _LuckyCardActionButtonState extends State<LuckyCardActionButton> with Sing
     final look = LuckyCardButtonLook.of(widget.control);
     final label = luckyCardControlLabel(widget.control);
     const rim = 2.0;
-    final radius = BorderRadius.circular(14);
+    final radius = BorderRadius.circular(layout.buttonRadius);
 
     final face = DecoratedBox(
       decoration: BoxDecoration(

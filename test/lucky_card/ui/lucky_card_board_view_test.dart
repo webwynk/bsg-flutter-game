@@ -112,7 +112,7 @@ void main() {
           expect(rect.width, greaterThanOrEqualTo(kLuckyCardMinTapDp));
           expect(rect.height, greaterThan(0));
 
-          final bar = layout.suitBar(s.index).shift(origin);
+          final bar = layout.suitHeader(s.index).shift(origin);
           final panel = LuckyCardSlots.suitPlate.within(bar);
           final total = tester.getRect(find.descendant(of: suit(s), matching: find.text(wantSuit[s]!)));
           expect(total.center.dx, closeTo(panel.center.dx, 0.6), reason: '${s.dbValue} total on the plate');
@@ -130,7 +130,7 @@ void main() {
           final rect = tester.getRect(rank(r));
           expect(rect.width, greaterThanOrEqualTo(kLuckyCardMinTapDp));
           expect(rect.height, greaterThanOrEqualTo(kLuckyCardMinTapDp));
-          final disc = LuckyCardSlots.rankPlate.within(layout.rankPicture(r.index).shift(origin));
+          final disc = LuckyCardSlots.rankPlate.within(layout.rankSelector(r.index).shift(origin));
           final total = tester.getRect(find.descendant(of: rank(r), matching: find.text(wantRank[r]!)));
           expect(total.center.dx, closeTo(disc.center.dx, 0.6), reason: '${r.dbValue} total on the oval');
           expect(total.center.dy, closeTo(disc.center.dy, 0.6), reason: '${r.dbValue} total on the oval');
@@ -177,12 +177,12 @@ void main() {
         final layout = LuckyCardLayout.of(d.size);
         final origin = layout.canvasRect.topLeft;
         for (final s in LuckyCardSuit.values) {
-          final panel = LuckyCardSlots.suitPlate.within(layout.suitBar(s.index).shift(origin));
+          final panel = LuckyCardSlots.suitPlate.within(layout.suitHeader(s.index).shift(origin));
           final total = tester.getRect(find.descendant(of: suit(s), matching: find.text('150000')));
           expect(total.width, lessThanOrEqualTo(panel.width), reason: '${s.dbValue}: 150000 inside its panel');
         }
         for (final r in LuckyCardRank.values) {
-          final disc = LuckyCardSlots.rankPlate.within(layout.rankPicture(r.index).shift(origin));
+          final disc = LuckyCardSlots.rankPlate.within(layout.rankSelector(r.index).shift(origin));
           final total = tester.getRect(find.descendant(of: rank(r), matching: find.text('200000')));
           expect(total.width, lessThanOrEqualTo(disc.width), reason: '${r.dbValue}: 200000 inside its oval');
         }

@@ -11,6 +11,7 @@ import 'package:best_smart_game/screens/lucky_card_screen.dart';
 import 'package:best_smart_game/services/lucky_card_round_sync.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_art.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_background.dart';
+import 'package:best_smart_game/widgets/lucky_card/lucky_card_controls_binding.dart' show LuckyCardChipBar;
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_layout.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_reveal_binding.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_wheel_binding.dart';
@@ -21,6 +22,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../fake_wallet.dart';
 import '../provider_rig.dart';
+import 'lucky_card_layout_tablet_test.dart' show kTabletReferenceSizes;
 import 'ui_harness.dart';
 
 const Size phone = Size(844, 390);
@@ -696,6 +698,61 @@ void main() {
           final size = t.style?.fontSize;
           if (size != null) expect(size, greaterThanOrEqualTo(kLuckyCardMinReadableDp), reason: '"${t.data}"');
         }
+        await rig.finish();
+      });
+    }
+  });
+
+  group('the real screen on the six reference tablet sizes (spec §17BN, step T4)', () {
+    for (final d in kTabletReferenceSizes) {
+      testWidgets('${d.name} (${d.width.toInt()} x ${d.height.toInt()}): the tablet arrangement is on; chips, a card and the buttons work by finger; the wheel takes the board\'s place; the win popup shows', (tester) async {
+        final rig = BetRig(tester);
+        await openGame(tester, rig, size: d.size);
+        final l = LuckyCardLayout.of(d.size);
+        final p = rig.provider;
+        expect(l.isTablet, isTrue, reason: 'the app chooses the tablet arrangement for this screen');
+        expect(find.byType(LuckyCardChipBar), findsOneWidget, reason: 'the chips are in their own bar');
+        expect(tester.takeException(), isNull);
+
+        // A finger: the 10 chip in the bar, the Jack of Hearts, DOUBLE, then CLEAR.
+        await tester.tapAt(l.chip(1).center);
+        await tester.pump();
+        expect(p.activeChip, LuckyCardChip.ten, reason: 'the chip bar picks the chip up');
+        await tester.tapAt(l.cardCell(0, 0).center);
+        await tester.pump();
+        expect(p.total, 10, reason: 'the card takes the chip');
+        await tester.tap(find.byKey(const ValueKey('button-doubleBet')));
+        await tester.pump();
+        expect(p.total, 20, reason: 'DOUBLE, in the stack at the right');
+        await tester.tap(find.byKey(const ValueKey('button-clear')));
+        await tester.pump();
+        expect(p.total, 0, reason: 'CLEAR');
+
+        // A whole round: the lock puts the wheel where the board was and leaves the chip bar and panel.
+        rig.betTenOnEveryCard();
+        await tester.pump();
+        await rig.world.runUntil(90.5);
+        await settle(tester);
+        expect(onWheel, isTrue, reason: 'the wheel after the lock');
+        expect(onBoard, isFalse, reason: 'the board is gone');
+        final wheel = tester.getRect(find.byType(LuckyCardWheelBinding));
+        expect(wheel.left, greaterThanOrEqualTo(l.grid.left - 0.5), reason: 'the wheel inside the board\'s place');
+        expect(wheel.right, lessThanOrEqualTo(l.grid.right + 0.5));
+        expect(wheel.bottom, lessThanOrEqualTo(l.chipBar.top), reason: 'above the chip bar');
+        expect(find.byType(LuckyCardChipBar), findsOneWidget, reason: 'the chip bar stays (dimmed)');
+        expect(tester.takeException(), isNull, reason: 'the lock');
+        await rig.world.runUntil(99.0);
+        await settle(tester);
+        expect(find.byType(LuckyCardWinPopup), findsOneWidget, reason: 'the win popup');
+        expect(tester.takeException(), isNull, reason: 'the reveal');
+        for (final t in tester.widgetList<Text>(find.byType(Text))) {
+          final size = t.style?.fontSize;
+          if (size != null) expect(size, greaterThanOrEqualTo(kLuckyCardMinReadableDp), reason: '"${t.data}"');
+        }
+        await rig.runIntoNextCycle(8);
+        await settle(tester);
+        expect(find.byType(LuckyCardWinPopup), findsNothing);
+        expect(onBoard, isTrue, reason: 'the board is back for the next round');
         await rig.finish();
       });
     }

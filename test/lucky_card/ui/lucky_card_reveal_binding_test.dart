@@ -46,7 +46,8 @@ class ProbeProvider extends LuckyCardProvider {
       : super(
           api: rig.server,
           wallet: FakeWallet(1000),
-          sync: LuckyCardRoundSync(api: rig.server, now: () => rig.world.deviceNow),
+          sync: LuckyCardRoundSync(
+              api: rig.server, now: () => rig.world.deviceNow),
           now: () => rig.world.deviceNow,
         );
 
@@ -105,7 +106,9 @@ void main() {
   setUpAll(loadLuckyCardWheelFonts);
 
   group('Aisha wins', () {
-    testWidgets('the shuffle, the settling at the landing, the coins from the wheel centre, then the popup, then the end', (tester) async {
+    testWidgets(
+        'the shuffle, the settling at the landing, the coins from the wheel centre, then the popup, then the end',
+        (tester) async {
       final rig = BetRig(tester);
       final h = Hooks();
       await pumpAtSize(tester, phone, scene(rig, h));
@@ -116,15 +119,19 @@ void main() {
       await rig.world.runUntil(91.4);
       final t0 = h.startedAt!;
       expect(h.spinStarts, 1);
-      expect(cardState(tester).isShuffling, isTrue, reason: 'the big card starts with the wheel');
+      expect(cardState(tester).isShuffling, isTrue,
+          reason: 'the big card starts with the wheel');
 
       await rig.world.runUntil(t0 + 1.0);
-      expect(cardState(tester).shownCard, isNotNull, reason: 'a face is showing');
+      expect(cardState(tester).shownCard, isNotNull,
+          reason: 'a face is showing');
       expect(h.flips, greaterThanOrEqualTo(3));
 
       await rig.world.runUntil(t0 + 4.8);
-      expect(cardState(tester).isSettled, isFalse, reason: 'the suit rim has not landed');
-      expect(cardState(tester).shownCard, isNot(winner), reason: 'the winner is not shown early');
+      expect(cardState(tester).isSettled, isFalse,
+          reason: 'the suit rim has not landed');
+      expect(cardState(tester).shownCard, isNot(winner),
+          reason: 'the winner is not shown early');
       expect(h.revealed, 0);
       expect(h.coins, 0);
       expect(coinsFinder, findsNothing);
@@ -134,7 +141,8 @@ void main() {
       await rig.world.runUntil(t0 + 5.8);
       expect(p.cardRevealed, isTrue);
       expect(cardState(tester).isSettled, isTrue);
-      expect(cardState(tester).shownCard, winner, reason: 'the column settles on the winner');
+      expect(cardState(tester).shownCard, winner,
+          reason: 'the column settles on the winner');
       expect(h.revealed, 1);
 
       // The coins burst from the wheel's centre.
@@ -148,15 +156,19 @@ void main() {
       final fountain = tester.widget<CoinFountain>(coinsFinder);
       expect(fountain.coinsPerSecond, 60, reason: 'as in Triple Chance');
       expect(fountain.autoPlay, isTrue);
-      expect(fountain.duration, const Duration(milliseconds: 1500), reason: 'the 1.5 s of spec section 6, the widget default');
-      expect(popupFinder, findsNothing, reason: 'the popup waits for the coins');
+      expect(fountain.duration, const Duration(milliseconds: 1500),
+          reason: 'the 1.5 s of spec section 6, the widget default');
+      expect(popupFinder, findsNothing,
+          reason: 'the popup waits for the coins');
 
       await rig.world.runUntil(t0 + 6.9);
       expect(coinsFinder, findsNothing, reason: 'the coins are over');
       expect(popupFinder, findsOneWidget);
       expect(h.popups, 1);
-      expect(tester.widget<Text>(find.byKey(const ValueKey('win-amount'))).data, '400');
-      expect(tester.widget<Text>(find.byKey(const ValueKey('win-bonus'))).data, '${bonus}X');
+      expect(tester.widget<Text>(find.byKey(const ValueKey('win-amount'))).data,
+          '400');
+      expect(tester.widget<Text>(find.byKey(const ValueKey('win-bonus'))).data,
+          '${bonus}X');
       expect(find.byKey(ValueKey('win-card-${winner.key}')), findsOneWidget);
 
       await rig.world.runUntil(t0 + 8.5);
@@ -165,33 +177,50 @@ void main() {
       await rig.world.runUntil(t0 + 9.6);
       expect(popupFinder, findsNothing, reason: 'closed at W + 4');
       expect(p.stage, LuckyCardStage.none);
-      expect(cardState(tester).shownCard, winner, reason: 'the column keeps the winner');
+      expect(cardState(tester).shownCard, winner,
+          reason: 'the column keeps the winner');
       expect(h.coins, 1);
       expect(h.popups, 1);
       expect(h.revealed, 1);
-      expect(h.flips, 12, reason: '11 random faces and the final turn to the winner, each announced once');
+      expect(h.flips, 12,
+          reason:
+              '11 random faces and the final turn to the winner, each announced once');
       await rig.finish();
     });
 
-    testWidgets('on a tablet, where the canvas is smaller than the screen, the coins still burst from the wheel centre', (tester) async {
-      const tablet = Size(1024, 768);
-      final rig = BetRig(tester);
-      final h = Hooks();
-      await pumpAtSize(tester, tablet, scene(rig, h));
-      await rig.open();
-      rig.betTenOnEveryCard();
-      await rig.world.runUntil(91.4);
-      await rig.world.runUntil(h.startedAt! + 5.8);
-      expect(coinsFinder, findsOneWidget);
-      final layout = LuckyCardLayout.of(tablet);
-      expect(layout.canvasRect.top, greaterThan(0), reason: 'the canvas is offset on this screen');
-      final centre = layout.wheelCenter + layout.canvasRect.topLeft;
-      final origin = tester.widget<CoinFountain>(coinsFinder).originFraction;
-      expect(origin.dx, closeTo(centre.dx / tablet.width, 1e-6));
-      expect(origin.dy, closeTo(centre.dy / tablet.height, 1e-6));
-      await rig.world.run(const Duration(seconds: 8));
-      await rig.finish();
-    });
+    for (final screen in const [
+      Size(1200, 400),
+      Size(1024, 768),
+      Size(1366, 1024)
+    ]) {
+      testWidgets(
+          'on a ${screen.width.toInt()} x ${screen.height.toInt()} screen the coins burst from the wheel centre (a very wide phone has a narrower canvas, a tablet the whole screen)',
+          (tester) async {
+        final tablet = screen;
+        final rig = BetRig(tester);
+        final h = Hooks();
+        await pumpAtSize(tester, tablet, scene(rig, h));
+        await rig.open();
+        rig.betTenOnEveryCard();
+        await rig.world.runUntil(91.4);
+        await rig.world.runUntil(h.startedAt! + 5.8);
+        expect(coinsFinder, findsOneWidget);
+        final layout = LuckyCardLayout.of(tablet);
+        if (layout.isTablet) {
+          expect(layout.canvasRect.topLeft, Offset.zero,
+              reason: 'a tablet\'s canvas is the whole screen');
+        } else {
+          expect(layout.canvasRect.left, greaterThan(0),
+              reason: 'the canvas is offset on this screen');
+        }
+        final centre = layout.wheelCenter + layout.canvasRect.topLeft;
+        final origin = tester.widget<CoinFountain>(coinsFinder).originFraction;
+        expect(origin.dx, closeTo(centre.dx / tablet.width, 1e-6));
+        expect(origin.dy, closeTo(centre.dy / tablet.height, 1e-6));
+        await rig.world.run(const Duration(seconds: 8));
+        await rig.finish();
+      });
+    }
   });
 
   group('a loser and a spectator watch', () {
@@ -213,7 +242,8 @@ void main() {
         sawCoins = sawCoins || coinsFinder.evaluate().isNotEmpty;
         sawPopup = sawPopup || popupFinder.evaluate().isNotEmpty;
       }
-      expect(sawCoins, isFalse, reason: 'no coins for ${bet ? 'a loser' : 'a spectator'}');
+      expect(sawCoins, isFalse,
+          reason: 'no coins for ${bet ? 'a loser' : 'a spectator'}');
       expect(sawPopup, isFalse, reason: 'no popup');
       expect(h.coins, 0);
       expect(h.popups, 0);
@@ -222,12 +252,16 @@ void main() {
       await rig.finish();
     }
 
-    testWidgets('a loser sees the wheel and the winning card but no coins and no popup', (tester) => watch(tester, bet: true));
+    testWidgets(
+        'a loser sees the wheel and the winning card but no coins and no popup',
+        (tester) => watch(tester, bet: true));
     testWidgets('a spectator the same', (tester) => watch(tester, bet: false));
   });
 
   group('a screen that opens at other moments', () {
-    testWidgets('a late joiner: the big card shuffles at once and settles with the wheel', (tester) async {
+    testWidgets(
+        'a late joiner: the big card shuffles at once and settles with the wheel',
+        (tester) async {
       final rig = BetRig(tester, startInto: 98);
       final h = Hooks();
       await pumpAtSize(tester, phone, scene(rig, h));
@@ -244,15 +278,20 @@ void main() {
       await rig.finish();
     });
 
-    testWidgets('a screen that opens after the reveal shows the winner at once, with no shuffle', (tester) async {
+    testWidgets(
+        'a screen that opens after the reveal shows the winner at once, with no shuffle',
+        (tester) async {
       final rig = BetRig(tester);
       final h = Hooks();
-      await pumpAtSize(tester, phone, const SizedBox()); // nothing on screen yet
+      await pumpAtSize(
+          tester, phone, const SizedBox()); // nothing on screen yet
       await rig.open();
-      await rig.world.runUntil(98.8); // no wheel is mounted, so the provider reveals at its 7 s ceiling
+      await rig.world.runUntil(
+          98.8); // no wheel is mounted, so the provider reveals at its 7 s ceiling
       expect(rig.provider.cardRevealed, isTrue);
 
-      await tester.pumpWidget(MaterialApp(home: Scaffold(body: scene(rig, h, wheel: false, overlay: false))));
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(body: scene(rig, h, wheel: false, overlay: false))));
       await tester.pump();
       expect(cardState(tester).isSettled, isTrue);
       expect(cardState(tester).shownCard, winner);
@@ -263,14 +302,17 @@ void main() {
       await rig.finish();
     });
 
-    testWidgets('a column put on the screen after the shuffle began joins it at once', (tester) async {
+    testWidgets(
+        'a column put on the screen after the shuffle began joins it at once',
+        (tester) async {
       final rig = BetRig(tester);
       final h = Hooks();
       await pumpAtSize(tester, phone, const SizedBox());
       await rig.open();
       await rig.world.runUntil(92.0);
       expect(rig.provider.stage, LuckyCardStage.spinning);
-      await tester.pumpWidget(MaterialApp(home: Scaffold(body: scene(rig, h, wheel: false, overlay: false))));
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(body: scene(rig, h, wheel: false, overlay: false))));
       await tester.pump(); // one frame, no clock time: no new notification
       expect(cardState(tester).isShuffling, isTrue);
       await rig.world.run(const Duration(seconds: 8));
@@ -279,7 +321,9 @@ void main() {
   });
 
   group('round after round', () {
-    testWidgets('the next round shuffles again with its own order and settles on its own winner', (tester) async {
+    testWidgets(
+        'the next round shuffles again with its own order and settles on its own winner',
+        (tester) async {
       final rig = BetRig(tester);
       final h = Hooks();
       await pumpAtSize(tester, phone, scene(rig, h));
@@ -298,8 +342,14 @@ void main() {
       expect(cardState(tester).shownCard, nextWinner);
       expect(h.revealed, 2);
       expect(
-        luckyCardRevealPlan(winner: nextWinner, roundNumber: next).steps.map((s) => s.face).toList(),
-        isNot(luckyCardRevealPlan(winner: winner, roundNumber: cycle).steps.map((s) => s.face).toList()),
+        luckyCardRevealPlan(winner: nextWinner, roundNumber: next)
+            .steps
+            .map((s) => s.face)
+            .toList(),
+        isNot(luckyCardRevealPlan(winner: winner, roundNumber: cycle)
+            .steps
+            .map((s) => s.face)
+            .toList()),
       );
       await rig.world.run(const Duration(seconds: 6));
       await rig.finish();
@@ -307,7 +357,9 @@ void main() {
   });
 
   group('leaving', () {
-    testWidgets('the player leaves mid-shuffle: the card never settles, no coins, no popup, nothing throws', (tester) async {
+    testWidgets(
+        'the player leaves mid-shuffle: the card never settles, no coins, no popup, nothing throws',
+        (tester) async {
       final rig = BetRig(tester);
       final h = Hooks();
       await pumpAtSize(tester, phone, scene(rig, h));
@@ -328,10 +380,13 @@ void main() {
       await rig.finish();
     });
 
-    testWidgets('both bindings stop listening to the provider when they are removed', (tester) async {
+    testWidgets(
+        'both bindings stop listening to the provider when they are removed',
+        (tester) async {
       final rig = BetRig(tester);
       final probe = ProbeProvider(rig);
-      await pumpAtSize(tester, phone, scene(rig, Hooks(), provider: probe, wheel: false));
+      await pumpAtSize(
+          tester, phone, scene(rig, Hooks(), provider: probe, wheel: false));
       expect(probe.listenedTo, isTrue);
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
       expect(probe.listenedTo, isFalse, reason: 'no listener left behind');
@@ -339,21 +394,27 @@ void main() {
       await rig.world.run(const Duration(seconds: 12));
     });
 
-    testWidgets('given another provider they follow that one and let go of the first', (tester) async {
+    testWidgets(
+        'given another provider they follow that one and let go of the first',
+        (tester) async {
       final rigA = BetRig(tester);
       final rigB = BetRig(tester, startInto: 40);
       final probeA = ProbeProvider(rigA);
       final probeB = ProbeProvider(rigB);
       final h = Hooks();
-      await pumpAtSize(tester, phone, scene(rigA, h, provider: probeA, wheel: false));
+      await pumpAtSize(
+          tester, phone, scene(rigA, h, provider: probeA, wheel: false));
       expect(probeA.listenedTo, isTrue);
-      await tester.pumpWidget(MaterialApp(home: Scaffold(body: scene(rigB, h, provider: probeB, wheel: false))));
+      await tester.pumpWidget(MaterialApp(
+          home:
+              Scaffold(body: scene(rigB, h, provider: probeB, wheel: false))));
       expect(probeA.listenedTo, isFalse);
       expect(probeB.listenedTo, isTrue);
 
       unawaited(probeB.attach());
       await rigB.world.runUntil(92.0);
-      expect(cardState(tester).isShuffling, isTrue, reason: 'the new provider drives the card');
+      expect(cardState(tester).isShuffling, isTrue,
+          reason: 'the new provider drives the card');
       await rigB.world.run(const Duration(seconds: 9));
       probeA.dispose();
       probeB.dispose();
@@ -362,10 +423,12 @@ void main() {
   });
 
   group('pictures to look at, with the real artwork and fonts', () {
-    Future<void> shot(WidgetTester tester, String name) =>
-        expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/$name.png'));
+    Future<void> shot(WidgetTester tester, String name) => expectLater(
+        find.byType(MaterialApp), matchesGoldenFile('goldens/$name.png'));
 
-    testWidgets('Aisha wins: the wheel landed, the winner alone in the column, the popup open (915x412)', (tester) async {
+    testWidgets(
+        'Aisha wins: the wheel landed, the winner alone in the column, the popup open (915x412)',
+        (tester) async {
       const size = Size(915, 412);
       final art = (await tester.runAsync(PreloadedLuckyCardArt.load))!;
       final rig = BetRig(tester);
@@ -381,7 +444,9 @@ void main() {
       await rig.finish();
     });
 
-    testWidgets('a loser watches: the wheel landed and the winner alone in the column, no popup (915x412)', (tester) async {
+    testWidgets(
+        'a loser watches: the wheel landed and the winner alone in the column, no popup (915x412)',
+        (tester) async {
       const size = Size(915, 412);
       final art = (await tester.runAsync(PreloadedLuckyCardArt.load))!;
       final rig = BetRig(tester);

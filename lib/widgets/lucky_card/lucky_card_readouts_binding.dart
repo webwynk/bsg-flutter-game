@@ -1,4 +1,4 @@
-// Connects the top bar, the status strip and the side column's readouts to the
+// Connects the top bar (which carries the round's status words) and the side column's readouts to the
 // Lucky Card provider.
 //
 // The provider notifies for every chip, every second of the countdown and every step
@@ -7,8 +7,7 @@
 // and nothing else; the results are redrawn only when a round is added.
 //
 //   LuckyCardCanvas(
-//     topBar: (context, layout) => LuckyCardTopBarBinding(provider: p, layout: layout, soundOn: ..., onExit: ..., onInfo: ...),
-//     status: (context, layout) => LuckyCardStatusBinding(provider: p, layout: layout),
+//     topBar: (context, layout) => LuckyCardTopBarBinding(provider: p, layout: layout, art: art, soundOn: ..., onExit: ..., onInfo: ...),
 //     side:   (context, layout) => Stack(children: [
 //       LuckyCardSideReadouts(provider: p, layout: layout, art: art),
 //       ...the chip rail and the buttons (App Step 7b)...
@@ -30,7 +29,7 @@ import 'lucky_card_readouts.dart';
 import 'lucky_card_status_strip.dart';
 import 'lucky_card_top_bar.dart';
 
-/// Which words the status strip shows right now.
+/// Which words the header shows right now (the round's status).
 LuckyCardStatusMode luckyCardStatusModeOf(LuckyCardProvider provider) {
   if (provider.isSequenceRunning || provider.stage != LuckyCardStage.none) {
     return LuckyCardStatusMode.noMoreSteady;
@@ -265,7 +264,8 @@ class _LuckyCardHeaderStatusSlot extends StatelessWidget {
   }
 }
 
-/// TOTAL BET, WIN and the results, placed in the side zone.
+/// PLAY, WIN and the results, placed in the side zone. On the desktop the side zone is the wheel's
+/// column and holds only PLAY and WIN: the results are a row of their own ([LuckyCardResultsBarBinding]).
 class LuckyCardSideReadouts extends StatelessWidget {
   const LuckyCardSideReadouts({super.key, required this.provider, required this.layout, required this.art});
 
@@ -312,15 +312,32 @@ class LuckyCardSideReadouts extends StatelessWidget {
             ),
           ),
         ),
-        Positioned.fromRect(
-          rect: inSide(layout.resultsPanel),
-          child: LuckyCardSelector<LuckyCardResultsSnapshot>(
-            provider: provider,
-            select: LuckyCardResultsSnapshot.of,
-            builder: (context, s) => LuckyCardResultsPanel(layout: layout, art: art, history: s.history),
+        if (!layout.isDesktop)
+          Positioned.fromRect(
+            rect: inSide(layout.resultsPanel),
+            child: LuckyCardResultsBarBinding(provider: provider, layout: layout, art: art),
           ),
-        ),
       ],
+    );
+  }
+}
+
+/// The history cards, linked to the provider: the results box of the bet panel on a phone and a
+/// tablet; on the desktop the row under the board ([LuckyCardLayout.resultsBar]), which is its own
+/// canvas zone and so is filled edge to edge by this.
+class LuckyCardResultsBarBinding extends StatelessWidget {
+  const LuckyCardResultsBarBinding({super.key, required this.provider, required this.layout, required this.art});
+
+  final LuckyCardProvider provider;
+  final LuckyCardLayout layout;
+  final LuckyCardArt art;
+
+  @override
+  Widget build(BuildContext context) {
+    return LuckyCardSelector<LuckyCardResultsSnapshot>(
+      provider: provider,
+      select: LuckyCardResultsSnapshot.of,
+      builder: (context, s) => LuckyCardResultsPanel(layout: layout, art: art, history: s.history),
     );
   }
 }

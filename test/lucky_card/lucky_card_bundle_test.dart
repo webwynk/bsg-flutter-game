@@ -43,10 +43,10 @@ void main() {
     }
   });
 
-  test('the whole Lucky Card picture folder is bundled: 12 cards, 4 bars, 4 symbols, 3 selectors, the 500 chip, the stage and the poster', () async {
+  test('the whole Lucky Card picture folder is bundled: 12 cards, 4 bars, 4 symbols, 3 selectors, the 500 chip, the 2 history frames, the stage and the poster', () async {
     final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
     final own = manifest.listAssets().where((a) => a.startsWith('assets/lucky_card/images/')).toList();
-    expect(own.length, 26, reason: own.toString());
+    expect(own.length, 28, reason: own.toString());
     for (final key in LuckyCardArtKey.all.where((k) => k.assetPath.startsWith('assets/lucky_card/'))) {
       expect(own, contains(key.assetPath));
     }

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_art.dart';
+import 'package:best_smart_game/widgets/lucky_card/lucky_card_layout.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,6 +38,12 @@ const List<Device> kDeviceMatrix = [
   Device('tablet', 1280, 800),
   Device('large tablet', 1366, 1024),
 ];
+
+/// The five phones of the matrix: the phone arrangement.
+final List<Device> kPhoneMatrix = [for (final d in kDeviceMatrix) if (!LuckyCardLayout.isTabletScreen(d.size)) d];
+
+/// The three tablets of the matrix: the tablet arrangement (spec §17BN).
+final List<Device> kTabletMatrix = [for (final d in kDeviceMatrix) if (LuckyCardLayout.isTabletScreen(d.size)) d];
 
 /// Shows [child] filling a screen of [size] dp, at [devicePixelRatio], with the
 /// system font scale at [textScale].

@@ -1,4 +1,6 @@
-// Connects the wheel to the Lucky Card provider, and places it in the grid zone.
+// Connects the wheel to the Lucky Card provider, and places it in the grid zone (phone and tablet:
+// it takes the board's place while betting is closed) or, on the desktop, in the wheel's column,
+// where it stays on screen all the time.
 //
 // The provider hands the wheel the server's result when the countdown reaches 00
 // (`stage` becomes spinning, `spinTarget` holds the card and the bonus). This
@@ -31,12 +33,24 @@ class LuckyCardWheelBinding extends StatefulWidget {
     super.key,
     required this.provider,
     required this.layout,
+    this.zone,
+    this.permanent = false,
     this.onSpinStart,
     this.onRankLanded,
   });
 
   final LuckyCardProvider provider;
   final LuckyCardLayout layout;
+
+  /// The canvas zone this is placed in, whose top-left corner [LuckyCardLayout.wheelBox] is measured
+  /// from. Null means the grid zone (phone and tablet, where the wheel takes the board's place); the
+  /// desktop passes its wheel column, [LuckyCardLayout.side].
+  final Rect? zone;
+
+  /// True when the wheel stays on screen between rounds (the desktop, spec §17BP): when betting opens
+  /// again the hub goes back to the mystery gift box. False (phone and tablet) leaves the hub alone,
+  /// because there the wheel is taken off the screen when betting opens.
+  final bool permanent;
 
   /// Both rims begin to turn (the spin sound starts here).
   final VoidCallback? onSpinStart;
@@ -81,6 +95,7 @@ class _LuckyCardWheelBindingState extends State<LuckyCardWheelBinding> {
   void _startIfDue() {
     if (!mounted) return;
     final provider = widget.provider;
+    if (widget.permanent && !provider.isLocked) _wheel.currentState?.clearResult();
     final target = provider.spinTarget;
     if (provider.stage != LuckyCardStage.spinning || target == null) return;
     if (_spunRoundId == target.roundId) return;
@@ -115,7 +130,7 @@ class _LuckyCardWheelBindingState extends State<LuckyCardWheelBinding> {
       clipBehavior: Clip.none,
       children: [
         Positioned.fromRect(
-          rect: layout.wheelBox.shift(-layout.grid.topLeft),
+          rect: layout.wheelBox.shift(-(widget.zone ?? layout.grid).topLeft),
           child: LuckyCardWheel(
             key: _wheel,
             size: layout.wheelDiameter,

@@ -6,7 +6,6 @@
 import 'package:best_smart_game/models/lucky_card_board.dart';
 import 'package:best_smart_game/models/lucky_card_models.dart';
 import 'package:best_smart_game/providers/lucky_card_provider.dart';
-import 'package:best_smart_game/widgets/lucky_card/lucky_card_art.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_canvas.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_layout.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_messages.dart';

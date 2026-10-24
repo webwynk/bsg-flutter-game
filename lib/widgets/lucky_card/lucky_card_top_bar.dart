@@ -4,7 +4,7 @@
 // One straight red bar, edge to edge (it is painted under a phone's notch as well, see
 // [LuckyCardTopBar.bleed]), with a gold line along its bottom edge only. It holds, from left
 // to right: the EXIT ball, the balance (the BSG coin and the figure) in a sunken pill, then a
-// flexible middle with the countdown ring and the line of words, and at the right the HISTORY,
+// flexible middle with the countdown and the line of words, and at the right the HISTORY,
 // SOUND and RULES balls.
 //
 // Given plain values and four callbacks, nothing else: no provider (the binding in
@@ -14,7 +14,8 @@
 //     "NO MORE PLAY" once betting closes -- and a refused tap borrows that same spot for a
 //     moment, in red or amber ([statusColor]). The design draws no separate strip under the board,
 //     and the game no longer has one.
-//   * The countdown sits in a gold ring that empties as the betting window runs down.
+//   * The countdown is the two digits on a purple disc. (A gold ring that emptied as the betting
+//     window ran down used to go round it; the user had it removed, 2026-10-24.)
 //   * RULES and HISTORY are dimmed and ignore taps while [infoEnabled] is false (betting is
 //     closed or a result is playing): each opens a dialog that closes itself at the lock.
 //     HISTORY is always drawn, even before the player has played a round.
@@ -31,7 +32,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../services/lucky_card_round_clock.dart';
 import 'lucky_card_art.dart';
 import 'lucky_card_layout.dart';
 import 'lucky_card_palette.dart';
@@ -44,11 +44,6 @@ String luckyCardBalanceSemantics(int balance) => 'Balance: ${luckyCardGroupedBal
 
 /// The countdown is red from 5 seconds down to 1; at 0 the round is being drawn.
 bool luckyCardCountdownUrgent(int seconds) => seconds >= 1 && seconds <= 5;
-
-/// How full the countdown ring is: all of it at the start of the betting window, none of it
-/// once the window has run out.
-double luckyCardCountdownFraction(int seconds) =>
-    (seconds / kLuckyCardCountdownStart).clamp(0.0, 1.0).toDouble();
 
 /// A number with a comma every three digits: 129695 is "129,695".
 String luckyCardGroupedBalance(int value) {
@@ -72,6 +67,26 @@ Text _oswald(String text, {required double size, required Color color, double sp
       style: TextStyle(
         fontFamily: 'Oswald',
         fontWeight: FontWeight.w700,
+        fontSize: size,
+        height: 1.0,
+        letterSpacing: spacing,
+        color: color,
+        shadows: shadow == null ? null : [Shadow(color: shadow, offset: const Offset(0, 2))],
+      ),
+    );
+
+/// Text in DM Sans, the face of the header's line of words. Like [_oswald], it never follows the
+/// phone's font setting.
+Text _dmSans(String text, {required double size, required Color color, double spacing = 0, Color? shadow, TextOverflow? overflow}) =>
+    Text(
+      text,
+      maxLines: 1,
+      softWrap: false,
+      overflow: overflow ?? TextOverflow.visible,
+      textScaler: TextScaler.noScaling,
+      style: TextStyle(
+        fontFamily: 'DMSans',
+        fontWeight: FontWeight.w800,
         fontSize: size,
         height: 1.0,
         letterSpacing: spacing,
@@ -220,8 +235,9 @@ class LuckyCardBalanceBox extends StatelessWidget {
   }
 }
 
-/// The countdown: a gold ring that empties as the betting window runs down, around a purple
-/// disc holding the number.
+/// The countdown: the number on a purple disc [LuckyCardLayout.designCountdownSize] across. It does
+/// not change look as the window runs down; the last five seconds are shown by the words beside it,
+/// which flash.
 class LuckyCardCountdownBox extends StatelessWidget {
   const LuckyCardCountdownBox({super.key, required this.layout, required this.seconds});
 
@@ -231,61 +247,33 @@ class LuckyCardCountdownBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = layout.designCountdownSize;
-    final urgent = luckyCardCountdownUrgent(seconds);
-    final left = luckyCardCountdownFraction(seconds);
     return Semantics(
       label: 'Time left: $seconds seconds',
       excludeSemantics: true,
       child: Container(
         width: size,
         height: size,
-        decoration: BoxDecoration(
+        alignment: Alignment.center,
+        decoration: const BoxDecoration(
           shape: BoxShape.circle,
-          // The ring: gold for the share of the window still to run, dark for the rest.
-          gradient: SweepGradient(
-            transform: const GradientRotation(-math.pi / 2),
-            colors: [
-              urgent ? kDesignAlertText : kDesignRing,
-              urgent ? kDesignAlertText : kDesignRing,
-              kDesignRingSpent,
-              kDesignRingSpent,
-            ],
-            stops: [0.0, left, left, 1.0],
+          gradient: RadialGradient(
+            center: Alignment(-0.3, -0.4),
+            radius: 0.9,
+            colors: kDesignCountdownDisc,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: (urgent ? kDesignAlertText : kDesignRing).withValues(alpha: 0.55),
-              blurRadius: size * 0.25,
-            ),
-          ],
         ),
-        child: Center(
-          child: Container(
-            width: size * 0.82,
-            height: size * 0.82,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                center: Alignment(-0.3, -0.4),
-                radius: 0.9,
-                colors: kDesignCountdownDisc,
-              ),
-            ),
-            child: _oswald(
-              luckyCardCountdownText(seconds),
-              size: layout.designCountdownFont,
-              color: kDesignCountdownText,
-              shadow: kDesignCountdownShadow,
-            ),
-          ),
+        child: _oswald(
+          luckyCardCountdownText(seconds),
+          size: layout.designCountdownFont,
+          color: kDesignCountdownText,
+          shadow: kDesignCountdownShadow,
         ),
       ),
     );
   }
 }
 
-/// The line of words in the middle of the header, which fades in and out while [flashing]
+/// The line of words in the middle of the header, in DM Sans, which fades in and out while [flashing]
 /// (the last five seconds of betting), exactly as the strip under the board used to.
 /// The phone's "remove animations" setting stops the fading; the words still change.
 class LuckyCardStatusLine extends StatefulWidget {
@@ -353,7 +341,7 @@ class _LuckyCardStatusLineState extends State<LuckyCardStatusLine> with SingleTi
 
   @override
   Widget build(BuildContext context) {
-    final line = _oswald(
+    final line = _dmSans(
       widget.text.toUpperCase(),
       size: widget.size,
       color: widget.color,

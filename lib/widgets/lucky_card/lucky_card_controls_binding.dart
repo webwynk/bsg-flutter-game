@@ -131,12 +131,18 @@ class LuckyCardActionButtonsBinding extends StatelessWidget {
     super.key,
     required this.provider,
     required this.layout,
+    this.zone,
     this.onPressed,
     this.onRefused,
   });
 
   final LuckyCardProvider provider;
   final LuckyCardLayout layout;
+
+  /// The canvas zone the buttons are placed in, whose top-left corner their rects are measured from.
+  /// Null means the bet panel ([LuckyCardLayout.side]); the desktop passes its bottom bar,
+  /// [LuckyCardLayout.actionBar].
+  final Rect? zone;
 
   /// A button was accepted (the click sound).
   final void Function(LuckyCardControl control)? onPressed;
@@ -146,7 +152,7 @@ class LuckyCardActionButtonsBinding extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final side = layout.side;
+    final side = zone ?? layout.side;
     return LuckyCardSelector<LuckyCardButtonsSnapshot>(
       provider: provider,
       select: LuckyCardButtonsSnapshot.of,
@@ -187,8 +193,44 @@ class LuckyCardActionButtonsBinding extends StatelessWidget {
   }
 }
 
-/// The whole bet panel: its frame, TOTAL BET | WIN, the results, the chip row and the three
-/// buttons.
+/// The tablet's chip bar, under the board (spec §17BN): the same purple box as the bet panel with
+/// the five chips centred in it. On a phone the chips are in the panel, so this is not used there.
+class LuckyCardChipBar extends StatelessWidget {
+  const LuckyCardChipBar({
+    super.key,
+    required this.provider,
+    required this.layout,
+    required this.art,
+    this.onChipSelected,
+  });
+
+  final LuckyCardProvider provider;
+  final LuckyCardLayout layout;
+  final LuckyCardArt art;
+  final void Function(LuckyCardChip chip)? onChipSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned.fill(child: LuckyCardBetPanelFrame(radius: layout.panelRadius)),
+        Positioned.fromRect(
+          rect: layout.within(layout.chipBar, layout.chipRail),
+          child: LuckyCardChipRailBinding(
+            provider: provider,
+            layout: layout,
+            art: art,
+            onChipSelected: onChipSelected,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The whole bet panel: its frame, PLAY | WIN, the results, the three buttons and, on a phone, the
+/// chip row (on a tablet the chips are in [LuckyCardChipBar]).
 class LuckyCardSideColumn extends StatelessWidget {
   const LuckyCardSideColumn({
     super.key,
@@ -213,17 +255,18 @@ class LuckyCardSideColumn extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        const Positioned.fill(child: LuckyCardBetPanelFrame()),
+        Positioned.fill(child: LuckyCardBetPanelFrame(radius: layout.panelRadius)),
         Positioned.fill(child: LuckyCardSideReadouts(provider: provider, layout: layout, art: art)),
-        Positioned.fromRect(
-          rect: layout.within(side, layout.chipRail),
-          child: LuckyCardChipRailBinding(
-            provider: provider,
-            layout: layout,
-            art: art,
-            onChipSelected: onChipSelected,
+        if (!layout.isTablet)
+          Positioned.fromRect(
+            rect: layout.within(side, layout.chipRail),
+            child: LuckyCardChipRailBinding(
+              provider: provider,
+              layout: layout,
+              art: art,
+              onChipSelected: onChipSelected,
+            ),
           ),
-        ),
         Positioned.fill(
           child: LuckyCardActionButtonsBinding(
             provider: provider,

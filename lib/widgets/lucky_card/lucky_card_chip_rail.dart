@@ -22,7 +22,6 @@ import '../../models/lucky_card_board.dart';
 import 'lucky_card_art.dart';
 import 'lucky_card_layout.dart';
 import 'lucky_card_palette.dart';
-import 'lucky_card_panel.dart';
 import 'lucky_card_tap_target.dart';
 
 /// The words a screen reader says for a chip.
@@ -64,33 +63,46 @@ class LuckyCardChipRail extends StatelessWidget {
             child: LuckyCardTapTarget(
               key: ValueKey('chip-${chip.amount}'),
               size: layout.chip(chip.index).size,
-              semanticsLabel: luckyCardChipSemantics(chip, selected: chip == activeChip),
+              semanticsLabel:
+                  luckyCardChipSemantics(chip, selected: chip == activeChip),
               isLocked: isLocked,
               onTap: () => onSelect(chip),
               content: (context, tinted) {
                 final selected = chip == activeChip;
-                final side = layout.designChipSize * (selected ? 1.0 : restingShare / selectedShare);
+                final side = layout.designChipSize *
+                    (selected ? layout.chipHandScale : layout.chipRestScale);
                 return Center(
                   child: AnimatedContainer(
                     key: ValueKey('chip-face-${chip.amount}'),
                     duration: const Duration(milliseconds: 150),
-                    transform: Matrix4.translationValues(0, selected ? -layout.dp(3) : 0, 0),
+                    transform: Matrix4.translationValues(
+                        0, selected ? -layout.dp(3) : 0, 0),
                     width: side,
                     height: side,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       boxShadow: selected
                           ? [
-                              BoxShadow(color: kDesignChipUnder, offset: Offset(0, layout.dp(3))),
-                              BoxShadow(color: kDesignChipInnerRing, spreadRadius: layout.dp(3)),
-                              BoxShadow(color: kDesignChipGoldRing, spreadRadius: layout.dp(5)),
-                              BoxShadow(color: kDesignChipGoldGlow, spreadRadius: layout.dp(5), blurRadius: layout.dp(14)),
+                              BoxShadow(
+                                  color: kDesignChipUnder,
+                                  offset: Offset(0, layout.dp(3))),
+                              BoxShadow(
+                                  color: kDesignChipInnerRing,
+                                  spreadRadius: layout.dp(3)),
+                              BoxShadow(
+                                  color: kDesignChipGoldRing,
+                                  spreadRadius: layout.dp(5)),
+                              BoxShadow(
+                                  color: kDesignChipGoldGlow,
+                                  spreadRadius: layout.dp(5),
+                                  blurRadius: layout.dp(14)),
                             ]
                           : const [],
                     ),
                     child: tinted(
                       Image(
-                        image: art.image(LuckyCardArtKey.chip(chip), cacheWidth: layout.chipCacheWidth(dpr)),
+                        image: art.image(LuckyCardArtKey.chip(chip),
+                            cacheWidth: layout.chipCacheWidth(dpr)),
                         fit: BoxFit.contain,
                         filterQuality: FilterQuality.medium,
                         gaplessPlayback: true,
@@ -109,10 +121,14 @@ class LuckyCardChipRail extends StatelessWidget {
 
 /// Loads the five chip pictures (at the width the rail draws them) into the image
 /// cache, so no chip pops in when the screen opens.
-Future<void> precacheLuckyCardChips(BuildContext context, LuckyCardLayout layout, LuckyCardArt art) {
+Future<void> precacheLuckyCardChips(
+    BuildContext context, LuckyCardLayout layout, LuckyCardArt art) {
   final dpr = MediaQuery.devicePixelRatioOf(context);
   return Future.wait([
     for (final chip in LuckyCardChip.values)
-      precacheImage(art.image(LuckyCardArtKey.chip(chip), cacheWidth: layout.chipCacheWidth(dpr)), context),
+      precacheImage(
+          art.image(LuckyCardArtKey.chip(chip),
+              cacheWidth: layout.chipCacheWidth(dpr)),
+          context),
   ]);
 }

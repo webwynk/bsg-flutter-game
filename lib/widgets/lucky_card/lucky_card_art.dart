@@ -58,6 +58,11 @@ class LuckyCardArtKey {
   /// The BSG coin (Triple Chance's, used read-only), drawn in the header beside the balance.
   static const LuckyCardArtKey coin = LuckyCardArtKey._('assets/images/bsg_coin.webp');
 
+  /// The empty frame of a history card (604 x 686, the user's, spec §17BO): cream with a gold
+  /// border, for the older rounds; and the green one for the newest round.
+  static const LuckyCardArtKey historyCard = LuckyCardArtKey._('$_own/history-card.webp');
+  static const LuckyCardArtKey latestHistoryCard = LuckyCardArtKey._('$_own/latest-history-card.webp');
+
   /// The in-game background: a red theatre stage (1003 x 564, spec §17B).
   static const LuckyCardArtKey background = LuckyCardArtKey._('$_own/bg-lobby-lucky-card.webp');
 
@@ -74,13 +79,15 @@ class LuckyCardArtKey {
   String toString() => 'LuckyCardArtKey($assetPath)';
 
   /// Every picture the screen uses: 12 cards, 4 bars, 4 symbols, 3 selectors, 5 chips,
-  /// the 2 win-popup pictures, the coin and the background.
+  /// the 2 history-card frames, the 2 win-popup pictures, the coin and the background.
   static List<LuckyCardArtKey> get all => [
         for (final card in LuckyCard.all) LuckyCardArtKey.card(card),
         for (final suit in LuckyCardSuit.values) LuckyCardArtKey.suitBar(suit),
         for (final suit in LuckyCardSuit.values) LuckyCardArtKey.suitIcon(suit),
         for (final rank in LuckyCardRank.values) LuckyCardArtKey.rankSelector(rank),
         for (final chip in LuckyCardChip.values) LuckyCardArtKey.chip(chip),
+        historyCard,
+        latestHistoryCard,
         winPopup,
         winText,
         coin,

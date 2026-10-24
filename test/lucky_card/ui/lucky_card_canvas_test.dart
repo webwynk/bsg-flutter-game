@@ -14,6 +14,7 @@ const _zoneKeys = {
   'grid': Key('zone-grid'),
   'rankColumn': Key('zone-rankColumn'),
   'side': Key('zone-side'),
+  'chipBar': Key('zone-chipBar'),
 };
 
 /// A zone filled with a labelled box that must fit inside it.
@@ -31,6 +32,7 @@ Widget fullCanvas({Widget? background}) => LuckyCardCanvas(
       grid: probe('grid', Colors.green),
       rankColumn: probe('rankColumn', Colors.indigo),
       side: probe('side', Colors.purple),
+      chipBar: probe('chipBar', Colors.deepPurple),
     );
 
 void main() {
@@ -61,13 +63,20 @@ void main() {
   });
 
   group('the background', () {
-    testWidgets('covers the whole screen, even where the canvas does not (a 4:3 tablet)', (tester) async {
+    testWidgets('covers the whole screen, even where the canvas does not (a very wide phone screen)', (tester) async {
+      const key = Key('background');
+      await pumpAtSize(tester, const Size(1200, 400), fullCanvas(background: const ColoredBox(key: key, color: Colors.black)));
+      final bg = tester.getRect(find.byKey(key));
+      expect(bg, const Rect.fromLTWH(0, 0, 1200, 400));
+      final canvas = LuckyCardLayout.of(const Size(1200, 400)).canvasRect;
+      expect(canvas.width, lessThan(1200), reason: 'the canvas is narrower than the screen here (2.4 : 1)');
+    });
+
+    testWidgets('a tablet\'s canvas is the whole screen, so the background and the canvas are the same size', (tester) async {
       const key = Key('background');
       await pumpAtSize(tester, const Size(1024, 768), fullCanvas(background: const ColoredBox(key: key, color: Colors.black)));
-      final bg = tester.getRect(find.byKey(key));
-      expect(bg, const Rect.fromLTWH(0, 0, 1024, 768));
-      final canvas = LuckyCardLayout.of(const Size(1024, 768)).canvasRect;
-      expect(canvas.height, lessThan(768), reason: 'the canvas is smaller than the screen here');
+      expect(tester.getRect(find.byKey(key)), const Rect.fromLTWH(0, 0, 1024, 768));
+      expect(LuckyCardLayout.of(const Size(1024, 768)).canvasRect, const Rect.fromLTWH(0, 0, 1024, 768));
     });
 
     testWidgets('a plain dark one stands in when none is given', (tester) async {
@@ -122,9 +131,15 @@ void main() {
       expect(seen!.screen, const Size(844, 390));
       expect(seen!.scale, closeTo(0.39, 1e-9));
 
+      await pumpAtSize(tester, const Size(1200, 400), canvas());
+      expect(seen!.screen, const Size(1200, 400));
+      expect(seen!.usedShare, lessThan(1), reason: 'a very wide phone screen leaves room at the sides');
+      expect(seen!.isTablet, isFalse);
+
       await pumpAtSize(tester, const Size(1366, 1024), canvas());
       expect(seen!.screen, const Size(1366, 1024));
-      expect(seen!.usedShare, lessThan(1));
+      expect(seen!.isTablet, isTrue, reason: 'a tablet gets the tablet arrangement');
+      expect(seen!.usedShare, 1.0);
     });
   });
 
@@ -141,7 +156,7 @@ void main() {
             for (var c = 0; c < 4; c++)
               for (var r = 0; r < 3; r++)
                 Positioned.fromRect(
-                  rect: l.cardImage(c, r).shift(-l.grid.topLeft),
+                  rect: l.cardCell(c, r).shift(-l.grid.topLeft),
                   child: const ColoredBox(color: Color(0xFFFFD54F)),
                 ),
           ]),
@@ -153,6 +168,7 @@ void main() {
               ),
           ]),
           side: (context, l) => const ColoredBox(color: Color(0xFF6A1B9A)),
+          chipBar: (context, l) => const ColoredBox(color: Color(0xFF4A148C)),
         );
 
     for (final d in const [Device('small phone', 640, 360), Device('large phone', 915, 412), Device('small tablet', 1024, 768)]) {

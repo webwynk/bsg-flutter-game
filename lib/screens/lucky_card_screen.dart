@@ -10,8 +10,12 @@
 //   * forces landscape, preloads the pictures behind a short loading screen, then starts the
 //     provider;
 //   * lays out the top bar, the board (or, once betting closes, the wheel), the rank
-//     selectors (or the card column), the status strip and the side column on the canvas,
-//     with the coins and the win popup over everything;
+//     selectors (or the card column) and the side column on the canvas (the round's status
+//     words and warnings are in the header),
+//     with the coins and the win popup over everything. On a desktop screen (spec §17BP: Windows,
+//     macOS, Linux or a browser, and at least 1280 x 720 dp) the wheel is instead always on
+//     screen in a column at the left, the board and rank selectors only dim while betting is
+//     closed, and the results and the chips-and-buttons have a row and a bar of their own;
 //   * asks "EXIT GAME / Do you want to exit?" for the EXIT button and the back gesture, as
 //     Triple Chance does; chips that were never sent are given back when the screen closes;
 //   * opens the Info dialog from the INFO button, and the History dialog from the HISTORY
@@ -54,11 +58,13 @@ import '../widgets/lucky_card/lucky_card_board_binding.dart';
 import '../widgets/lucky_card/lucky_card_board_view.dart';
 import '../widgets/lucky_card/lucky_card_canvas.dart';
 import '../widgets/lucky_card/lucky_card_controls_binding.dart';
+import '../widgets/lucky_card/lucky_card_desktop_pieces.dart';
 import '../widgets/lucky_card/lucky_card_exit_dialog.dart';
 import '../widgets/lucky_card/lucky_card_history_dialog.dart';
 import '../widgets/lucky_card/lucky_card_info_dialog.dart';
 import '../widgets/lucky_card/lucky_card_layout.dart';
 import '../widgets/lucky_card/lucky_card_messages.dart';
+import '../widgets/lucky_card/lucky_card_platform.dart';
 import '../widgets/lucky_card/lucky_card_readouts_binding.dart';
 import '../widgets/lucky_card/lucky_card_region_swap.dart';
 import '../widgets/lucky_card/lucky_card_reveal_binding.dart';
@@ -78,10 +84,19 @@ class LuckyCardScreenSetup {
     this.ownsHistory = false,
     this.sessionStart,
     this.auth,
+    this.desktopPlatform,
   });
 
   final LuckyCardProvider provider;
   final LuckyCardArt art;
+
+  /// Whether a screen of at least 1280 x 720 gets the desktop arrangement (spec §17BP: the wheel
+  /// always on screen at the left, the board dimmed while betting is closed, the results row and the
+  /// chips-and-buttons bar). The real app's default setup ([_defaultSetup]) passes true, so the choice
+  /// is by screen size alone, like Triple Chance, on every platform (including an Android emulator on
+  /// a desktop). Null means "ask the platform" ([luckyCardRunsOnDesktop]: Windows, macOS, Linux and the
+  /// web say yes, Android and iOS no), which is what a test that leaves it unset sees.
+  final bool? desktopPlatform;
 
   /// The player's history. When null the screen makes its own (over the real database read)
   /// and disposes it; a test hands in one over a scripted read.
@@ -136,6 +151,7 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
   late final LuckyCardSound _sound;
   LuckyCardSoundDirector? _director;
   late final Future<void> Function()? _endSession;
+  late final bool _desktopPlatform;
   AuthProvider? _auth;
   final LuckyCardNotice _notice = LuckyCardNotice();
   bool _connectionDialogShowing = false;
@@ -162,6 +178,7 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
     _ownsHistory = setup.history == null || setup.ownsHistory;
     _sound = setup.sound ?? LuckyCardSound();
     _endSession = setup.endSession;
+    _desktopPlatform = setup.desktopPlatform ?? luckyCardRunsOnDesktop();
     _auth = setup.auth;
     if (widget.setup == null) _auth = context.read<AuthProvider>();
     // Read when HISTORY is tapped, not now: with no login (a test) the list is empty.
@@ -183,13 +200,16 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
       wallet: AuthLuckyCardWallet(context.read<AuthProvider>()),
       sync: sync,
     );
-    return LuckyCardScreenSetup(provider: provider, ownsProvider: true);
+    // The real app chooses the desktop arrangement by screen size alone (>= 1280 x 720 dp), exactly
+    // like Triple Chance's `isDesktopScreen`, so an emulator such as BlueStacks on a desktop (which
+    // reports Android as its platform) gets the desktop arrangement too.
+    return LuckyCardScreenSetup(provider: provider, ownsProvider: true, desktopPlatform: true);
   }
 
   /// Preloads the pictures, then starts the game.
   Future<void> _open() async {
     if (!mounted) return;
-    final layout = LuckyCardLayout.of(MediaQuery.sizeOf(context));
+    final layout = LuckyCardLayout.of(MediaQuery.sizeOf(context), desktopPlatform: _desktopPlatform);
     try {
       await Future.wait([
         precacheLuckyCardBoard(context, layout, _art),
@@ -429,6 +449,7 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
           }
         },
         builder: (context, zones) => LuckyCardCanvas(
+          layoutOf: (screen) => LuckyCardLayout.of(screen, desktopPlatform: _desktopPlatform),
           // The background is the screen's own, behind the safe area (below).
           background: const SizedBox.shrink(),
           topBar: (context, layout) => LuckyCardTopBarBinding(
@@ -446,26 +467,54 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
             // round's status and, for a moment, a refused tap's warning.
             notice: _notice,
           ),
-          grid: (context, layout) => LuckyCardRegionSwap(
-            provider: provider,
-            betting: (context) => zones.grid(context, layout),
-            reveal: (context) => LuckyCardWheelBinding(
-              provider: provider,
-              layout: layout,
-              // The first ding, for the rank rim, and the owner's own wheel sound from the start of
-              // the spin (the second ding, for the suit rim, comes from the sound director).
-              onSpinStart: _sound.wheelSpin,
-              onRankLanded: _sound.ding,
-            ),
-          ),
-          rankColumn: (context, layout) => LuckyCardRegionSwap(
-            provider: provider,
-            betting: (context) => zones.rankColumn(context, layout),
-            // The card flip has no sound (owner's decision 2026-10-07): the wheel's own sound and
-            // the two dings are what is heard.
-            reveal: (context) => LuckyCardRevealColumn(provider: provider, layout: layout, art: art),
-          ),
-          side: (context, layout) => LuckyCardSideColumn(
+          // Desktop (spec §17BP): the board and the rank selectors stay where they are while betting is
+          // closed (dimmed and locked by their own lock) and the wheel lives in the side column, so
+          // nothing is swapped and no card flips over the rank column.
+          grid: (context, layout) => layout.isDesktop
+              ? zones.grid(context, layout)
+              : LuckyCardRegionSwap(
+                  provider: provider,
+                  betting: (context) => zones.grid(context, layout),
+                  reveal: (context) => LuckyCardWheelBinding(
+                    provider: provider,
+                    layout: layout,
+                    // The first ding, for the rank rim, and the owner's own wheel sound from the start of
+                    // the spin (the second ding, for the suit rim, comes from the sound director).
+                    onSpinStart: _sound.wheelSpin,
+                    onRankLanded: _sound.ding,
+                  ),
+                ),
+          rankColumn: (context, layout) => layout.isDesktop
+              ? zones.rankColumn(context, layout)
+              : LuckyCardRegionSwap(
+                  provider: provider,
+                  betting: (context) => zones.rankColumn(context, layout),
+                  // The card flip has no sound (owner's decision 2026-10-07): the wheel's own sound and
+                  // the two dings are what is heard.
+                  reveal: (context) => LuckyCardRevealColumn(provider: provider, layout: layout, art: art),
+                ),
+          side: (context, layout) => layout.isDesktop
+              ? LuckyCardDesktopSide(
+                  provider: provider,
+                  layout: layout,
+                  art: art,
+                  onSpinStart: _sound.wheelSpin,
+                  onRankLanded: _sound.ding,
+                )
+              : LuckyCardSideColumn(
+                  provider: provider,
+                  layout: layout,
+                  art: art,
+                  onChipSelected: (_) => _sound.buttonClick(),
+                  onButtonRefused: (control, issues) => _refusal(issues),
+                  onButtonPressed: (_) {
+                    _sound.buttonClick();
+                    _lightClick();
+                  },
+                ),
+          // The desktop's results row and its bar of chips and buttons (not built on a phone or a tablet).
+          resultsBar: (context, layout) => LuckyCardResultsBarBinding(provider: provider, layout: layout, art: art),
+          actionBar: (context, layout) => LuckyCardActionBar(
             provider: provider,
             layout: layout,
             art: art,
@@ -475,6 +524,13 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
               _sound.buttonClick();
               _lightClick();
             },
+          ),
+          // A tablet's chips are in a bar under the board (spec §17BN); a phone has no such zone.
+          chipBar: (context, layout) => LuckyCardChipBar(
+            provider: provider,
+            layout: layout,
+            art: art,
+            onChipSelected: (_) => _sound.buttonClick(),
           ),
           overlay: (context, layout) => LuckyCardRevealOverlay(
           provider: provider,

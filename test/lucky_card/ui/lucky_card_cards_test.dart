@@ -85,7 +85,7 @@ void main() {
           expect(text.style!.fontSize, greaterThanOrEqualTo(kLuckyCardMinReadableDp - 0.001), reason: '${c.key} text size');
 
           // Centred on the ribbon of the card picture.
-          final picture = layout.cardImage(c.suit.index, c.rank.index).shift(layout.canvasRect.topLeft);
+          final picture = layout.cardCell(c.suit.index, c.rank.index).shift(layout.canvasRect.topLeft);
           final ribbon = LuckyCardSlots.cardPlate.within(picture);
           expect(tester.getCenter(textIn(c)).dx, closeTo(ribbon.center.dx, 0.6), reason: '${c.key} text across');
           expect(tester.getCenter(textIn(c)).dy, closeTo(ribbon.center.dy, 0.6), reason: '${c.key} text down');

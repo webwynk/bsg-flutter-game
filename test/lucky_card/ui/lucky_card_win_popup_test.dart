@@ -160,11 +160,21 @@ void main() {
     });
 
 
-    testWidgets('on a tablet the dimmed backdrop covers the whole screen, not just the smaller canvas', (tester) async {
+    testWidgets('on a very wide phone screen the dimmed backdrop covers the whole screen, not just the narrower canvas', (tester) async {
+      await pumpAtSize(tester, const Size(1200, 400), popup(outcome()));
+      await ms(tester, 500);
+      expect(LuckyCardLayout.of(const Size(1200, 400)).canvasRect.left, greaterThan(0), reason: 'the canvas is narrower than the screen here');
+      expect(tester.getRect(find.byType(BackdropFilter)), const Rect.fromLTWH(0, 0, 1200, 400));
+    });
+
+    testWidgets('on a tablet the canvas is the whole screen, the popup is centred on it and the backdrop covers it', (tester) async {
       await pumpAtSize(tester, const Size(1024, 768), popup(outcome()));
       await ms(tester, 500);
-      expect(LuckyCardLayout.of(const Size(1024, 768)).canvasRect.top, greaterThan(0), reason: 'the canvas is smaller than the screen here');
+      final layout = LuckyCardLayout.of(const Size(1024, 768));
+      expect(layout.canvasRect, const Rect.fromLTWH(0, 0, 1024, 768));
       expect(tester.getRect(find.byType(BackdropFilter)), const Rect.fromLTWH(0, 0, 1024, 768));
+      expect(layout.winPopup.center.dx, closeTo(512, 0.01));
+      expect(layout.winPopup.center.dy, closeTo(384, 0.01));
     });
 
 

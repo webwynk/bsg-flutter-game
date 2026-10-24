@@ -341,6 +341,18 @@ class LuckyCardWheelState extends State<LuckyCardWheel>
     return spin(outerIndex: stop.outerIndex, innerIndex: stop.innerIndex, bonus: bonus);
   }
 
+  /// Puts the hub back to the mystery gift box after a result has been shown, leaving the rims where
+  /// they stopped (the next spin starts from there). Used by the desktop arrangement, where the wheel
+  /// stays on screen between rounds instead of being built fresh at every lock (spec §17BP). Does
+  /// nothing while a spin is running or when no result is showing.
+  void clearResult() {
+    if (_spinning || _result == null) return;
+    _idleLightsTimer?.cancel();
+    _setLights(_LightMode.idle);
+    _smokeCtrl.stop();
+    setState(() => _result = null);
+  }
+
   /// The hub is a display only: it is not a button.
   Widget _buildHub(double size) {
     return Container(

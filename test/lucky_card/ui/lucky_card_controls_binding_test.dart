@@ -66,6 +66,13 @@ Widget scene(
         onButtonPressed: hooks == null ? null : (c) => hooks.events.add('pressed ${c.name}'),
         onButtonRefused: hooks == null ? null : (c, issues) => hooks.events.add('refused ${c.name} ${(issues.map((e) => e.name).toList()..sort()).join('+')}'),
       ),
+      // A tablet's chips are in the bar under the board; a phone has no such zone.
+      chipBar: (context, layout) => LuckyCardChipBar(
+        provider: provider,
+        layout: layout,
+        art: art,
+        onChipSelected: hooks == null ? null : (chip) => hooks.events.add('chip ${chip.amount}'),
+      ),
     );
 
 Finder key(String k) => find.byKey(ValueKey(k));
@@ -445,7 +452,7 @@ void main() {
       final rig = BetRig(tester);
       await pumpAtSize(tester, phone, scene(rig.provider));
       await rig.open();
-      for (final k in ['total-bet', 'win', 'result-latest', 'result-8']) {
+      for (final k in ['total-bet', 'win', 'result-latest', 'result-10']) {
         expect(key(k), findsOneWidget, reason: k);
       }
       expect(find.byType(LuckyCardChipRail), findsOneWidget);
@@ -483,7 +490,7 @@ void main() {
       expect(cache.currentSize, 5, reason: 'the five chips');
       cache.clear();
       await tester.runAsync(() => precacheLuckyCardSideColumn(context, layout, const FileLuckyCardArt()));
-      expect(cache.currentSize, 9, reason: 'the five chips and the four suit icons');
+      expect(cache.currentSize, 11, reason: 'the five chips, the four suit icons and the two history frames');
       cache.clear();
     });
   });

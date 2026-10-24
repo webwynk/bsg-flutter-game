@@ -9,7 +9,7 @@
 //   * [luckyCardProblemDialog]: what Triple Chance's shared dialog says for each kind of
 //     problem the provider reports, in Triple Chance's own words (the bet was rejected, the
 //     round never resolved, the connection was lost, the account is blocked).
-//   * [LuckyCardNotice]: the one line shown in the status strip, with its timer.
+//   * [LuckyCardNotice]: the one line shown in the header, with its timer.
 //
 // Plain functions, so every word and every number is tested against the game's rules.
 //
@@ -31,7 +31,7 @@ const Duration kLuckyCardRefusalLineTime = Duration(seconds: 2);
 /// How long the "balance not confirmed" line stays (Triple Chance's bar stays 6 seconds).
 const Duration kLuckyCardBalanceLineTime = Duration(seconds: 6);
 
-/// What the status strip says when a round's balance could not be confirmed.
+/// What the header says when a round's balance could not be confirmed.
 const String kLuckyCardBalanceLine = 'BALANCE NOT CONFIRMED - IT WILL UPDATE NEXT ROUND';
 
 /// True when the tap was refused because a card is already at its largest stake (and not
@@ -192,7 +192,7 @@ const LuckyCardProblemDialog luckyCardBlockedDialog = LuckyCardProblemDialog(
 LuckyCardProblemDialog luckyCardDialogForConnection(LuckyCardError reason) =>
     reason == LuckyCardError.accountBlocked ? luckyCardBlockedDialog : luckyCardConnectionLostDialog;
 
-/// The one line the status strip shows in place of its words, for a short time.
+/// The one line the header shows in place of the round's status words, for a short time.
 class LuckyCardNotice extends ChangeNotifier {
   String? _text;
   bool _important = false;

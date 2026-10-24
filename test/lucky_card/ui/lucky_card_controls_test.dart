@@ -268,8 +268,8 @@ void main() {
       expect(mid, lessThan(big), reason: 'it grows, it does not jump');
     });
 
-    testWidgets('a tap anywhere in a chip\'s 48 dp area picks it up, even beside the picture', (tester) async {
-      for (final d in kDeviceMatrix) {
+    testWidgets('a tap anywhere in a chip\'s 48 dp area picks it up, even beside the picture (the phones: a tablet\'s chips are in lucky_card_tablet_panel_test.dart)', (tester) async {
+      for (final d in kPhoneMatrix) {
         final log = Log();
         await pumpAtSize(tester, d.size, scene(log: log));
         final l = LuckyCardLayout.of(d.size);

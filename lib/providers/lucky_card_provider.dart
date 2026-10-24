@@ -1,7 +1,7 @@
 // The Lucky Card game provider (App Steps 3b-1 and 3b-2): the betting board as
 // the player uses it, the lock at countdown 5, sending the bet with every way it
 // can fail, and the result sequence (the wheel, the confirmed result, the
-// balance, the coins and the popup), the last-10 history strip, and a round that
+// balance, the coins and the popup), the last-12 history strip, and a round that
 // never resolves.
 //
 // The provider is an ordinary object created for one screen. Everything it
@@ -184,7 +184,7 @@ class LuckyCardProvider extends ChangeNotifier {
 
   // ── The history strip (App Step 3b-2b) ──────────────────────────────────
 
-  /// The last 10 results, newest first, global to every player.
+  /// The last 12 results, newest first, global to every player.
   final List<LuckyCardRecentRound> _history = [];
 
   /// Rounds this screen has revealed. A round of the current cycle is shown in
@@ -201,7 +201,7 @@ class LuckyCardProvider extends ChangeNotifier {
   LuckyCardPhase get phase => _phase;
   String? get submittedRoundId => _submittedRoundId;
 
-  /// The last 10 results, newest first. The first entry is the current result.
+  /// The last 12 results, newest first. The first entry is the current result.
   /// A round that has been drawn but not yet revealed on this screen is not in
   /// it, so the strip never gives the winner away before the wheel lands.
   List<LuckyCardRecentRound> get history => List.unmodifiable(_history);
@@ -665,7 +665,7 @@ class LuckyCardProvider extends ChangeNotifier {
 
   // ── The history strip ───────────────────────────────────────────────────
 
-  /// Loads the last 10 results from the server and merges them in. A failed or
+  /// Loads the last 12 results from the server and merges them in. A failed or
   /// empty answer leaves the strip as it is, as Triple Chance does.
   Future<void> _loadHistory(int epoch) async {
     List<LuckyCardRecentRound> rounds;
@@ -682,10 +682,10 @@ class LuckyCardProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  static const int _historySize = 10;
+  static const int _historySize = 12;
 
   /// Merges [incoming] into the strip: by round (no duplicates, what is already
-  /// there is kept), newest first, at most 10. A round of the CURRENT cycle that
+  /// there is kept), newest first, at most 12. A round of the CURRENT cycle that
   /// this screen has not revealed yet is left out: the database returns a round
   /// from the moment it is drawn (second 89), which is before the wheel lands,
   /// and the card must not show anywhere before both rims have landed. Triple

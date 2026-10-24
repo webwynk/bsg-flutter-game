@@ -1,5 +1,6 @@
 // The Lucky Card screen's frame: a background over the whole screen, and on top
-// of it a canvas, shaped by [LuckyCardLayout], holding the five zones.
+// of it a canvas, shaped by [LuckyCardLayout], holding the four zones (five on a tablet: the chip
+// bar under the board; six on the desktop: the results row and the bottom bar of chips and buttons).
 //
 // It does three things and nothing else:
 //   * places each zone where [LuckyCardLayout] says, giving it that layout so it
@@ -45,8 +46,19 @@ class LuckyCardCanvas extends StatelessWidget {
     this.grid,
     this.rankColumn,
     this.side,
+    this.chipBar,
+    this.resultsBar,
+    this.actionBar,
     this.overlay,
+    this.layoutOf = LuckyCardCanvas.defaultLayoutOf,
   });
+
+  /// The layout for a screen of this size: [LuckyCardLayout.of], which gives a tablet-sized screen the
+  /// tablet arrangement and any other the phone one (spec §17BN). The desktop arrangement is never
+  /// chosen here (it needs to be told the platform): the screen and tests pass their own.
+  final LuckyCardLayout Function(Size screen) layoutOf;
+
+  static LuckyCardLayout defaultLayoutOf(Size screen) => LuckyCardLayout.of(screen);
 
   /// Painted over the whole screen. A plain dark one stands in until the real
   /// background is supplied.
@@ -56,6 +68,19 @@ class LuckyCardCanvas extends StatelessWidget {
   final LuckyCardZoneBuilder? grid;
   final LuckyCardZoneBuilder? rankColumn;
   final LuckyCardZoneBuilder? side;
+
+  /// The bar under the board that holds the chips: a tablet-only zone. It is left out on a phone,
+  /// whatever is passed, because a phone's chips are in [side].
+  final LuckyCardZoneBuilder? chipBar;
+
+  /// The desktop-only row of the newest history cards, under the board. Left out on a phone and a tablet,
+  /// whatever is passed (their results are in [side]).
+  final LuckyCardZoneBuilder? resultsBar;
+
+  /// The desktop-only bar at the bottom of the right column that holds the chips and the three buttons.
+  /// Left out on a phone and a tablet, whatever is passed (their chips and buttons are in [side] and
+  /// [chipBar]).
+  final LuckyCardZoneBuilder? actionBar;
 
   /// Drawn over everything, across the whole screen (not just the canvas): the
   /// coins and the win popup.
@@ -69,7 +94,7 @@ class LuckyCardCanvas extends StatelessWidget {
           constraints.hasBoundedWidth && constraints.hasBoundedHeight,
           'LuckyCardCanvas needs a bounded size (give it the whole screen)',
         );
-        final layout = LuckyCardLayout.of(constraints.biggest);
+        final layout = layoutOf(constraints.biggest);
         final media = MediaQuery.maybeOf(context) ?? const MediaQueryData();
         return MediaQuery(
           data: media.copyWith(textScaler: TextScaler.noScaling),
@@ -88,6 +113,11 @@ class LuckyCardCanvas extends StatelessWidget {
                       _zone(layout.grid, grid, layout),
                       _zone(layout.rankColumn, rankColumn, layout),
                       _zone(layout.side, side, layout),
+                      if (layout.isTablet) _zone(layout.chipBar, chipBar, layout),
+                      if (layout.isDesktop) ...[
+                        _zone(layout.resultsBar, resultsBar, layout),
+                        _zone(layout.actionBar, actionBar, layout),
+                      ],
                     ],
                   ),
                 ),

@@ -15,10 +15,10 @@ import 'ui_harness.dart';
 
 void main() {
   group('the keys', () {
-    test('there are 32 pictures, all different', () {
+    test('there are 34 pictures, all different', () {
       final all = LuckyCardArtKey.all;
-      expect(all.length, 32, reason: '12 cards, 4 bars, 4 symbols, 3 selectors, 5 chips, 2 win-popup pictures, the coin, the background');
-      expect(all.toSet().length, 32);
+      expect(all.length, 34, reason: '12 cards, 4 bars, 4 symbols, 3 selectors, 5 chips, 2 history frames, 2 win-popup pictures, the coin, the background');
+      expect(all.toSet().length, 34);
       expect(all, contains(LuckyCardArtKey.background));
     });
 

@@ -2,7 +2,7 @@
 // (lucky_card_top_bar.dart, lucky_card_status_strip.dart, lucky_card_readouts.dart).
 //
 // What the player reads: the balance, the countdown, the status words, PLAY and WIN and the
-// ten latest results. Everything is checked on every
+// twelve latest results. Everything is checked on every
 // device of the matrix: where it sits, that each button has a tap area of at least
 // 48 dp, that no text is smaller than 11 dp, that nothing overflows, and that the
 // phone's font-size setting changes nothing. The pieces here are given plain values;
@@ -45,6 +45,27 @@ final List<LuckyCardRecentRound> ten = [
   round(1, LuckyCardRank.jack, LuckyCardSuit.diamonds, 5),
 ];
 
+/// Twelve rounds: those ten, then two older ones (King of Hearts with no bonus, Queen of Hearts with 6X).
+final List<LuckyCardRecentRound> twelve = [
+  ...ten,
+  round(0, LuckyCardRank.king, LuckyCardSuit.hearts, 1),
+  round(-1, LuckyCardRank.queen, LuckyCardSuit.hearts, 6),
+];
+
+/// A picture source that remembers what was asked of it, to prove each picture is asked for at the
+/// width it is drawn.
+class RecordingArt extends LuckyCardArt {
+  RecordingArt();
+
+  final List<({LuckyCardArtKey key, int cacheWidth})> requests = [];
+
+  @override
+  ImageProvider image(LuckyCardArtKey key, {required int cacheWidth}) {
+    requests.add((key: key, cacheWidth: cacheWidth));
+    return const FileLuckyCardArt().image(key, cacheWidth: cacheWidth);
+  }
+}
+
 class Taps {
   int exit = 0, sound = 0, info = 0;
 }
@@ -64,7 +85,7 @@ Widget scene({
   List<LuckyCardRecentRound>? history,
   Taps? taps,
 }) {
-  final rounds = history ?? ten;
+  final rounds = history ?? twelve;
   // Matches what LuckyCardTopBarBinding actually feeds the header from a mode, so a test
   // here that picks a mode sees the same words, colour and flashing the real screen would.
   return LuckyCardCanvas(
@@ -207,7 +228,7 @@ void main() {
           'win': l.winCell,
           'results': l.resultsPanel,
           'result-latest': l.resultTile(0),
-          for (var i = 0; i < 9; i++) 'result-$i': l.resultTile(i + 1),
+          for (var i = 0; i < 11; i++) 'result-$i': l.resultTile(i + 1),
         };
         for (final e in expected.entries) {
           final got = rectOf(tester, e.key);
@@ -272,28 +293,34 @@ void main() {
       expect(textsIn(tester, find.byKey(const ValueKey('top-countdown'))), ['90']);
     });
 
-    testWidgets('the countdown ring is gold, and red for the last five seconds only; the digits stay white, as the design draws them', (tester) async {
-      // The design's countdown turns urgent in its RING, not its digits (a purple disc with
-      // white digits throughout): the old gold/red text is gone with the strip that used it.
-      Color ringColorAt(int seconds) {
-        final container = tester.widget<Container>(find.descendant(of: find.byKey(const ValueKey('top-countdown')), matching: find.byType(Container)).first);
-        return ((container.decoration as BoxDecoration).gradient as SweepGradient).colors.first;
-      }
+    testWidgets('the countdown is a purple disc with white digits and NO ring, at every second, the last five included', (tester) async {
+      // The gold ring that emptied as the window ran down (and went red for the last five seconds)
+      // was removed, 2026-10-24: the disc looks the same all the time; the words beside it flash.
+      Container disc() => tester.widget<Container>(find.descendant(of: find.byKey(const ValueKey('top-countdown')), matching: find.byType(Container)).first);
 
-      Color textColorAt(int seconds) {
+      for (final s in [90, 45, 6, 5, 3, 1, 0]) {
+        await pumpAtSize(tester, const Size(844, 390), scene(countdown: s));
+        final decoration = disc().decoration as BoxDecoration;
+        expect(decoration.gradient, isA<RadialGradient>(), reason: '$s seconds: a plain disc, no sweep ring');
+        expect((decoration.gradient as RadialGradient).colors, kDesignCountdownDisc, reason: '$s seconds');
+        expect(decoration.boxShadow, isNull, reason: '$s seconds: no glow');
+        expect(find.descendant(of: find.byKey(const ValueKey('top-countdown')), matching: find.byType(Container)), findsOneWidget, reason: '$s seconds: one layer, no ring around it');
         final t = tester.widget<Text>(find.descendant(of: find.byKey(const ValueKey('top-countdown')), matching: find.byType(Text)));
-        return t.style!.color!;
+        expect(t.style!.color, kDesignCountdownText, reason: '$s seconds');
+        expect(t.data, s.toString().padLeft(2, '0'));
+        expect(tester.getSize(find.byKey(const ValueKey('top-countdown'))), Size.square(LuckyCardLayout.phone(const Size(844, 390)).designCountdownSize), reason: '$s seconds: the box is exactly the disc');
       }
+    });
 
-      for (final s in [90, 6, 0]) {
-        await pumpAtSize(tester, const Size(844, 390), scene(countdown: s));
-        expect(ringColorAt(s), kDesignRing, reason: '$s seconds');
-        expect(textColorAt(s), kDesignCountdownText, reason: '$s seconds');
-      }
-      for (final s in [5, 3, 1]) {
-        await pumpAtSize(tester, const Size(844, 390), scene(countdown: s));
-        expect(ringColorAt(s), kDesignAlertText, reason: '$s seconds');
-        expect(textColorAt(s), kDesignCountdownText, reason: '$s seconds, digits unchanged');
+    testWidgets('the words in the header are DM Sans (extra-bold); the digits and the balance stay Oswald', (tester) async {
+      for (final mode in LuckyCardStatusMode.values) {
+        await pumpAtSize(tester, const Size(844, 390), scene(mode: mode));
+        final words = tester.widget<Text>(find.descendant(of: find.byKey(const ValueKey('top-status')), matching: find.byType(Text)));
+        expect(words.style!.fontFamily, 'DMSans', reason: '$mode');
+        expect(words.style!.fontWeight, FontWeight.w800, reason: '$mode');
+        expect(words.data, luckyCardStatusText(mode).toUpperCase(), reason: '$mode');
+        final digits = tester.widget<Text>(find.descendant(of: find.byKey(const ValueKey('top-countdown')), matching: find.byType(Text)));
+        expect(digits.style!.fontFamily, 'Oswald', reason: 'the countdown digits keep their face: $mode');
       }
     });
 
@@ -536,11 +563,33 @@ void main() {
     });
   });
 
-  group('the results', () {
-    testWidgets('the ten latest rounds fill two rows of five, newest first, each with its bonus under the letter and suit', (tester) async {
+  group('the results (the twelve history cards, spec §17BO)', () {
+    /// The file name of every picture ([Image]) drawn in [key]'s card: the suit's picture only,
+    /// because the frame is its own widget ([LuckyCardHistoryFrame]).
+    List<String> picturesIn(WidgetTester tester, String key) => [
+          for (final image in tester.widgetList<Image>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(Image))))
+            ((image.image as ResizeImage).imageProvider as FileImage).file.path.split(RegExp(r'[\\/]')).last,
+        ];
+
+    /// The suit picture of [key]'s card.
+    String? iconOf(WidgetTester tester, String key) {
+      final icons = picturesIn(tester, key);
+      return icons.isEmpty ? null : icons.single;
+    }
+
+    /// The frame of [key]'s card (null when it has none).
+    LuckyCardHistoryFrame? frameOf(WidgetTester tester, String key) {
+      final found = find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(LuckyCardHistoryFrame));
+      return found.evaluate().isEmpty ? null : tester.widget<LuckyCardHistoryFrame>(found);
+    }
+
+    TextStyle styleOf(WidgetTester tester, String key, String text) =>
+        tester.widget<Text>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.text(text))).style!;
+
+    testWidgets('the twelve latest rounds fill four across and three down, newest first, each with its letter and its bonus', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene());
       expect(textsIn(tester, find.byKey(const ValueKey('result-latest'))), ['Q', '4X']);
-      final row = [for (var i = 0; i < 9; i++) textsIn(tester, find.byKey(ValueKey('result-$i')))];
+      final row = [for (var i = 0; i < 11; i++) textsIn(tester, find.byKey(ValueKey('result-$i')))];
       expect(row, [
         ['J', 'N'],
         ['K', '10X'],
@@ -551,21 +600,25 @@ void main() {
         ['J', '7X'],
         ['K', 'N'],
         ['J', '5X'],
+        ['K', 'N'],
+        ['Q', '6X'],
       ]);
-      expect(find.text('LAST RESULT'), findsNothing, reason: 'no caption line any more');
+      // Four across (the same top along a row, the same left down a column), three rows.
+      final tiles = [rectOf(tester, 'result-latest'), for (var i = 0; i < 11; i++) rectOf(tester, 'result-$i')];
+      for (var i = 0; i < 12; i++) {
+        expect(tiles[i].top, closeTo(tiles[i - i % 4].top, 0.01), reason: 'card $i is in its row');
+        expect(tiles[i].left, closeTo(tiles[i % 4].left, 0.01), reason: 'card $i is in its column');
+      }
+      expect(tiles[4].top, greaterThan(tiles[0].bottom), reason: 'the second row is under the first');
+      expect(tiles[8].top, greaterThan(tiles[4].bottom), reason: 'the third row is under the second');
+      expect(find.text('LAST RESULT'), findsNothing);
       expect(find.text('Previous 9'), findsNothing);
     });
 
-    testWidgets('each result carries the picture of its own suit', (tester) async {
+    testWidgets('each card carries the picture of its own suit and the right frame: the green one for the newest, the cream one for the rest', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene());
-      String? iconOf(String key) {
-        final image = tester.widget<Image>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(Image)));
-        final provider = image.image as ResizeImage;
-        return (provider.imageProvider as FileImage).file.path.split(RegExp(r'[\\/]')).last;
-      }
-
-      expect(iconOf('result-latest'), 'spades-icon.webp');
-      expect([for (var i = 0; i < 9; i++) iconOf('result-$i')], [
+      expect(iconOf(tester, 'result-latest'), 'spades-icon.webp');
+      expect([for (var i = 0; i < 11; i++) iconOf(tester, 'result-$i')], [
         'hearts-icon.webp',
         'diamonds-icon.webp',
         'clubs-icon.webp',
@@ -575,93 +628,195 @@ void main() {
         'clubs-icon.webp',
         'spades-icon.webp',
         'diamonds-icon.webp',
+        'hearts-icon.webp',
+        'hearts-icon.webp',
       ]);
+      expect(frameOf(tester, 'result-latest')!.latest, isTrue, reason: 'the newest card has the green frame');
+      for (var i = 0; i < 11; i++) {
+        expect(frameOf(tester, 'result-$i')!.latest, isFalse, reason: 'card $i has the cream frame');
+      }
     });
 
-    testWidgets('a new table has fewer than ten rounds: the missing ones are empty slots', (tester) async {
+    testWidgets('the green frame is the picture latest-history-card and the cream one history-card', (tester) async {
+      final art = RecordingArt();
+      await pumpAtSize(tester, const Size(844, 390), scene(art: art));
+      final frames = art.requests.where((r) => !r.key.assetPath.endsWith('-icon.webp')).map((r) => r.key.assetPath.split('/').last).toSet();
+      expect(frames, {'latest-history-card.webp', 'history-card.webp'});
+    });
+
+    testWidgets('a new table has fewer than twelve rounds: the missing ones are faint empty frames', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene(history: ten.sublist(0, 3)));
       expect(textsIn(tester, find.byKey(const ValueKey('result-latest'))), ['Q', '4X']);
       expect(textsIn(tester, find.byKey(const ValueKey('result-0'))), ['J', 'N']);
       expect(textsIn(tester, find.byKey(const ValueKey('result-1'))), ['K', '10X']);
-      for (var i = 2; i < 9; i++) {
-        expect(textsIn(tester, find.byKey(ValueKey('result-$i'))), isEmpty, reason: 'slot $i is empty');
-        expect(find.descendant(of: find.byKey(ValueKey('result-$i')), matching: find.byType(Image)), findsNothing);
+      for (var i = 2; i < 11; i++) {
+        final slot = find.byKey(ValueKey('result-$i'));
+        expect(textsIn(tester, slot), isEmpty, reason: 'slot $i is empty');
+        expect(iconOf(tester, 'result-$i'), isNull, reason: 'slot $i has no suit picture');
+        expect(frameOf(tester, 'result-$i')!.latest, isFalse, reason: 'slot $i is a bare cream frame');
+        expect(tester.widget<Opacity>(find.descendant(of: slot, matching: find.byType(Opacity))).opacity, 0.3, reason: 'slot $i is faint');
       }
-      expect(find.descendant(of: find.byKey(const ValueKey('results')), matching: find.byType(Image)), findsNWidgets(3));
+      expect(find.descendant(of: find.byKey(const ValueKey('results')), matching: find.byType(Opacity)), findsNWidgets(9));
     });
 
-    testWidgets('an empty slot is a faint blank box, the newest card green and the older ones white', (tester) async {
-      await pumpAtSize(tester, const Size(844, 390), scene(history: ten.sublist(0, 3)));
-      BoxDecoration decoration(String k) =>
-          tester.widget<DecoratedBox>(find.descendant(of: find.byKey(ValueKey(k)), matching: find.byType(DecoratedBox)).first).decoration as BoxDecoration;
-      expect(decoration('result-latest').gradient!.colors, kDesignTileFill, reason: 'the newest is green');
-      expect(decoration('result-0').gradient!.colors, kDesignOldTileFill, reason: 'older ones are white');
-      expect(decoration('result-0').gradient!.colors.every((c) => c == const Color(0xFFFFFFFF)), isTrue);
-      expect(decoration('result-1').gradient!.colors, kDesignOldTileFill);
-      for (var i = 2; i < 9; i++) {
-        expect(decoration('result-$i').gradient, isNull, reason: 'slot $i');
-        expect(decoration('result-$i').color, const Color(0x1FFFFFFF), reason: 'slot $i');
+    testWidgets('the newest card has white writing with a thin dark outline and its suit on a cream patch; the older ones have red or black writing and no patch', (tester) async {
+      await pumpAtSize(tester, const Size(844, 390), scene());
+      final latest = styleOf(tester, 'result-latest', 'Q');
+      expect(latest.color, kDesignHistoryLatestLetter);
+      expect(latest.shadows!.length, 4, reason: 'a thin outline from four sides');
+      expect(latest.shadows!.every((s) => s.color == kDesignHistoryLatestOutline && s.blurRadius == 0), isTrue);
+      bool hasPatch(String key) => tester
+          .widgetList<DecoratedBox>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(DecoratedBox)))
+          .any((d) => d.decoration is BoxDecoration && (d.decoration as BoxDecoration).color == kDesignHistoryPatch);
+      expect(hasPatch('result-latest'), isTrue, reason: 'the newest suit sits on the cream patch');
+      // Cream cards: red hearts and diamonds, black spades and clubs (result-0 Jack of Hearts,
+      // result-1 King of Diamonds, result-2 Queen of Clubs, result-3 Jack of Spades).
+      expect(styleOf(tester, 'result-0', 'J').color, kDesignHistoryRed);
+      expect(styleOf(tester, 'result-1', 'K').color, kDesignHistoryRed);
+      expect(styleOf(tester, 'result-2', 'Q').color, kDesignHistoryBlack);
+      expect(styleOf(tester, 'result-3', 'J').color, kDesignHistoryBlack);
+      for (var i = 0; i < 11; i++) {
+        expect(hasPatch('result-$i'), isFalse, reason: 'card $i has no patch');
+        expect(styleOf(tester, 'result-$i', textsIn(tester, find.byKey(ValueKey('result-$i'))).first).shadows, isNull, reason: 'card $i has no outline');
       }
     });
 
-    testWidgets('the suit pictures are decoded no wider than the largest one drawn, at any pixel density', (tester) async {
-      for (final dpr in [1.0, 2.0, 3.0]) {
-        const size = Size(844, 390);
-        await pumpAtSize(tester, size, scene(), devicePixelRatio: dpr);
-        final need = (LuckyCardLayout.designTileIcon * dpr).ceil();
-        for (final k in ['result-latest', for (var i = 0; i < 9; i++) 'result-$i']) {
-          final image = tester.widget<Image>(find.descendant(of: find.byKey(ValueKey(k)), matching: find.byType(Image)));
-          final width = (image.image as ResizeImage).width!;
-          expect(width, greaterThanOrEqualTo(need), reason: 'sharp enough: $k at $dpr');
-          expect(width, lessThanOrEqualTo(need + 1), reason: 'not larger than needed: $k at $dpr');
+    testWidgets('the bonus sits in a red bubble with white writing, "N" when there was none, never under 11 dp, the bubble wider for "10X"', (tester) async {
+      await pumpAtSize(tester, const Size(844, 390), scene());
+      for (final e in {'result-latest': '4X', 'result-0': 'N', 'result-1': '10X', 'result-2': '2X'}.entries) {
+        final text = styleOf(tester, e.key, e.value);
+        expect(text.color, kDesignHistoryBubbleText, reason: e.key);
+        expect(text.fontSize, greaterThanOrEqualTo(kLuckyCardMinReadableDp), reason: e.key);
+      }
+      Rect bubble(String key, String text) {
+        final box = find.ancestor(of: find.descendant(of: find.byKey(ValueKey(key)), matching: find.text(text)), matching: find.byType(DecoratedBox)).first;
+        final decoration = tester.widget<DecoratedBox>(box).decoration as BoxDecoration;
+        expect((decoration.gradient as LinearGradient).colors, kDesignHistoryBubbleFill, reason: '$key $text is a red bubble');
+        expect((decoration.border as Border).top.color, kDesignHistoryBubbleRing, reason: 'with the gold ring');
+        return tester.getRect(box);
+      }
+
+      final two = bubble('result-2', '2X');
+      final ten = bubble('result-1', '10X');
+      final none = bubble('result-0', 'N');
+      expect(ten.width, greaterThan(two.width), reason: 'a longer bonus widens the bubble');
+      expect(none.height, closeTo(two.height, 0.01));
+      expect(two.width, greaterThanOrEqualTo(two.height - 0.01), reason: 'round or a pill, never narrower than tall');
+      // At the top right of its card.
+      final card = rectOf(tester, 'result-2');
+      expect(two.top, lessThan(card.top + card.height * 0.2));
+      expect(two.right, greaterThan(card.right - card.width * 0.2));
+    });
+
+    testWidgets('the letter is at the top left, the suit at the bottom middle, the bubble at the top right, and they do not cover each other on any device', (tester) async {
+      for (final d in kDeviceMatrix) {
+        await pumpAtSize(tester, d.size, scene());
+        expect(tester.takeException(), isNull, reason: d.name);
+        for (final key in ['result-latest', for (var i = 0; i < 11; i++) 'result-$i']) {
+          final card = rectOf(tester, key);
+          final slot = find.byKey(ValueKey(key));
+          final texts = textsIn(tester, slot);
+          final letter = tester.getRect(find.descendant(of: slot, matching: find.text(texts[0])));
+          final bonus = tester.getRect(find.ancestor(of: find.descendant(of: slot, matching: find.text(texts[1])), matching: find.byType(DecoratedBox)).first);
+          final icon = tester.getRect(find.descendant(of: slot, matching: find.byType(Image)));
+          final why = '$key on ${d.name}';
+          expect(letter.left, lessThan(card.left + card.width * 0.25), reason: 'letter at the left: $why');
+          expect(letter.top, lessThan(card.top + card.height * 0.25), reason: 'letter at the top: $why');
+          expect(bonus.right, greaterThan(card.right - card.width * 0.25), reason: 'bubble at the right: $why');
+          expect(bonus.top, lessThan(card.top + card.height * 0.25), reason: 'bubble at the top: $why');
+          expect(icon.bottom, greaterThan(card.bottom - card.height * 0.2), reason: 'suit at the bottom: $why');
+          expect(icon.center.dx, closeTo(card.center.dx, card.width * 0.3), reason: 'suit in the middle: $why');
+          expect(letter.overlaps(bonus), isFalse, reason: 'the letter and the bubble are apart: $why');
+          // The suit may tuck a few dp under the bubble on a short card, never more than a quarter of its own area.
+          final inter = icon.intersect(bonus);
+          final overlap = inter.width > 0 && inter.height > 0 ? inter.width * inter.height : 0.0;
+          expect(overlap, lessThanOrEqualTo(icon.width * icon.height * 0.25), reason: 'the suit is mostly clear of the bubble: $why');
+          // Everything stays inside the card (the frame is the whole card).
+          for (final r in [letter, bonus, icon]) {
+            expect(r.left, greaterThanOrEqualTo(card.left - 0.5), reason: why);
+            expect(r.right, lessThanOrEqualTo(card.right + 0.5), reason: why);
+            expect(r.top, greaterThanOrEqualTo(card.top - 0.5), reason: why);
+            expect(r.bottom, lessThanOrEqualTo(card.bottom + 0.5), reason: why);
+          }
         }
       }
     });
 
-    testWidgets('no rounds at all: ten empty slots, nothing drawn, nothing thrown', (tester) async {
+    testWidgets('the frames and suit pictures are decoded no wider than they are drawn, at any pixel density', (tester) async {
+      for (final dpr in [1.0, 2.0, 3.0]) {
+        const size = Size(844, 390);
+        final art = RecordingArt();
+        await pumpAtSize(tester, size, scene(art: art), devicePixelRatio: dpr);
+        final l = LuckyCardLayout.of(size);
+        expect(art.requests, isNotEmpty);
+        for (final r in art.requests) {
+          final isIcon = r.key.assetPath.endsWith('-icon.webp');
+          final isFrame = r.key.assetPath.endsWith('history-card.webp');
+          if (!isIcon && !isFrame) continue;
+          expect(r.cacheWidth, isIcon ? l.resultIconCacheWidth(dpr) : l.historyFrameCacheWidth(dpr), reason: '${r.key.assetPath} at $dpr');
+        }
+        // The frame's decoded width gives exactly tileBorder dp of border at this density.
+        expect(l.historyFrameCacheWidth(dpr) * 18 / 604 / dpr, closeTo(l.tileBorder, 0.02 + 0.5 / dpr), reason: 'the border at $dpr');
+      }
+    });
+
+    test('the frame is drawn nine-slice: corners of 7.5% of the picture, scaled so the 18 px border comes out tileBorder dp', () {
+      // The picture is 604 x 686: the middle leaves 45.3 px at every side.
+      final center = LuckyCardHistoryFramePainter.centerOf(604, 686);
+      expect(center.left, closeTo(45.3, 0.001));
+      expect(center.top, closeTo(45.3, 0.001));
+      expect(center.right, closeTo(604 - 45.3, 0.001));
+      expect(center.bottom, closeTo(686 - 45.3, 0.001));
+      // At 604 px wide an 18 px border drawn 1.5 dp thick is a scale of 1.5 / 18; at a decoded 50 px it is ten times bigger.
+      expect(LuckyCardHistoryFramePainter.scaleFor(604, 1.5), closeTo(1.5 / 18, 1e-9));
+      expect(LuckyCardHistoryFramePainter.scaleFor(50, 1.5), closeTo(1.5 / (50 * 18 / 604), 1e-9));
+      // Whatever size the picture arrives at, its border is drawn the same thickness.
+      for (final w in [50.0, 100.0, 302.0, 604.0]) {
+        expect(w * LuckyCardHistoryFramePainter.scaleFor(w, 2.2) * (18 / 604), closeTo(2.2, 1e-9), reason: 'decoded $w px wide');
+      }
+    });
+
+    testWidgets('the frame is as big as its card, and drawn once the picture has arrived', (tester) async {
+      await pumpAtSize(tester, const Size(640, 360), scene());
+      final l = LuckyCardLayout.of(const Size(640, 360));
+      for (final key in ['result-latest', 'result-0', 'result-10']) {
+        final frame = find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(LuckyCardHistoryFrame));
+        expect(frame, findsOneWidget, reason: key);
+        final size = tester.getSize(find.descendant(of: frame, matching: find.byType(SizedBox)).first);
+        expect(size.width, closeTo(l.designTileWidth, 0.01), reason: key);
+        expect(size.height, closeTo(l.designTileHeight, 0.01), reason: key);
+      }
+    });
+
+    testWidgets('no rounds at all: twelve faint empty frames, no letters, no bubbles, nothing thrown', (tester) async {
       await pumpAtSize(tester, const Size(844, 390), scene(history: const []));
       expect(tester.takeException(), isNull);
-      expect(find.descendant(of: find.byKey(const ValueKey('results')), matching: find.byType(Image)), findsNothing);
-      expect(textsIn(tester, find.byKey(const ValueKey('results'))), isEmpty);
+      final results = find.byKey(const ValueKey('results'));
+      expect(find.descendant(of: results, matching: find.byType(LuckyCardHistoryFrame)), findsNWidgets(12), reason: 'only the frames');
+      expect(find.descendant(of: results, matching: find.byType(Image)), findsNothing, reason: 'no suit pictures');
+      expect(find.descendant(of: results, matching: find.byType(Opacity)), findsNWidgets(12));
+      expect(textsIn(tester, results), isEmpty);
     });
 
-    testWidgets('more than ten rounds: only the latest ten are shown', (tester) async {
-      final many = [round(11, LuckyCardRank.king, LuckyCardSuit.clubs, 6), ...ten];
+    testWidgets('more than twelve rounds: only the latest twelve are shown', (tester) async {
+      final many = [round(13, LuckyCardRank.king, LuckyCardSuit.clubs, 6), ...twelve];
       await pumpAtSize(tester, const Size(844, 390), scene(history: many));
       expect(textsIn(tester, find.byKey(const ValueKey('result-latest'))), ['K', '6X']);
-      expect(find.descendant(of: find.byKey(const ValueKey('results')), matching: find.byType(Image)), findsNWidgets(10));
+      final results = find.byKey(const ValueKey('results'));
+      expect(find.descendant(of: results, matching: find.byType(LuckyCardHistoryFrame)), findsNWidgets(12));
+      expect(find.descendant(of: results, matching: find.byType(Image)), findsNWidgets(12), reason: '12 suit pictures');
     });
 
-    testWidgets('the newest card has dark writing (a real bonus amber, none a muted purple); the older ones light writing', (tester) async {
-      await pumpAtSize(tester, const Size(844, 390), scene());
-      Color color(String key, String text) =>
-          tester.widget<Text>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.text(text))).style!.color!;
-      expect(color('result-latest', 'Q'), kDesignTileLetter);
-      expect(color('result-latest', '4X'), kDesignTileBonus, reason: 'a bonus on the white card');
-      expect(color('result-0', 'J'), kDesignOldTileLetter);
-      expect(color('result-1', 'K'), kDesignOldTileLetter);
-      expect(color('result-1', '10X'), kDesignOldTileBonus, reason: 'a bonus on a dark card');
-      expect(color('result-0', 'N'), kDesignOldTileNoBonus, reason: 'no bonus on a dark card');
-    });
-
-    testWidgets('every result holds its content on every device, the bonus at 11 dp or more', (tester) async {
+    testWidgets('every card holds its text at 11 dp or more on every device', (tester) async {
       for (final d in kDeviceMatrix) {
         await pumpAtSize(tester, d.size, scene());
         expect(tester.takeException(), isNull, reason: d.name);
-        for (final key in ['result-latest', for (var i = 0; i < 9; i++) 'result-$i']) {
-          final tile = rectOf(tester, key);
-          for (final child in [find.byType(Image), find.byType(Text)]) {
-            for (final e in find.descendant(of: find.byKey(ValueKey(key)), matching: child).evaluate()) {
-              final r = tester.getRect(find.byWidget(e.widget));
-              final what = e.widget is Text ? '"${(e.widget as Text).data}"' : 'the icon';
-              expect(r.left, greaterThanOrEqualTo(tile.left - 0.5), reason: '$what in $key on ${d.name}');
-              expect(r.right, lessThanOrEqualTo(tile.right + 0.5), reason: '$what in $key on ${d.name}');
-              expect(r.top, greaterThanOrEqualTo(tile.top - 0.5), reason: '$what in $key on ${d.name}');
-              expect(r.bottom, lessThanOrEqualTo(tile.bottom + 0.5), reason: '$what in $key on ${d.name}');
-              if (e.widget is Text) {
-                expect((e.widget as Text).style!.fontSize, greaterThanOrEqualTo(kLuckyCardMinReadableDp - 0.001), reason: '$what in $key');
-              }
-            }
+        final l = LuckyCardLayout.of(d.size);
+        expect(l.tileLetterFont, greaterThanOrEqualTo(kLuckyCardMinReadableDp), reason: d.name);
+        expect(l.tileBubbleFont, greaterThanOrEqualTo(kLuckyCardMinReadableDp), reason: d.name);
+        for (final key in ['result-latest', for (var i = 0; i < 11; i++) 'result-$i']) {
+          for (final t in tester.widgetList<Text>(find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(Text)))) {
+            expect(t.style!.fontSize, greaterThanOrEqualTo(kLuckyCardMinReadableDp - 0.001), reason: '"${t.data}" in $key on ${d.name}');
           }
         }
       }
@@ -671,7 +826,7 @@ void main() {
       final handle = tester.ensureSemantics();
       await pumpAtSize(tester, const Size(844, 390), scene());
       expect(find.bySemanticsLabel('Latest result: Queen of Spades, bonus 4X'), findsOneWidget);
-      expect(find.bySemanticsLabel('Earlier result: Jack of Hearts, no bonus'), findsOneWidget);
+      expect(find.bySemanticsLabel('Earlier result: Jack of Hearts, no bonus'), findsWidgets);
       expect(find.bySemanticsLabel('Earlier result: King of Diamonds, bonus 10X'), findsOneWidget);
       handle.dispose();
     });
