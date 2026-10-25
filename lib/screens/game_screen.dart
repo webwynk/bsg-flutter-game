@@ -9,6 +9,7 @@ import '../services/sound_service.dart';
 import '../services/round_sync_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_exit.dart';
+import '../widgets/common/game_bottom_banner.dart';
 import '../widgets/dialogs/action_dialog.dart';
 import '../widgets/dialogs/popup_scale.dart';
 import '../widgets/wheel/wheel_widget.dart';
@@ -793,60 +794,18 @@ class _GameScreenState extends State<GameScreen> {
       game.clearRejection();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ScaffoldMessenger.of(context).clearSnackBars();
+        // The shared bottom banner: edge to edge (no blank strip beside a camera cut-out) and
+        // sized for the device (Hasan, 2026-10-25). Same colours, words and 3 seconds as before.
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            behavior: SnackBarBehavior.fixed,
-            padding: EdgeInsets.zero,
-            margin: EdgeInsets.zero,
-            content: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.deepRed, AppColors.bgBase],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-                border: const Border(
-                  top: BorderSide(color: AppColors.goldPrimary, width: 2.0),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.casinoRed.withValues(alpha: 0.4),
-                    blurRadius: 10,
-                    spreadRadius: 1,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded, color: AppColors.goldBright, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '$boardName PLAY LIMIT REACHED',
-                      style: const TextStyle(
-                        color: AppColors.goldBright,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    'Max $cap / number',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          gameBottomBanner(
+            icon: Icons.warning_amber_rounded,
+            text: '$boardName PLAY LIMIT REACHED',
+            detail: 'Max $cap / number',
+            iconColor: AppColors.goldBright,
+            textColor: AppColors.goldBright,
+            gradient: const [AppColors.deepRed, AppColors.bgBase],
+            edge: AppColors.goldPrimary,
+            glow: AppColors.casinoRed.withValues(alpha: 0.4),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -859,52 +818,19 @@ class _GameScreenState extends State<GameScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).clearSnackBars();
+        // The shared bottom banner (see the PLAY LIMIT REACHED bar above). Same colours, words
+        // and 6 seconds as before.
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            behavior: SnackBarBehavior.fixed,
-            padding: EdgeInsets.zero,
-            margin: EdgeInsets.zero,
-            content: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF4A3000), Color(0xFF1A1000)],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-                border: const Border(
-                  top: BorderSide(color: Color(0xFFFFA500), width: 2.0),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.orange.withValues(alpha: 0.3),
-                    blurRadius: 10,
-                    spreadRadius: 1,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.sync_problem_rounded, color: Color(0xFFFFA500), size: 20),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Balance sync failed — your balance will update on the next round.',
-                      style: TextStyle(
-                        color: Color(0xFFFFA500),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          gameBottomBanner(
+            icon: Icons.sync_problem_rounded,
+            text: 'Balance sync failed — your balance will update on the next round.',
+            iconColor: const Color(0xFFFFA500),
+            textColor: const Color(0xFFFFA500),
+            gradient: const [Color(0xFF4A3000), Color(0xFF1A1000)],
+            edge: const Color(0xFFFFA500),
+            glow: Colors.orange.withValues(alpha: 0.3),
+            textWeight: FontWeight.w700,
+            letterSpacing: 0.4,
             duration: const Duration(seconds: 6),
           ),
         );

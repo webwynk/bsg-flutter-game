@@ -10,6 +10,7 @@ import '../services/sound_service.dart';
 import '../utils/app_exit.dart';
 import '../utils/device_type.dart';
 import 'lucky_card_screen.dart';
+import 'spin2win_screen.dart';
 
 import 'package:flutter/services.dart';
 
@@ -24,7 +25,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
   static const List<_GameInfo> _games = [
     _GameInfo('assets/images/card_triple_chance.webp', true),
     _GameInfo('assets/lucky_card/images/lucky-card-game-card.webp', true, luckyCard: true),
-    _GameInfo('assets/images/card_coming_soon.webp', false),
+    _GameInfo('assets/spin2win/images/spin2win-game-card.webp', true, spin2win: true),
     _GameInfo('assets/images/card_coming_soon.webp', false),
     _GameInfo('assets/images/card_coming_soon.webp', false),
     _GameInfo('assets/images/card_coming_soon.webp', false),
@@ -1048,6 +1049,9 @@ class _GameCardState extends State<_GameCard> {
           if (widget.game.luckyCard) {
             // Lucky Card has no named route (main.dart is not touched): its screen is opened directly.
             Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const LuckyCardScreen()));
+          } else if (widget.game.spin2win) {
+            // Spin2Win has no named route either (main.dart is not touched): its screen is opened directly.
+            Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const Spin2WinScreen()));
           } else {
             Navigator.pushNamed(context, '/game');
           }
@@ -1075,5 +1079,8 @@ class _GameInfo {
 
   /// True for the Lucky Card poster: its tap opens the Lucky Card screen instead of '/game'.
   final bool luckyCard;
-  const _GameInfo(this.imagePath, this.isActive, {this.luckyCard = false});
+
+  /// True for the Spin2Win poster: its tap opens the Spin2Win screen instead of '/game'.
+  final bool spin2win;
+  const _GameInfo(this.imagePath, this.isActive, {this.luckyCard = false, this.spin2win = false});
 }

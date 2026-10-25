@@ -1,0 +1,23 @@
+[
+  {
+    "round_id": "ef4213b2-2655-4626-985d-1ab55ce48edd",
+    "round_number": 17928119,
+    "scheduled_at": "2026-10-24T03:20:00+00:00",
+    "winning_number": 0,
+    "bonus_multiplier": 4
+  },
+  {
+    "round_id": "73d52235-b1f1-404a-bf6e-628a0e40e994",
+    "round_number": 17928118,
+    "scheduled_at": "2026-10-24T03:18:20+00:00",
+    "winning_number": 9,
+    "bonus_multiplier": 2
+  },
+  {
+    "round_id": "7807699b-0569-4751-9ba3-72785f7184ea",
+    "round_number": 17928117,
+    "scheduled_at": "2026-10-24T03:16:40+00:00",
+    "winning_number": 4,
+    "bonus_multiplier": 1
+  }
+]

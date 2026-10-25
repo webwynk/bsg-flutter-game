@@ -23,6 +23,7 @@ import '../../models/lucky_card_board.dart';
 import '../../models/lucky_card_models.dart';
 import '../../providers/lucky_card_provider.dart';
 import '../../theme/app_colors.dart';
+import '../common/game_bottom_banner.dart';
 import 'lucky_card_panel.dart';
 
 /// How long a refusal line stays.
@@ -46,49 +47,18 @@ const Duration kLuckyCardLimitSnackBarTime = Duration(seconds: 3);
 /// The snackbar for a card at its largest stake: a full-width bar at the bottom in Triple
 /// Chance's own look (deep red to black, gold line on top, a warning icon, gold words and the
 /// maximum in white), reading CARD PLAY LIMIT REACHED and "Max 50,000 / card".
-SnackBar luckyCardLimitSnackBar() => SnackBar(
+/// Drawn by the shared bottom banner: edge to edge and sized for the device (Hasan, 2026-10-25).
+SnackBar luckyCardLimitSnackBar() => gameBottomBanner(
       key: const ValueKey('limit-snackbar'),
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      behavior: SnackBarBehavior.fixed,
-      padding: EdgeInsets.zero,
+      icon: Icons.warning_amber_rounded,
+      text: 'CARD PLAY LIMIT REACHED',
+      detail: 'Max ${luckyCardGrouped(kLuckyCardMaxStake)} / card',
+      iconColor: AppColors.goldBright,
+      textColor: AppColors.goldBright,
+      gradient: const [AppColors.deepRed, AppColors.bgBase],
+      edge: AppColors.goldPrimary,
+      glow: AppColors.casinoRed.withValues(alpha: 0.4),
       duration: kLuckyCardLimitSnackBarTime,
-      content: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [AppColors.deepRed, AppColors.bgBase],
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-          ),
-          border: const Border(top: BorderSide(color: AppColors.goldPrimary, width: 2.0)),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.casinoRed.withValues(alpha: 0.4),
-              blurRadius: 10,
-              spreadRadius: 1,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded, color: AppColors.goldBright, size: 20),
-            const SizedBox(width: 8),
-            const Expanded(
-              child: Text(
-                'CARD PLAY LIMIT REACHED',
-                style: TextStyle(color: AppColors.goldBright, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.2),
-              ),
-            ),
-            Text(
-              'Max ${luckyCardGrouped(kLuckyCardMaxStake)} / card',
-              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-      ),
     );
 
 /// The line for a refused tap, or null when nothing should be said. When several reasons
