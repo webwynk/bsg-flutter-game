@@ -1,0 +1,26 @@
+[
+  {
+    "round_id": "2609dff7-972e-47ac-bb33-33f41b62ce84",
+    "total_stake": 160000,
+    "total_payout": 700000,
+    "created_at": "2026-10-21T18:05:04.680622+00:00",
+    "lucky16_rounds": {
+      "round_number": 17403940,
+      "winning_rank": "Q",
+      "winning_suit": "spades",
+      "bonus_multiplier": 5
+    }
+  },
+  {
+    "round_id": "5b1e4628-1ceb-4b5c-8430-66865d7cda9a",
+    "total_stake": 300,
+    "total_payout": 0,
+    "created_at": "2026-10-17T10:44:28.414618+00:00",
+    "lucky16_rounds": {
+      "round_number": 17400328,
+      "winning_rank": "A",
+      "winning_suit": "hearts",
+      "bonus_multiplier": 1
+    }
+  }
+]

@@ -1,0 +1,334 @@
+<!doctype html>
+<!--
+  Lucky 16 Card - desktop design mockup (like Lucky Card's desktop screen).
+  Design reference only: no app code. Follows the BUILT Lucky Card desktop arrangement
+  (lucky_card_layout.dart, LuckyCardLayout.desktop; goldens desktop_screen_betting_1920x1080
+  and desktop_screen_spin_1920x1080): flat header; at the left a column with the wheel,
+  always on screen, and PLAY / WIN under it; at the right the board, the row of the
+  10 latest results, and the bottom bar with the five chips and DOUBLE / CLEAR / REMOVE.
+  Only the board changes: suit bars on top, then rows A, J, Q, K, each with 4 cards and
+  its rank selector at the right (same board as lucky16-phone.html).
+  All sizes are Lucky Card's desktop shares and clamps of the screen size.
+
+  Images are read in place (never copied):
+    ../../assets/lucky16card/images/  - the 16 cards, 4 suit bars, 4 selectors
+    ../../assets/lucky_card/images/   - background, suit icons, history frames, 500 chip
+    ../../assets/images/              - BSG coin, chips 5/10/50/100
+  Fonts: Oswald + DM Sans from ../../assets/fonts (as the app).
+
+  Open with ?state=spin for betting closed (the wheel shows the bonus, the board is
+  dimmed with its stakes kept), default is betting.
+  Lucky Card uses this arrangement on a desktop platform for a screen of at least
+  1280 x 720 (1280x720, 1366x768, 1440x900, 1920x1080 ...).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lucky 16 Card - desktop</title>
+<style>
+  @font-face { font-family: Oswald; src: url(../../assets/fonts/Oswald-Bold.ttf); font-weight: 700; }
+  @font-face { font-family: Oswald; src: url(../../assets/fonts/Oswald-SemiBold.ttf); font-weight: 600; }
+  @font-face { font-family: DMSans; src: url(../../assets/fonts/DMSans-ExtraBold.ttf); font-weight: 800; }
+  @font-face { font-family: DMSans; src: url(../../assets/fonts/DMSans-Black.ttf); font-weight: 900; }
+  @font-face { font-family: DMSans; src: url(../../assets/fonts/DMSans-Bold.ttf); font-weight: 700; }
+  :root { --gold: #F2C14E; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #1a0306; }
+  body { font-family: DMSans, sans-serif; color: #fff; }
+  #stage { position: fixed; inset: 0; background: #2a0408 url(../../assets/lucky_card/images/bg-lobby-lucky-card.webp) center/cover no-repeat; }
+  .abs { position: absolute; }
+
+  /* Header: flush dark-red bar with a gold rim, as Lucky Card */
+  #hdr { left: 0; right: 0; top: 0; background: linear-gradient(#A3192A, #6E0B17 55%, #4D0710);
+         border-bottom: 2px solid var(--gold); box-shadow: 0 3px 8px #0008; }
+  .ball { position: absolute; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+          box-shadow: inset 0 2px 0 #fff6, 0 2px 0 var(--under), 0 3px 6px #0007; }
+  .ball svg { width: 52%; height: 52%; fill: #fff; }
+  .exit { background: radial-gradient(circle at 35% 30%, #FF6A5C, #D81F2E 60%, #8C0A16); --under: #5A0610; }
+  .hist { background: radial-gradient(circle at 35% 30%, #FFC27A, #F5781F 60%, #A84A05); --under: #6A2E02; }
+  .snd  { background: radial-gradient(circle at 35% 30%, #6FA8FF, #2A63E0 60%, #133A9C); --under: #0B2466; }
+  .info { background: radial-gradient(circle at 35% 30%, #6BE08A, #1FA34A 60%, #0D6A2C); --under: #08471D; }
+  #bal { position: absolute; display: flex; align-items: center; border-radius: 999px;
+         background: linear-gradient(#24030A, #3D0610); box-shadow: inset 0 1px 3px #000a; }
+  #bal span { font-family: Oswald; font-weight: 700; color: #FFE58A; }
+  #cd { position: absolute; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #5B2AA8, #2E0F63);
+        display: flex; align-items: center; justify-content: center; font-family: Oswald; font-weight: 700; text-shadow: 0 2px 0 #12052B; }
+  #status { position: absolute; font-family: DMSans; font-weight: 800; letter-spacing: .02em; text-shadow: 0 2px 0 #2A0408; white-space: nowrap; }
+
+  /* Board pictures with the stake drawn on their plates */
+  .pic { position: absolute; background-size: 100% 100%; filter: drop-shadow(0 2px 3px #0009); }
+  .num { position: absolute; left: 0; right: 0; text-align: center; font-family: DMSans; font-weight: 900; color: #fff;
+         text-shadow: 0 1px 2px #000c; white-space: nowrap; }
+
+  /* Bet panel and chip bar (purple, gold rim, 22 corner as Lucky Card's tablet) */
+  .purple { border-radius: 22px; background: linear-gradient(#3B1466, #24093F); border: 2px solid #F2C14E99;
+            box-shadow: 0 4px 0 #12041F, 0 6px 14px #000a; }
+  #hbox { position: absolute; border-radius: 12px; background: #1A0631cc; box-shadow: inset 0 2px 6px #000a; }
+  .box { position: absolute; border-radius: 14px; box-shadow: inset 0 2px 0 #fff5, 0 3px 0 var(--under); }
+  .box b { display: block; font-family: DMSans; font-weight: 800; color: var(--lab); }
+  .box i { display: block; font-style: normal; font-family: Oswald; font-weight: 700; line-height: 1.1; }
+  .play { background: linear-gradient(#4F8DFF, #2459E0 60%, #1A44B8); --under: #0E2A78; --lab: #DBE8FF; }
+  .win  { background: linear-gradient(#4FDC7A, #1FA34A 60%, #158A3C); --under: #0A5424; --lab: #DDFFE7; }
+  .tile { position: absolute; }
+  .tile .frame { position: absolute; inset: 0; }
+  .tile .let { position: absolute; font-family: Oswald; font-weight: 700; line-height: 1; }
+  .tile .ico { position: absolute; background-size: contain; background-repeat: no-repeat; background-position: center; }
+  .tile .bub { position: absolute; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #FF5A52, #C4161C);
+               border: 1.5px solid #FFD34D; display: flex; align-items: center; justify-content: center; font-family: DMSans; font-weight: 900; }
+  .chip { position: absolute; border-radius: 50%; background-size: cover; filter: drop-shadow(0 2px 2px #000a); }
+  .chip.on { box-shadow: 0 0 0 3px #FFD34D, 0 0 14px #FFD34Dcc; transform: translateY(-5px) scale(1.12); }
+  .btn { position: absolute; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+         font-family: Oswald; font-weight: 700; letter-spacing: .04em; border: 1.5px solid var(--bd);
+         box-shadow: inset 0 2px 0 #fff8, 0 3px 0 var(--under), 0 0 10px var(--glow); text-shadow: 0 2px 0 var(--ts); }
+  .dbl { background: linear-gradient(90deg, #B6FF3B, #FFD31A 45%, #FF8A00); --bd: #FFF3A8; --under: #9A4A00; --glow: #FFAA0080; --ts: #9A4A00; }
+  .clr { background: linear-gradient(90deg, #FF5FD2, #FF2E7E 50%, #B62BFF); --bd: #FFC4F0; --under: #6E0F7A; --glow: #FF2EA073; --ts: #7A0A52; }
+  .rem { background: linear-gradient(90deg, #3EE8FF, #1AA3FF 50%, #4B4DFF); --bd: #B8F4FF; --under: #1F2A8F; --glow: #1EA0FF73; --ts: #1A2A9C; }
+  .closed .btn, .closed .chip { filter: saturate(.35) brightness(.75); }
+  .closed .pic { filter: brightness(.72) saturate(.7) drop-shadow(0 2px 3px #0009); }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+const L16 = '../../assets/lucky16card/images/';
+const LC = '../../assets/lucky_card/images/';
+const IMG = '../../assets/images/';
+const SPIN = new URLSearchParams(location.search).get('state') === 'spin';
+
+const RANKS = ['a', 'j', 'q', 'k'];           // grid rows top to bottom (Hasan)
+const SUITS = ['hearts', 'spades', 'diamonds', 'clubs']; // Lucky Card's column order
+// Sample board: 10 chip on the Hearts bar, then 10 chip on the A selector (same as the phone file).
+const stake = {};
+for (const r of RANKS) for (const s of SUITS) stake[r + '_' + s] = 0;
+for (const r of RANKS) stake[r + '_hearts'] += 10;
+for (const s of SUITS) stake['a_' + s] += 10;
+const total = Object.values(stake).reduce((a, b) => a + b, 0);
+const suitTotal = s => RANKS.reduce((a, r) => a + stake[r + '_' + s], 0);
+const rankTotal = r => SUITS.reduce((a, s) => a + stake[r + '_' + s], 0);
+// Results: newest first. Ranks now include A.
+const results = [['A','diamonds',3],['K','spades',2],['A','hearts',1],['Q','clubs',10],['Q','diamonds',9],['J','spades',8],
+                 ['K','hearts',7],['A','clubs',6],['J','diamonds',5],['A','spades',4],['J','hearts',3],['K','clubs',2]];
+
+const CARD_AR = 700 / 476, BAR_AR = 1049 / 270, SEL_AR = 640 / 687;
+
+function el(tag, cls, css, parent, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (css) Object.assign(e.style, css);
+  if (html != null) e.innerHTML = html;
+  (parent || stage).appendChild(e);
+  return e;
+}
+const px = v => Math.round(v) + 'px';
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const ICONS = {
+  exit: '<svg viewBox="0 0 24 24"><path d="M10 3h9a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-9v-2h9V5h-9zM8 7l1.4 1.4L6.8 11H15v2H6.8l2.6 2.6L8 17l-5-5z"/></svg>',
+  hist: '<svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-2.05-4.95L15 10h7V3l-2.64 2.64A8.96 8.96 0 0 0 13 3zm-1 5v5l4.25 2.52.77-1.28-3.52-2.09V8z"/></svg>',
+  snd: '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06A9 9 0 0 0 14 3.23z"/></svg>',
+  info: '<svg viewBox="0 0 24 24"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/></svg>',
+};
+
+// The largest Lucky 16 board (bar row + 4 card rows; 4 cards + selector column) that fits w x h,
+// with a gap of 0.9% of the board's width between pictures (Lucky Card's tablet/desktop gap).
+function fitBoard(w, h) {
+  let g = 0, r;
+  for (let k = 0; k < 3; k++) {
+    const cw = Math.min((h - 4 * g) / (1 / BAR_AR + 4 / CARD_AR), (w - 4 * g) / (4 + SEL_AR / CARD_AR));
+    const ch = cw / CARD_AR, bh = cw / BAR_AR, sw = ch * SEL_AR;
+    r = { cw, ch, bh, sw, g, boardW: 4 * cw + 4 * g + sw, boardH: bh + 4 * ch + 4 * g };
+    g = Math.max(4, r.boardW * 0.009);
+  }
+  return r;
+}
+
+function drawBoard(b, bx, by) {
+  const { cw, ch, bh, sw, g } = b;
+  SUITS.forEach((s, c) => {
+    const p = el('div', 'pic', { left: px(bx + c * (cw + g)), top: px(by), width: px(cw), height: px(bh),
+      backgroundImage: `url(${L16}${s}-bar.webp)` });
+    el('div', 'num', { left: '30%', top: '0', lineHeight: px(bh), fontSize: px(bh * 0.5) }, p, suitTotal(s) || s.toUpperCase());
+  });
+  RANKS.forEach((r, row) => {
+    const y = by + bh + g + row * (ch + g);
+    SUITS.forEach((s, c) => {
+      const card = el('div', 'pic', { left: px(bx + c * (cw + g)), top: px(y), width: px(cw), height: px(ch),
+        backgroundImage: `url(${L16}${s}-${r}-card.webp)` });
+      el('div', 'num', { top: px(ch * 0.69), height: px(ch * 0.27), lineHeight: px(ch * 0.27), fontSize: px(ch * 0.2) }, card, stake[r + '_' + s] || 'Play');
+    });
+    const sel = el('div', 'pic', { left: px(bx + 4 * (cw + g)), top: px(y), width: px(sw), height: px(ch),
+      backgroundImage: `url(${L16}${r}-selector.webp)` });
+    el('div', 'num', { top: px(ch * 0.68), height: px(ch * 0.16), lineHeight: px(ch * 0.16), fontSize: px(ch * 0.16) }, sel, rankTotal(r) || '');
+  });
+}
+
+// One history card (Lucky Card's frame pictures, drawn nine-slice so the gold border stays thin).
+function drawTile(parent, x, y, tw, th, [rank, suit, bonus], latest) {
+  const t = el('div', 'tile', { left: px(x), top: px(y), width: px(tw), height: px(th) }, parent);
+  const bw = Math.max(2, Math.min(tw, th) * 0.06);
+  el('div', 'frame', { borderStyle: 'solid', borderWidth: px(bw),
+    borderImage: `url(${LC}${latest ? 'latest-history-card' : 'history-card'}.webp) 40 fill / ${px(bw)} stretch` }, t);
+  const red = suit === 'hearts' || suit === 'diamonds';
+  // Desktop cards are wide and low: rank at the left, suit in the middle, bonus at the right.
+  el('div', 'let', { left: px(tw * 0.08), top: px(th * 0.1), fontSize: px(th * 0.42),
+    color: latest ? '#fff' : (red ? '#D4141C' : '#1D1A17'), webkitTextStroke: latest ? '1px #063D1B' : '' }, t, rank);
+  const ic = el('div', 'ico', { left: px((tw - th * 0.5) / 2), top: px(th * 0.38), width: px(th * 0.5), height: px(th * 0.5),
+    backgroundImage: `url(${LC}${suit}-icon.webp)` }, t);
+  if (latest) Object.assign(ic.style, { background: `#F6EEDC url(${LC}${suit}-icon.webp) center/70% no-repeat`, borderRadius: '5px' });
+  const bd = Math.min(th * 0.42, tw * 0.3);
+  el('div', 'bub', { right: px(tw * 0.07), top: px(th * 0.07), width: px(bd), height: px(bd), fontSize: px(bd * 0.42) }, t, bonus > 1 ? bonus + 'X' : 'N');
+}
+
+function render() {
+  const W = innerWidth, H = innerHeight;
+  const d = (share, lo, hi) => clamp(H * share, lo, hi);   // Lucky Card's _design(): a share of the height
+  stage.innerHTML = '';
+  stage.className = SPIN ? 'closed' : '';
+
+  // ---- Header (Lucky Card desktop: 8% of the height, 64 to 100) ----
+  const hh = d(0.08, 64, 100), ball = d(0.062, 50, 80), by = (hh - ball) / 2;
+  const hg = clamp(W * 0.01, 12, 20), edge = clamp(W * 0.016, 20, 32);
+  el('div', 'abs', { height: px(hh) }).id = 'hdr';
+  el('div', 'ball exit', { left: px(edge), top: px(by), width: px(ball), height: px(ball) }, null, ICONS.exit);
+  const pillH = d(0.056, 46, 72), coin = d(0.042, 34, 56);
+  const bal = el('div', '', { left: px(edge + ball + hg), top: px((hh - pillH) / 2), height: px(pillH), padding: `0 ${px(pillH * 0.35)} 0 ${px((pillH - coin) / 2)}` });
+  bal.id = 'bal';
+  el('img', '', { height: px(coin) }, bal).src = IMG + 'bsg_coin.webp';
+  el('span', '', { fontSize: px(d(0.029, 22, 38)), marginLeft: px(hg * 0.6) }, bal, String(1000 - total));
+  // Countdown and status, centred across the screen as a pair.
+  const cdD = 0.82 * d(0.066, 52, 84), stF = d(0.031, 22, 42);
+  const stText = SPIN ? 'NO MORE PLAY' : 'PLACE YOUR CHIPS';
+  const st = el('div', '', { top: '0', lineHeight: px(hh), fontSize: px(stF), color: SPIN ? '#FFB3AB' : '#fff' }, null, stText);
+  st.id = 'status';
+  const pairW = cdD + hg + st.offsetWidth, pairX = (W - pairW) / 2;
+  st.style.left = px(pairX + cdD + hg);
+  const cd = el('div', '', { left: px(pairX), top: px((hh - cdD) / 2), width: px(cdD), height: px(cdD), fontSize: px(d(0.026, 18, 34)) }, null, SPIN ? '00' : '47');
+  cd.id = 'cd';
+  [['info', 0], ['snd', 1], ['hist', 2]].forEach(([k, i]) =>
+    el('div', 'ball ' + k, { left: px(W - edge - ball - i * (ball + hg)), top: px(by), width: px(ball), height: px(ball),
+      opacity: SPIN && k !== 'snd' ? 0.55 : 1 }, null, ICONS[k]));
+
+  // ---- Body: wheel column on the left, board + results row + bottom bar on the right ----
+  const pad = clamp(W * 0.014, 14, 32), gapX = clamp(W * 0.013, 16, 32), gapY = clamp(H * 0.014, 12, 22);
+  const body = { l: pad, t: hh + gapY, r: W - pad, b: H - pad };
+  const colGap = d(0.013, 10, 20), actH = d(0.115, 92, 150), resH = d(0.058, 50, 76);
+  // The board is as big as the height allows; the wheel's column takes the rest of the width,
+  // never less than 34% of the screen (360 to 780), as Lucky Card's desktop.
+  const boardSecH = body.b - body.t - actH - resH - 2 * colGap;
+  const asideW = Math.max(clamp(W * 0.34, 360, 780), (body.r - body.l) - gapX - fitBoard(1e5, boardSecH).boardW);
+  const side = { l: body.l, t: body.t, r: body.l + asideW, b: body.b };
+  const right = { l: side.r + gapX, t: body.t, r: body.r, b: body.b };
+  const actBar = { l: right.l, t: right.b - actH, r: right.r, b: right.b };
+  const resBar = { l: right.l, t: actBar.t - colGap - resH, r: right.r, b: actBar.t - colGap };
+  const sec = { l: right.l, t: right.t, r: right.r, b: resBar.t - colGap };
+  const secW = sec.r - sec.l, secH = sec.b - sec.t;
+
+  const B = fitBoard(secW, secH);
+  const bx = sec.l, byy = sec.t + (secH - B.boardH) / 2;      // flush left, centred up and down
+  drawBoard(B, bx, byy);                                       // stays on screen, dimmed when closed
+
+  // ---- Wheel column: the wheel, always on screen, PLAY / WIN at the bottom ----
+  const sw = side.r - side.l, sh = side.b - side.t, cg = 14;
+  const labF = d(0.013, 11, 16), valF = d(0.038, 28, 52), padY = d(0.011, 8, 16);
+  const totH = 2 * padY + labF * 1.2 + valF * 1.1, wheelGap = d(0.028, 20, 36);
+  const wD = Math.max(Math.min(sw, (sh - totH - wheelGap) / 1.06), 1);
+  const wTop = side.t + Math.max((sh - totH - wheelGap - wD * 1.06) / 2, 0);
+  const wLeft = side.l + (sw - wD) / 2;
+  drawWheel(wLeft + wD / 2, wTop + wD * 0.06 + wD / 2, wD, SPIN ? '3X' : '?');
+  const totW = (wD - cg) / 2;
+  [['play', 'PLAY', total], ['win', 'WIN', 0]].forEach(([k, lab, v], i) => {
+    const b = el('div', 'box ' + k, { left: px(wLeft + i * (totW + cg)), top: px(side.b - totH), width: px(totW), height: px(totH),
+      padding: `${px(padY)} 18px`, borderRadius: '16px' });
+    el('b', '', { fontSize: px(labF), lineHeight: 1.2 }, b, lab);
+    el('i', '', { fontSize: px(valF) }, b, String(v));
+  });
+  window.__geom = { layout: 'desktop', W, H, cardW: +B.cw.toFixed(1), cardH: +B.ch.toFixed(1), barH: +B.bh.toFixed(1),
+    selW: +B.sw.toFixed(1), gap: +B.g.toFixed(1), boardW: +B.boardW.toFixed(1), boardH: +B.boardH.toFixed(1),
+    wheelColumnW: +asideW.toFixed(1), wheelD: +wD.toFixed(1) };
+
+  // ---- Results row: the 10 latest rounds in one row, newest at the left ----
+  const rp = d(0.006, 5, 9), tg = d(0.006, 4, 8);
+  const hb = el('div', '', { left: px(resBar.l), top: px(resBar.t), width: px(resBar.r - resBar.l), height: px(resH) });
+  hb.id = 'hbox';
+  const tw = (resBar.r - resBar.l - 2 * rp - 9 * tg) / 10, th = resH - 2 * rp;
+  results.slice(0, 10).forEach((r, i) => drawTile(hb, rp + i * (tw + tg), rp, tw, th, r, i === 0));
+
+  // ---- Bottom bar: the five chips at the left, DOUBLE / CLEAR / REMOVE at the right ----
+  const ab = el('div', 'abs purple', { left: px(actBar.l), top: px(actBar.t), width: px(actBar.r - actBar.l), height: px(actH) });
+  const abW = actBar.r - actBar.l, ip = actH * 0.14;
+  const chipD = actH * 0.64, slot = chipD * 1.24;
+  [IMG + 'chip_5.webp', IMG + 'chip_10.webp', IMG + 'chip_50.webp', IMG + 'chip_100.webp', LC + 'chip_500.webp'].forEach((src, i) =>
+    el('div', 'chip' + (i === 1 && !SPIN ? ' on' : ''), { left: px(ip + i * slot + (slot - chipD) / 2), top: px((actH - 4 - chipD) / 2),
+      width: px(chipD), height: px(chipD), backgroundImage: `url(${src})` }, ab));
+  const bl = ip * 1.6 + 5 * slot, btnH = actH * 0.56, bw = (abW - bl - ip - 2 * cg) / 3;
+  [['dbl', 'DOUBLE'], ['clr', 'CLEAR'], ['rem', 'REMOVE']].forEach(([k, t], i) =>
+    el('div', 'btn ' + k, { left: px(bl + i * (bw + cg)), top: px((actH - 4 - btnH) / 2), width: px(bw), height: px(btnH), fontSize: px(btnH * 0.38) }, ab, t));
+}
+
+// The wheel, always on screen on the desktop (centre cx, cy; diameter d): outer rank rim of
+// 12 segments A J Q K x3, inner suit rim, hub with "?" while betting and the bonus once closed.
+function drawWheel(cx, cy, d, hub) {
+  const R = d / 2;
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  Object.assign(svg.style, { position: 'absolute', left: px(cx - R), top: px(cy - R), width: px(d), height: px(d), filter: 'drop-shadow(0 0 18px #FFB34Daa) drop-shadow(0 6px 10px #000c)' });
+  svg.setAttribute('viewBox', '-100 -100 200 200');
+  const seg = (r0, r1, a0, a1, fill) => {
+    const p = (r, a) => `${(r * Math.sin(a)).toFixed(2)} ${(-r * Math.cos(a)).toFixed(2)}`;
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('d', `M${p(r0, a0)} L${p(r1, a0)} A${r1} ${r1} 0 0 1 ${p(r1, a1)} L${p(r0, a1)} A${r0} ${r0} 0 0 0 ${p(r0, a0)} Z`);
+    path.setAttribute('fill', fill); path.setAttribute('stroke', '#E8B84A'); path.setAttribute('stroke-width', '0.8');
+    svg.appendChild(path);
+  };
+  const circle = (r, fill, stroke, sw, cxx = 0, cyy = 0) => {
+    const c = document.createElementNS(ns, 'circle');
+    c.setAttribute('cx', cxx); c.setAttribute('cy', cyy); c.setAttribute('r', r); c.setAttribute('fill', fill);
+    if (stroke) { c.setAttribute('stroke', stroke); c.setAttribute('stroke-width', sw); }
+    svg.appendChild(c);
+  };
+  const txt = (r, a, s, size, fill) => {
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', (r * Math.sin(a)).toFixed(2)); t.setAttribute('y', (-r * Math.cos(a)).toFixed(2));
+    t.setAttribute('text-anchor', 'middle'); t.setAttribute('dominant-baseline', 'central');
+    t.setAttribute('font-family', 'Oswald'); t.setAttribute('font-weight', '700'); t.setAttribute('font-size', size); t.setAttribute('fill', fill);
+    t.setAttribute('transform', `rotate(${a * 180 / Math.PI} ${(r * Math.sin(a)).toFixed(2)} ${(-r * Math.cos(a)).toFixed(2)})`);
+    t.textContent = s; svg.appendChild(t);
+  };
+  circle(99, '#8a5a12', '#F2C14E', 3);
+  for (let i = 0; i < 24; i++) {
+    const a = i * Math.PI / 12;
+    circle(2.4, i % 2 ? '#FFF3C4' : '#FFD34D', '#9A6A10', 0.6, (95.5 * Math.sin(a)).toFixed(2), (-95.5 * Math.cos(a)).toFixed(2));
+  }
+  const ranks = ['A', 'J', 'Q', 'K'];
+  for (let i = 0; i < 12; i++) {
+    const a0 = (i - 0.5) * Math.PI / 6, a1 = (i + 0.5) * Math.PI / 6;
+    seg(64, 91, a0, a1, i % 2 ? '#1E7A3A' : '#B3151F');
+    txt(77.5, i * Math.PI / 6, ranks[i % 4], 15, '#FFE9A8');
+  }
+  const suits = ['hearts', 'spades', 'diamonds', 'clubs'];
+  for (let i = 0; i < 8; i++) {
+    const a0 = (i - 0.5) * Math.PI / 4, a1 = (i + 0.5) * Math.PI / 4;
+    seg(36, 62, a0, a1, i % 2 ? '#F6E7C3' : '#FFF6DE');
+    const s = suits[i % 4], a = i * Math.PI / 4;
+    const im = document.createElementNS(ns, 'image');
+    im.setAttribute('href', LC + s + '-icon.webp'); im.setAttribute('width', 16); im.setAttribute('height', 16);
+    im.setAttribute('x', (49 * Math.sin(a) - 8).toFixed(2)); im.setAttribute('y', (-49 * Math.cos(a) - 8).toFixed(2));
+    svg.appendChild(im);
+  }
+  circle(34, '#2a0a10', '#F2C14E', 2.5);
+  const bonus = document.createElementNS(ns, 'text');
+  bonus.setAttribute('text-anchor', 'middle'); bonus.setAttribute('dominant-baseline', 'central');
+  bonus.setAttribute('font-family', 'Oswald'); bonus.setAttribute('font-weight', '700'); bonus.setAttribute('font-size', '26'); bonus.setAttribute('fill', '#FFD34D');
+  bonus.textContent = hub; svg.appendChild(bonus);
+  stage.appendChild(svg);
+  el('div', 'abs', { left: px(cx - d * 0.04), top: px(cy - R - d * 0.05), width: px(d * 0.08), height: px(d * 0.1),
+    background: 'linear-gradient(#FFD34D,#C98A12)', clipPath: 'polygon(0 0,100% 0,50% 100%)' });
+}
+
+const stage = document.getElementById('stage');
+addEventListener('resize', render);
+document.fonts.ready.then(render);
+render();
+</script>
+</body>
+</html>
