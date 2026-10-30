@@ -1,73 +1,72 @@
-// The Lucky Card Info dialog: two tabs, RULES and PAYOUTS (spec §17W, §17Z).
+// The Lucky Card Info popup, "HOW TO PLAY": two tabs, RULES and PAYOUTS, in the design Hasan approved
+// for Lucky 16 Card (lucky_card_popup_kit.dart), with Lucky Card's own rules and numbers.
 //
 //   LuckyCardInfoDialog.show(context, provider: provider)
 //
-//   * It closes by itself, with a fade, the moment betting closes, so the wheel, the card
-//     and the win popup are never hidden behind it (Triple Chance keeps its dialog open).
-//     Opened while betting is already closed, it closes again at once.
-//   * RULES is a numbered list; PAYOUTS has the rule, a worked example, a table of what a
-//     stake of 10 wins at N and at 2X to 10X, and the limits. Both scroll; each tab opens at
-//     its top.
-//   * The tabs and the close button are at least 48 dp each way; all text is at least 11 dp
-//     and ignores the phone's font-size setting. The dialog's size follows the screen the
-//     same way the game's canvas does, never the font size.
-//   * The open sound and the tab click are hooks ([onOpen], [onTab]) for the screen
-//     (App Step 8).
+// How it behaves did not change with the new design:
+//   * it closes by itself, with a fade, the moment betting closes, so the wheel, the card and the win
+//     popup are never hidden behind it (Triple Chance keeps its dialog open); opened while betting is
+//     already closed, it closes at once;
+//   * a tap outside closes it; both tabs scroll and each opens at its top;
+//   * the tabs and the close button answer over at least 48 dp; all text is at least 11 dp and ignores
+//     the phone's font-size setting; its size follows the screen, never the font size;
+//   * the open sound and the tab click are hooks ([onOpen], [onTab]) for the screen.
 //
+// RULES is six rule cards in two columns and a full-width card of the four buttons. PAYOUTS is the
+// formula and a worked example, the table of what a stake of 10 wins at N and 2X to 10X, and the limits.
 // The words are in lucky_card_info_text.dart.
 //
 // Belongs to Lucky Card only.
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import '../../models/lucky_card_board.dart';
+import '../../models/lucky_card_models.dart';
 import '../../providers/lucky_card_provider.dart';
+import 'lucky_card_art.dart';
 import 'lucky_card_info_text.dart';
 import 'lucky_card_layout.dart';
 import 'lucky_card_panel.dart';
-import 'lucky_card_stake_text.dart';
+import 'lucky_card_popup_kit.dart';
 
 enum LuckyCardInfoTab { rules, payouts }
 
 class LuckyCardInfoDialog extends StatefulWidget {
-  const LuckyCardInfoDialog({super.key, required this.provider, this.onTab, this.initialTab = LuckyCardInfoTab.rules});
+  const LuckyCardInfoDialog({
+    super.key,
+    required this.provider,
+    this.art = const AssetLuckyCardArt(),
+    this.onTab,
+    this.initialTab = LuckyCardInfoTab.rules,
+  });
 
-  /// Watched so the dialog can close when betting closes.
+  /// Watched so the popup can close when betting closes.
   final LuckyCardProvider provider;
+  final LuckyCardArt art;
 
   /// A tab was chosen (the click sound).
   final void Function(LuckyCardInfoTab tab)? onTab;
-
   final LuckyCardInfoTab initialTab;
 
-  /// How long the open and the close take.
-  static const Duration transition = Duration(milliseconds: 220);
-
-  /// How much of the canvas the dialog covers.
+  /// How much of the canvas the popup covers.
   static const double widthShare = 0.8;
   static const double heightShare = 0.92;
 
-  /// Shows the dialog over the screen. Completes when it closes, for any reason.
+  /// Shows the popup over the screen. Completes when it closes, for any reason.
   static Future<void> show(
     BuildContext context, {
     required LuckyCardProvider provider,
+    LuckyCardArt art = const AssetLuckyCardArt(),
     VoidCallback? onOpen,
     void Function(LuckyCardInfoTab tab)? onTab,
+    LuckyCardInfoTab initialTab = LuckyCardInfoTab.rules,
   }) {
     onOpen?.call();
-    return showGeneralDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Close',
-      barrierColor: const Color(0xBF000000),
-      transitionDuration: transition,
-      pageBuilder: (_, __, ___) => LuckyCardInfoDialog(provider: provider, onTab: onTab),
-      transitionBuilder: (context, animation, _, child) {
-        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOut);
-        return FadeTransition(
-          opacity: curved,
-          child: ScaleTransition(scale: Tween<double>(begin: 0.94, end: 1.0).animate(curved), child: child),
-        );
-      },
+    return showLuckyCardPopup<void>(
+      context,
+      builder: (_) => LuckyCardInfoDialog(provider: provider, art: art, onTab: onTab, initialTab: initialTab),
     );
   }
 
@@ -75,49 +74,11 @@ class LuckyCardInfoDialog extends StatefulWidget {
   State<LuckyCardInfoDialog> createState() => _LuckyCardInfoDialogState();
 }
 
-class _LuckyCardInfoDialogState extends State<LuckyCardInfoDialog> {
+class _LuckyCardInfoDialogState extends State<LuckyCardInfoDialog> with LuckyCardClosesWhenBettingCloses<LuckyCardInfoDialog> {
   late LuckyCardInfoTab _tab = widget.initialTab;
-  bool _closing = false;
 
   @override
-  void initState() {
-    super.initState();
-    widget.provider.addListener(_closeIfBettingClosed);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _closeIfBettingClosed());
-  }
-
-  @override
-  void didUpdateWidget(LuckyCardInfoDialog oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.provider != widget.provider) {
-      oldWidget.provider.removeListener(_closeIfBettingClosed);
-      widget.provider.addListener(_closeIfBettingClosed);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.provider.removeListener(_closeIfBettingClosed);
-    super.dispose();
-  }
-
-  void _closeIfBettingClosed() {
-    if (!mounted || _closing || !widget.provider.isLocked) return;
-    _closing = true;
-    final route = ModalRoute.of(context);
-    if (route == null) return;
-    if (route.isCurrent) {
-      Navigator.of(context).pop();
-    } else {
-      Navigator.of(context).removeRoute(route);
-    }
-  }
-
-  void _close() {
-    if (_closing) return;
-    _closing = true;
-    Navigator.of(context).pop();
-  }
+  LuckyCardProvider get bettingProvider => widget.provider;
 
   void _choose(LuckyCardInfoTab tab) {
     if (tab == _tab) return;
@@ -130,10 +91,6 @@ class _LuckyCardInfoDialogState extends State<LuckyCardInfoDialog> {
     final media = MediaQuery.of(context);
     final layout = LuckyCardLayout.of(media.size);
     final canvas = layout.canvasRect;
-    final width = canvas.width * LuckyCardInfoDialog.widthShare;
-    final height = canvas.height * LuckyCardInfoDialog.heightShare;
-    final header = layout.dp(134);
-
     return MediaQuery(
       data: media.copyWith(textScaler: TextScaler.noScaling),
       child: Semantics(
@@ -144,30 +101,30 @@ class _LuckyCardInfoDialogState extends State<LuckyCardInfoDialog> {
         child: Center(
           child: SizedBox(
             key: const ValueKey('info-dialog'),
-            width: width,
-            height: height,
+            width: canvas.width * LuckyCardInfoDialog.widthShare,
+            height: canvas.height * LuckyCardInfoDialog.heightShare,
             child: Material(
               type: MaterialType.transparency,
-              child: LuckyCardPanel(
+              child: LuckyCardPopupFrame(
                 layout: layout,
-                radiusUnits: 28,
                 child: Column(
                   children: [
-                    SizedBox(
-                      height: header,
-                      child: Row(
-                        children: [
-                          Expanded(child: _tabButton(layout, LuckyCardInfoTab.rules, kLuckyCardRulesTab, 'info-tab-rules')),
-                          Expanded(child: _tabButton(layout, LuckyCardInfoTab.payouts, kLuckyCardPayoutsTab, 'info-tab-payouts')),
-                          _closeButton(layout, header),
-                        ],
-                      ),
+                    LuckyCardPopupHeader(
+                      layout: layout,
+                      title: kLuckyCardInfoTitle,
+                      close: LuckyCardCloseButton(key: const ValueKey('info-close'), layout: layout, onTap: closeByHand),
                     ),
-                    Container(height: 1, color: kLuckyCardGold.withValues(alpha: 0.5)),
+                    _tabs(layout),
+                    SizedBox(height: layout.dp(12)),
                     Expanded(
                       child: KeyedSubtree(
                         key: ValueKey('info-body-${_tab.name}'),
-                        child: _tab == LuckyCardInfoTab.rules ? _RulesBody(layout: layout) : _PayoutsBody(layout: layout),
+                        child: _Scroller(
+                          layout: layout,
+                          children: _tab == LuckyCardInfoTab.rules
+                              ? [_RulesBody(layout: layout)]
+                              : [_PayoutsBody(layout: layout, art: widget.art)],
+                        ),
                       ),
                     ),
                   ],
@@ -180,70 +137,97 @@ class _LuckyCardInfoDialogState extends State<LuckyCardInfoDialog> {
     );
   }
 
-  Widget _tabButton(LuckyCardLayout layout, LuckyCardInfoTab tab, String label, String key) {
-    final selected = tab == _tab;
-    return Semantics(
-      button: true,
-      selected: selected,
-      excludeSemantics: true,
-      label: label,
-      onTap: () => _choose(tab),
-      child: GestureDetector(
-        key: ValueKey(key),
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _choose(tab),
-        child: Stack(
-          children: [
-            LayoutBuilder(
-              builder: (context, c) => LuckyCardStakeText(
-                label,
-                maxWidth: c.maxWidth,
-                preferredSize: layout.fontSize(46),
-                color: selected ? kLuckyCardGoldBright : kLuckyCardCream.withValues(alpha: 0.65),
+  /// The pill switch under the header. The drawn pills are low; each tab answers over its half of a row
+  /// 48 dp tall, so the tap rule is kept without the switch taking that height on a small phone.
+  Widget _tabs(LuckyCardLayout layout) {
+    // The drawn switch (a line of text, the pill's padding, the switch's padding and its 1 dp edge) outgrows
+    // the 48 dp row on a tablet: the row then follows it, so the pills are never cut.
+    final drawn = layout.fontSize(34) * 1.1 + 2 * layout.dp(12) + 2 * layout.dp(8) + 2;
+    return SizedBox(
+      height: math.max(drawn, kLuckyCardMinTapDp),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Only drawn: the tap areas below answer the finger and the screen reader.
+          ExcludeSemantics(
+            child: IgnorePointer(
+              child: Container(
+                padding: EdgeInsets.all(layout.dp(8)),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  color: Colors.black.withValues(alpha: 0.45),
+                  border: Border.all(color: kLuckyCardGold.withValues(alpha: 0.35)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _tabPill(layout, LuckyCardInfoTab.rules, kLuckyCardRulesTab),
+                    SizedBox(width: layout.dp(8)),
+                    _tabPill(layout, LuckyCardInfoTab.payouts, kLuckyCardPayoutsTab),
+                  ],
+                ),
               ),
             ),
-            if (selected)
-              Positioned(
-                left: layout.dp(30),
-                right: layout.dp(30),
-                bottom: 0,
-                height: layout.dp(8).clamp(2.0, 4.0).toDouble(),
-                child: const ColoredBox(color: kLuckyCardGoldBright),
-              ),
-          ],
-        ),
+          ),
+          Positioned.fill(
+            child: Row(
+              children: [
+                Expanded(child: _tabArea(LuckyCardInfoTab.rules, kLuckyCardRulesTab, 'info-tab-rules')),
+                Expanded(child: _tabArea(LuckyCardInfoTab.payouts, kLuckyCardPayoutsTab, 'info-tab-payouts')),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _closeButton(LuckyCardLayout layout, double side) {
-    return Semantics(
-      button: true,
-      excludeSemantics: true,
-      label: 'Close',
-      onTap: _close,
-      child: GestureDetector(
-        key: const ValueKey('info-close'),
-        behavior: HitTestBehavior.opaque,
-        onTap: _close,
-        child: SizedBox(
-          width: side,
-          height: side,
-          child: Icon(Icons.close_rounded, size: layout.fontSize(60, minDp: 16), color: kLuckyCardCream),
+  /// A tab's tap area.
+  Widget _tabArea(LuckyCardInfoTab tab, String label, String key) => Semantics(
+        button: true,
+        selected: tab == _tab,
+        excludeSemantics: true,
+        label: label,
+        onTap: () => _choose(tab),
+        child: GestureDetector(
+          key: ValueKey(key),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _choose(tab),
         ),
+      );
+
+  /// A tab as drawn: gold when chosen.
+  Widget _tabPill(LuckyCardLayout layout, LuckyCardInfoTab tab, String label) {
+    final selected = tab == _tab;
+    return Container(
+      alignment: Alignment.center,
+      padding: EdgeInsets.symmetric(horizontal: layout.dp(56), vertical: layout.dp(12)),
+      decoration: selected
+          ? BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: kLuckyCardGoldFace,
+                stops: kLuckyCardGoldFaceStops,
+              ),
+              boxShadow: [
+                BoxShadow(color: const Color(0xFF7A5A0E), offset: Offset(0, layout.dp(4))),
+                BoxShadow(color: kLuckyCardGoldBright.withValues(alpha: 0.35), blurRadius: layout.dp(18)),
+              ],
+            )
+          : null,
+      child: luckyCardPopupText(
+        label,
+        layout,
+        weight: FontWeight.w600,
+        units: 34,
+        spacing: 0.16,
+        color: selected ? kLuckyCardPopupInk : kLuckyCardCream.withValues(alpha: 0.65),
       ),
     );
   }
 }
-
-TextStyle _bodyStyle(LuckyCardLayout layout, {Color color = kLuckyCardCream, FontWeight weight = FontWeight.w500}) =>
-    TextStyle(
-      fontFamily: 'DMSans',
-      fontWeight: weight,
-      fontSize: layout.fontSize(36),
-      height: 1.3,
-      color: color,
-    );
 
 class _Scroller extends StatelessWidget {
   const _Scroller({required this.layout, required this.children});
@@ -256,8 +240,89 @@ class _Scroller extends StatelessWidget {
     return Scrollbar(
       child: SingleChildScrollView(
         key: const ValueKey('info-scroll'),
-        padding: EdgeInsets.symmetric(horizontal: layout.dp(36), vertical: layout.dp(28)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+        padding: EdgeInsets.fromLTRB(layout.dp(36), 0, layout.dp(36), layout.dp(30)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+      ),
+    );
+  }
+}
+
+/// A body line in DM Sans.
+Text _body(
+  String text,
+  LuckyCardLayout layout, {
+  Key? key,
+  double units = 29,
+  double alpha = 1,
+  TextAlign? align,
+}) =>
+    luckyCardPopupText(
+      text,
+      layout,
+      key: key,
+      family: 'DMSans',
+      weight: FontWeight.w500,
+      units: units,
+      color: kLuckyCardCream.withValues(alpha: alpha),
+      height: 1.35,
+      maxLines: null,
+      align: align,
+    );
+
+/// One rule: the numbered badge, then the heading over the body.
+class _RuleCard extends StatelessWidget {
+  const _RuleCard({required this.layout, required this.number, required this.heading, required this.body});
+
+  final LuckyCardLayout layout;
+  final int number;
+  final String heading;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    final badge = math.max(layout.dp(58), 24.0);
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: layout.dp(22), vertical: layout.dp(18)),
+      decoration: luckyCardPopupCard(layout),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: badge,
+            height: badge,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const RadialGradient(colors: [Color(0xFFD4232B), Color(0xFF8B0000), Color(0xFF4A0000)]),
+              border: Border.all(color: kLuckyCardGold, width: math.max(layout.dp(3), 1.2)),
+            ),
+            child: luckyCardPopupText(
+              '$number',
+              layout,
+              weight: FontWeight.w700,
+              units: 30,
+              color: const Color(0xFFFFF6DA),
+            ),
+          ),
+          SizedBox(width: layout.dp(18)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                luckyCardPopupText(
+                  heading,
+                  layout,
+                  weight: FontWeight.w600,
+                  units: 33,
+                  color: kLuckyCardGoldBright,
+                  maxLines: null,
+                ),
+                SizedBox(height: layout.dp(4)),
+                _body(body, layout, key: ValueKey('rule-${number - 1}')),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -271,100 +336,300 @@ class _RulesBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lines = luckyCardRulesLines();
-    final badge = layout.fontSize(44, minDp: 20);
-    return _Scroller(
-      layout: layout,
-      children: [
-        for (var i = 0; i < lines.length; i++)
-          Padding(
-            padding: EdgeInsets.only(bottom: layout.dp(22)),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: badge,
-                  height: badge,
-                  alignment: Alignment.center,
-                  margin: EdgeInsets.only(right: layout.dp(22)),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF8B0000),
-                    border: Border.all(color: kLuckyCardGold, width: 1.2),
-                  ),
-                  child: Text(
-                    '${i + 1}',
-                    textScaler: TextScaler.noScaling,
-                    style: TextStyle(fontFamily: 'Oswald', fontWeight: FontWeight.w500, fontSize: layout.fontSize(32), height: 1.0, color: kLuckyCardCream),
-                  ),
-                ),
+    final gap = layout.dp(14);
+    Widget pair(int left) => IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final i in [left, left + 1]) ...[
+                if (i != left) SizedBox(width: gap),
                 Expanded(
-                  child: Text(lines[i], key: ValueKey('rule-$i'), textScaler: TextScaler.noScaling, style: _bodyStyle(layout)),
+                  child: _RuleCard(layout: layout, number: i + 1, heading: lines[i].heading, body: lines[i].body),
                 ),
               ],
-            ),
+            ],
           ),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < lines.length; i += 2) ...[pair(i), SizedBox(height: gap)],
+        _buttonsCard(),
       ],
+    );
+  }
+
+  /// The seventh rule, across the whole width: the four buttons.
+  Widget _buttonsCard() {
+    return Container(
+      key: const ValueKey('rule-6'),
+      padding: EdgeInsets.symmetric(horizontal: layout.dp(22), vertical: layout.dp(18)),
+      decoration: luckyCardPopupCard(layout),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          luckyCardPopupText(
+            '7  $kLuckyCardButtonsHeading',
+            layout,
+            weight: FontWeight.w600,
+            units: 33,
+            color: kLuckyCardGoldBright,
+          ),
+          SizedBox(height: layout.dp(10)),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < kLuckyCardButtonLines.length; i++) ...[
+                if (i > 0) SizedBox(width: layout.dp(14)),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        alignment: Alignment.center,
+                        padding: EdgeInsets.symmetric(vertical: layout.dp(5)),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(layout.dp(12)),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Color(0xFF6B1620), kLuckyCardPopupInk],
+                          ),
+                          border: Border.all(color: kLuckyCardGold),
+                        ),
+                        child: luckyCardPopupText(
+                          kLuckyCardButtonLines[i].label,
+                          layout,
+                          weight: FontWeight.w700,
+                          units: 26,
+                        ),
+                      ),
+                      SizedBox(height: layout.dp(6)),
+                      _body(kLuckyCardButtonLines[i].body, layout, units: 26, align: TextAlign.center),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
 
+/// A small heading over a block.
+Widget _kicker(String text, LuckyCardLayout layout) => luckyCardPopupText(
+      text,
+      layout,
+      units: 25,
+      spacing: 0.2,
+      color: kLuckyCardCream.withValues(alpha: 0.75),
+      maxLines: null,
+    );
+
 class _PayoutsBody extends StatelessWidget {
-  const _PayoutsBody({required this.layout});
+  const _PayoutsBody({required this.layout, required this.art});
 
   final LuckyCardLayout layout;
+  final LuckyCardArt art;
 
   @override
   Widget build(BuildContext context) {
-    final table = luckyCardPayoutTable();
-    final gap = layout.dp(12);
-    return _Scroller(
-      layout: layout,
+    final padding = EdgeInsets.symmetric(horizontal: layout.dp(24), vertical: layout.dp(22));
+    final card = luckyCardPopupCard(layout, radius: 20, borderAlpha: 0.3);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(luckyCardPayoutRule(), key: const ValueKey('payout-rule'), textScaler: TextScaler.noScaling, style: _bodyStyle(layout, color: kLuckyCardGoldBright)),
-        SizedBox(height: layout.dp(22)),
-        Text(luckyCardExampleText(), key: const ValueKey('payout-example'), textScaler: TextScaler.noScaling, style: _bodyStyle(layout)),
-        SizedBox(height: layout.dp(30)),
-        Text(luckyCardTableTitle(), key: const ValueKey('payout-table-title'), textScaler: TextScaler.noScaling, style: _bodyStyle(layout, color: kLuckyCardGold, weight: FontWeight.w700)),
-        SizedBox(height: layout.dp(14)),
-        LayoutBuilder(
-          builder: (context, c) {
-            // Five cells a row: the bonus above, what it wins below.
-            const perRow = 5;
-            final cell = (c.maxWidth - gap * (perRow - 1)) / perRow;
-            return Wrap(
-              spacing: gap,
-              runSpacing: gap,
-              children: [
-                for (final row in table)
-                  SizedBox(
-                    key: ValueKey('payout-${row.bonus}'),
-                    width: cell,
-                    height: layout.dp(150),
-                    child: LuckyCardPanel(
-                      layout: layout,
-                      radiusUnits: 14,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            height: layout.fontSize(34) * 1.1,
-                            child: LuckyCardStakeText(row.bonus, maxWidth: cell, preferredSize: layout.fontSize(34), color: kLuckyCardGold),
-                          ),
-                          SizedBox(
-                            height: layout.fontSize(40) * 1.1,
-                            child: LuckyCardStakeText(luckyCardGrouped(row.win), maxWidth: cell, preferredSize: layout.fontSize(40)),
-                          ),
-                        ],
-                      ),
-                    ),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                flex: 5,
+                child: Container(
+                  padding: padding,
+                  decoration: card,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _kicker(kLuckyCardPayoutKicker, layout),
+                      SizedBox(height: layout.dp(12)),
+                      _formula(),
+                      SizedBox(height: layout.dp(14)),
+                      _example(context),
+                      SizedBox(height: layout.dp(12)),
+                      _body(luckyCardExampleText(), layout,
+                          key: const ValueKey('payout-example'), units: 27, alpha: 0.85),
+                    ],
                   ),
-              ],
-            );
-          },
+                ),
+              ),
+              SizedBox(width: layout.dp(20)),
+              Expanded(
+                flex: 6,
+                child: Container(
+                  padding: padding,
+                  decoration: card,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _kicker(luckyCardTableTitle(), layout),
+                      SizedBox(height: layout.dp(12)),
+                      _table(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-        SizedBox(height: layout.dp(30)),
-        Text(luckyCardLimitsText(), key: const ValueKey('payout-limits'), textScaler: TextScaler.noScaling, style: _bodyStyle(layout)),
+        SizedBox(height: layout.dp(16)),
+        _body(luckyCardLimitsText(), layout,
+            key: const ValueKey('payout-limits'), units: 27, alpha: 0.8, align: TextAlign.center),
       ],
+    );
+  }
+
+  /// [STAKE] x [14] x [BONUS].
+  Widget _formula() {
+    Widget box(String text, {bool gold = false}) => Container(
+          padding: EdgeInsets.symmetric(horizontal: layout.dp(16), vertical: layout.dp(5)),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(layout.dp(12)),
+            color: gold ? null : Colors.black.withValues(alpha: 0.35),
+            gradient: gold
+                ? const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: kLuckyCardGoldFace,
+                    stops: kLuckyCardGoldFaceStops,
+                  )
+                : null,
+            border: Border.all(color: kLuckyCardGold.withValues(alpha: 0.45)),
+          ),
+          child: luckyCardPopupText(
+            text,
+            layout,
+            weight: FontWeight.w700,
+            units: 40,
+            color: gold ? kLuckyCardPopupInk : kLuckyCardCream,
+          ),
+        );
+    Widget times() => Padding(
+          padding: EdgeInsets.symmetric(horizontal: layout.dp(8)),
+          child: luckyCardPopupText('x', layout, weight: FontWeight.w700, units: 40, color: kLuckyCardGold),
+        );
+    return FittedBox(
+      key: const ValueKey('payout-formula'),
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [box('STAKE'), times(), box('$kLuckyCardPayoutMultiplier', gold: true), times(), box('BONUS')],
+      ),
+    );
+  }
+
+  /// The example in pictures: the card with its chip, what it pays, the bonus, what that makes.
+  Widget _example(BuildContext context) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final chip = math.max(layout.dp(46), 20.0);
+    Widget arrow() => Padding(
+          padding: EdgeInsets.symmetric(horizontal: layout.dp(9)),
+          child: Icon(Icons.arrow_forward_rounded, size: layout.fontSize(30, minDp: 12), color: kLuckyCardGold),
+        );
+    final plain = luckyCardPayoutFor(kLuckyCardExampleStake, 1);
+    final bonus = luckyCardPayoutFor(kLuckyCardExampleStake, kLuckyCardExampleBonus);
+    return FittedBox(
+      key: const ValueKey('payout-example-row'),
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              LuckyCardMiniCard(
+                layout: layout,
+                art: art,
+                card: const LuckyCard(LuckyCardRank.queen, LuckyCardSuit.spades),
+                width: 66,
+                height: 92,
+              ),
+              Positioned(
+                right: -chip * 0.4,
+                bottom: -chip * 0.2,
+                child: Image(
+                  image:
+                      art.image(LuckyCardArtKey.chip(LuckyCardChip.ten), cacheWidth: LuckyCardLayout.cacheWidth(chip, dpr)),
+                  width: chip,
+                  height: chip,
+                  excludeFromSemantics: true,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(width: chip * 0.3),
+          arrow(),
+          luckyCardPopupText(luckyCardGrouped(plain), layout, weight: FontWeight.w700, units: 40),
+          arrow(),
+          LuckyCardBonusPill(layout: layout, bonus: kLuckyCardExampleBonus, units: 34),
+          arrow(),
+          LuckyCardGoldText(luckyCardGrouped(bonus), layout: layout, units: 52, spacing: 0.02, drop: 2),
+        ],
+      ),
+    );
+  }
+
+  /// Five tiles across, two down; 10X is lit.
+  Widget _table() {
+    final rows = luckyCardPayoutTable();
+    final gap = layout.dp(12);
+    Widget tile(({String bonus, int win}) row) {
+      final top = row.bonus == '10X';
+      return Container(
+        key: ValueKey('payout-${row.bonus}'),
+        padding: EdgeInsets.symmetric(vertical: layout.dp(10), horizontal: layout.dp(2)),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(layout.dp(14)),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: top ? const [Color(0xFF7A5A0E), Color(0xFF3A2604)] : const [Color(0xFF4A0F16), Color(0xFF22050A)],
+          ),
+          border: top
+              ? Border.all(color: kLuckyCardGoldBright, width: math.max(layout.dp(3), 1.2))
+              : Border.all(color: kLuckyCardGold.withValues(alpha: 0.45)),
+          boxShadow:
+              top ? [BoxShadow(color: kLuckyCardGoldBright.withValues(alpha: 0.4), blurRadius: layout.dp(18))] : null,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            luckyCardPopupText(row.bonus, layout, weight: FontWeight.w700, units: 38, color: kLuckyCardGoldBright),
+            SizedBox(height: layout.dp(3)),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: luckyCardPopupText(luckyCardGrouped(row.win), layout, units: 31),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget line(int from) => Row(
+          children: [
+            for (var i = from; i < from + 5; i++) ...[
+              if (i != from) SizedBox(width: gap),
+              Expanded(child: tile(rows[i])),
+            ],
+          ],
+        );
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [line(0), SizedBox(height: gap), line(5)],
     );
   }
 }

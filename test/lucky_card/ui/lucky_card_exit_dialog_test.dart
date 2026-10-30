@@ -12,6 +12,18 @@ import 'ui_harness.dart';
 
 const Size phone = Size(844, 390);
 
+/// The sizes the new popup design is checked and pictured at, besides the device matrix. The popup is
+/// laid out by screen size alone, so the two desktop sizes need no flag.
+const List<Device> kPopupSizes = [
+  Device('phone 800', 800, 360),
+  Device('phone 844', 844, 390),
+  Device('phone 915', 915, 412),
+  Device('tablet 1180', 1180, 820),
+  Device('tablet 1024', 1024, 768),
+  Device('desktop 1920', 1920, 1080),
+  Device('desktop 1366', 1366, 768),
+];
+
 /// What the dialog answered, for every time it was opened.
 class Answers {
   final List<bool?> given = [];
@@ -86,6 +98,7 @@ void main() {
     expect(kLuckyCardExitNo, 'NO');
     expect(kLuckyCardExitYes, 'YES');
     expect(LuckyCardExitDialog.autoCancel, const Duration(seconds: 5));
+    expect(luckyCardExitCountdownText(3), 'STAYING IN 3S');
   });
 
   group('asking', () {
@@ -94,10 +107,26 @@ void main() {
       await ask(tester);
       expect(dialog, findsOneWidget);
       expect(answers.opens, 1);
-      expect(find.descendant(of: dialog, matching: find.text('EXIT GAME')), findsOneWidget);
+      expect(find.descendant(of: dialog, matching: find.text('EXIT GAME')), findsNWidgets(2), reason: 'the title and its shadow');
       expect(tester.widget<Text>(key('exit-message')).data, 'Do you want to exit?');
       expect(find.descendant(of: key('exit-no'), matching: find.text('NO')), findsOneWidget);
       expect(find.descendant(of: key('exit-yes'), matching: find.text('YES')), findsOneWidget);
+    });
+
+    testWidgets('the gold bar drains and the seconds count down as the 5 seconds run out', (tester) async {
+      await ready(tester);
+      await ask(tester);
+      double fill() => tester.widget<FractionallySizedBox>(key('exit-bar-fill')).widthFactor!;
+      String seconds() => tester.widget<Text>(key('exit-countdown')).data!;
+      final start = fill();
+      expect(seconds(), 'STAYING IN 5S');
+      await tester.pump(const Duration(seconds: 2));
+      expect(fill(), lessThan(start));
+      expect(seconds(), 'STAYING IN 3S');
+      await tester.pump(const Duration(seconds: 2));
+      expect(seconds(), 'STAYING IN 1S');
+      await tester.pump(const Duration(seconds: 2));
+      await settle(tester);
     });
 
     testWidgets('NO is green and YES is red', (tester) async {
@@ -178,7 +207,7 @@ void main() {
   });
 
   group('every device of the matrix', () {
-    for (final d in kDeviceMatrix) {
+    for (final d in [...kDeviceMatrix, ...kPopupSizes]) {
       testWidgets('${d.name} (${d.width.toInt()} x ${d.height.toInt()}): inside the screen, 48 dp buttons, 11 dp text', (tester) async {
         await ready(tester, size: d.size);
         await ask(tester);
@@ -187,12 +216,13 @@ void main() {
         expect(tester.takeException(), isNull);
         expect((Offset.zero & d.size).contains(box.topLeft) && (Offset.zero & d.size).contains(box.bottomRight), isTrue);
         expect(box.center.dx, closeTo(l.canvasRect.center.dx, 0.5));
-        expect(box.center.dy, closeTo(l.canvasRect.center.dy, 0.5));
+        final gem = tester.getRect(key('exit-gem'));
+        expect((Offset.zero & d.size).contains(gem.topLeft), isTrue, reason: 'the gem is on screen: $gem');
         expect(box.width, closeTo(l.canvasRect.width * LuckyCardExitDialog.widthShare, 0.5));
         for (final k in ['exit-no', 'exit-yes']) {
           final r = tester.getRect(key(k));
-          expect(r.width, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: '$k width on ${d.name}');
-          expect(r.height, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: '$k height on ${d.name}');
+          expect(r.width, greaterThanOrEqualTo(kLuckyCardMinTapDp - 0.001), reason: '$k width on ${d.name}');
+          expect(r.height, greaterThanOrEqualTo(kLuckyCardMinTapDp - 0.001), reason: '$k height on ${d.name}');
           expect(box.contains(r.topLeft) && box.contains(r.bottomRight - const Offset(0.01, 0.01)), isTrue, reason: '$k inside the dialog');
         }
         for (final t in tester.widgetList<Text>(find.descendant(of: dialog, matching: find.byType(Text)))) {
@@ -249,7 +279,7 @@ void main() {
   });
 
   group('a picture to look at', () {
-    for (final d in const [Device('small phone', 640, 360), Device('large phone', 915, 412), Device('small tablet', 1024, 768)]) {
+    for (final d in const [Device('small phone', 640, 360), ...kPopupSizes]) {
       testWidgets('${d.name} ${d.width.toInt()}x${d.height.toInt()}', (tester) async {
         await ready(tester, size: d.size);
         await ask(tester);

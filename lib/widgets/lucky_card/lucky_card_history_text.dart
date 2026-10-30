@@ -1,4 +1,4 @@
-// The words of the Lucky Card History dialog and of its row popup.
+// The words of the Lucky Card History popup and of its round detail popup.
 //
 // Written as plain functions and constants, not buried in the widgets, so that every
 // number is formatted in one place the same way the game screen's own readouts format it
@@ -19,14 +19,20 @@ import 'lucky_card_readouts.dart';
 /// The dialog's title.
 const String kLuckyCardHistoryTitle = 'HISTORY';
 
-/// The four column headings: the number of the line, the round, what was staked, what was won.
+/// The three stat boxes.
+const String kLuckyCardHistoryRoundsStat = 'ROUNDS';
+const String kLuckyCardHistoryPlayStat = 'TOTAL PLAY';
+const String kLuckyCardHistoryWinStat = 'TOTAL WIN';
+
+/// The column headings.
 const String kLuckyCardHistoryNoHeader = 'NO.';
 const String kLuckyCardHistoryRoundHeader = 'ROUND';
+const String kLuckyCardHistoryResultHeader = 'RESULT';
 const String kLuckyCardHistoryPlayHeader = 'PLAY';
 const String kLuckyCardHistoryWinHeader = 'WIN';
 
-/// The footer label: the sum of every line since login.
-const String kLuckyCardHistoryTotalLabel = 'TOTAL SESSION';
+/// The line at the foot of the list.
+const String kLuckyCardHistoryHint = 'This session, newest first. Tap a round for details.';
 
 /// Shown while the first read is on its way.
 const String kLuckyCardHistoryLoading = 'Loading session history...';
@@ -37,13 +43,13 @@ const String kLuckyCardHistoryEmpty = 'No rounds in this session yet';
 /// The button under a failed first read.
 const String kLuckyCardHistoryRetry = 'RETRY';
 
-/// The line over the table when a later read failed but an earlier list is still shown.
+/// The line over the list when a later read failed but an earlier list is still shown.
 const String kLuckyCardHistoryStale = 'Could not refresh the history. Tap to retry.';
 
-/// What the screen reader says for the dialog and its close button.
+/// What the screen reader says for the popup.
 const String kLuckyCardHistorySemanticsLabel = 'Game history';
 
-/// The row popup's heading badge: the line's number in the table.
+/// The round detail's badge: the line's number in the list.
 String luckyCardHistoryDetailBadge(int serial) => 'NO. $serial';
 
 /// The PLAY cell: what the player staked in that round.
@@ -52,28 +58,18 @@ String luckyCardHistoryPlayText(LuckyCardHistoryEntry e) => luckyCardGrouped(e.s
 /// The WIN cell: "+2,500" for a win, "0" for a loss, as the game screen's WIN readout writes it.
 String luckyCardHistoryWinText(LuckyCardHistoryEntry e) => luckyCardWinText(e.payout);
 
-/// The small tag under a WIN amount: "2X" to "10X". Empty for a round with no bonus, which
-/// is shown as a single line, as Triple Chance does.
-String luckyCardHistoryBonusTag(LuckyCardHistoryEntry e) =>
-    e.bonusMultiplier > 1 ? luckyCardBonusLabel(e.bonusMultiplier) : '';
-
 /// A card in words, for example "Queen of Spades".
 String luckyCardCardWords(LuckyCard card) => '${card.rank.label} of ${card.suit.label}';
 
-/// The popup's headline: "WIN +2,400,000 coins" or "NO WIN".
-String luckyCardHistoryHeadline(LuckyCardHistoryEntry e) =>
-    e.won ? 'WIN ${luckyCardWinText(e.payout)} coins' : 'NO WIN';
-
-/// The popup's detail lines, label then value, in the order they are shown.
+/// The round detail's four facts, label then value, in the order they are shown.
 List<(String, String)> luckyCardHistoryDetailLines(LuckyCardHistoryEntry e) => [
-      ('Round', '${e.roundNumber}'),
-      ('Winning card', luckyCardCardWords(e.winningCard)),
-      ('Bonus', luckyCardBonusLabel(e.bonusMultiplier)),
-      ('Total Bet', '${luckyCardGrouped(e.stake)} coins'),
-      ('Total Win', '${luckyCardGrouped(e.payout)} coins'),
+      ('ROUND', '${e.roundNumber}'),
+      ('WINNING CARD', luckyCardCardWords(e.winningCard)),
+      ('BONUS', luckyCardBonusLabel(e.bonusMultiplier)),
+      ('TOTAL BET', '${luckyCardGrouped(e.stake)} coins'),
     ];
 
-/// What a screen reader says for one table line.
+/// What a screen reader says for one line of the list.
 String luckyCardHistoryRowSemantics(LuckyCardHistoryEntry e, int serial) =>
     'Line $serial, round ${e.roundNumber}, played ${luckyCardGrouped(e.stake)}, '
     '${e.won ? 'won ${luckyCardGrouped(e.payout)}' : 'no win'}. Tap for details.';

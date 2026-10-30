@@ -15,7 +15,7 @@ import 'package:best_smart_game/services/lucky_card_round_sync.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_history_dialog.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_history_text.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_layout.dart';
-import 'package:best_smart_game/widgets/lucky_card/lucky_card_panel.dart';
+import 'package:best_smart_game/widgets/lucky_card/lucky_card_popup_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,6 +24,18 @@ import '../provider_rig.dart';
 import 'ui_harness.dart';
 
 const Size phone = Size(844, 390);
+
+/// The sizes the new popup design is checked and pictured at, besides the device matrix. The popup is
+/// laid out by screen size alone, so the two desktop sizes need no flag.
+const List<Device> kPopupSizes = [
+  Device('phone 800', 800, 360),
+  Device('phone 844', 844, 390),
+  Device('phone 915', 915, 412),
+  Device('tablet 1180', 1180, 820),
+  Device('tablet 1024', 1024, 768),
+  Device('desktop 1920', 1920, 1080),
+  Device('desktop 1366', 1366, 768),
+];
 
 final DateTime login = DateTime.utc(2026, 10, 22, 9);
 
@@ -168,30 +180,20 @@ void main() {
       expect(luckyCardHistoryPlayText(loss), '50');
     });
 
-    test('the bonus tag shows 2X to 10X on a winning line only, and nothing for no bonus', () {
-      expect(luckyCardHistoryBonusTag(win), '5X');
-      expect(luckyCardHistoryBonusTag(plainWin), '');
-      expect(luckyCardHistoryBonusTag(LuckyCardHistoryEntry.fromRow(row(payout: 10, bonus: 10))), '10X');
-    });
-
-    test('the popup headline and lines', () {
-      expect(luckyCardHistoryHeadline(win), 'WIN +5,000 coins');
-      expect(luckyCardHistoryHeadline(loss), 'NO WIN');
+    test('the detail has four facts: the round, the card in words, the bonus and the total bet', () {
       expect(luckyCardHistoryDetailLines(win), [
-        ('Round', '17403942'),
-        ('Winning card', 'King of Spades'),
-        ('Bonus', '5X'),
-        ('Total Bet', '100 coins'),
-        ('Total Win', '5,000 coins'),
+        ('ROUND', '17403942'),
+        ('WINNING CARD', 'King of Spades'),
+        ('BONUS', '5X'),
+        ('TOTAL BET', '100 coins'),
       ]);
       expect(luckyCardHistoryDetailLines(loss), [
-        ('Round', '17403941'),
-        ('Winning card', 'Jack of Hearts'),
-        ('Bonus', '3X'),
-        ('Total Bet', '50 coins'),
-        ('Total Win', '0 coins'),
+        ('ROUND', '17403941'),
+        ('WINNING CARD', 'Jack of Hearts'),
+        ('BONUS', '3X'),
+        ('TOTAL BET', '50 coins'),
       ]);
-      expect(luckyCardHistoryDetailLines(plainWin)[2], ('Bonus', 'N'));
+      expect(luckyCardHistoryDetailLines(plainWin)[2], ('BONUS', 'N'));
       expect(luckyCardHistoryDetailBadge(3), 'NO. 3');
     });
 
@@ -205,9 +207,13 @@ void main() {
         kLuckyCardHistoryTitle,
         kLuckyCardHistoryNoHeader,
         kLuckyCardHistoryRoundHeader,
+        kLuckyCardHistoryResultHeader,
         kLuckyCardHistoryPlayHeader,
         kLuckyCardHistoryWinHeader,
-        kLuckyCardHistoryTotalLabel,
+        kLuckyCardHistoryRoundsStat,
+        kLuckyCardHistoryPlayStat,
+        kLuckyCardHistoryWinStat,
+        kLuckyCardHistoryHint,
         kLuckyCardHistoryLoading,
         kLuckyCardHistoryEmpty,
         kLuckyCardHistoryRetry,
@@ -215,7 +221,6 @@ void main() {
         kLuckyCardHistorySemanticsLabel,
         LuckyCardHistoryProvider.loadErrorText,
         for (final e in [win, loss, plainWin]) ...[
-          luckyCardHistoryHeadline(e),
           luckyCardHistoryRowSemantics(e, 1),
           for (final l in luckyCardHistoryDetailLines(e)) ...[l.$1, l.$2],
         ],
@@ -238,18 +243,20 @@ void main() {
       expect(dialog, findsOneWidget);
       expect(log.events, ['open']);
       expect(script.reads, [login]);
-      expect(wordsIn(tester, dialog), containsAll(['HISTORY', 'NO.', 'ROUND', 'PLAY', 'WIN', 'TOTAL SESSION']));
+      expect(wordsIn(tester, dialog), containsAll(['HISTORY', 'ROUNDS', 'TOTAL PLAY', 'TOTAL WIN', 'NO.', 'ROUND', 'RESULT', 'PLAY', 'WIN', kLuckyCardHistoryHint]));
+      expect(find.text('NET'), findsNothing, reason: 'Hasan: only ROUNDS, TOTAL PLAY and TOTAL WIN');
+      expect(find.text('TOTAL SESSION'), findsNothing);
       await rig.finish();
     });
 
-    testWidgets('each line shows its number, round, what was staked and what was won, in order', (tester) async {
+    testWidgets('each line shows its number, round, card, bonus, what was staked and what was won, in order', (tester) async {
       final rig = BetRig(tester);
       await pumpAtSize(tester, phone, host(rig.provider, rowsScript(sampleRows()).history));
       await open(tester);
-      expect(wordsIn(tester, key('history-row-0')), ['1', '17403942', '100', '+5,000', '5X']);
-      expect(wordsIn(tester, key('history-row-1')), ['2', '17403941', '50', '0']);
-      expect(wordsIn(tester, key('history-row-2')), ['3', '17403940', '480,000', '+4,800,000']);
-      expect(wordsIn(tester, key('history-row-3')), ['4', '17403939', '300', '0']);
+      expect(wordsIn(tester, key('history-row-0')), ['1', '17403942', 'K', '5X', '100', '+5,000']);
+      expect(wordsIn(tester, key('history-row-1')), ['2', '17403941', 'J', 'N', '50', '0']);
+      expect(wordsIn(tester, key('history-row-2')), ['3', '17403940', 'Q', 'N', '480,000', '+4,800,000']);
+      expect(wordsIn(tester, key('history-row-3')), ['4', '17403939', 'Q', '3X', '300', '0']);
       await rig.finish();
     });
 
@@ -257,20 +264,21 @@ void main() {
       final rig = BetRig(tester);
       await pumpAtSize(tester, phone, host(rig.provider, rowsScript(sampleRows()).history));
       await open(tester);
-      Color strip(int i) => tester.widget<Container>(key('history-strip-$i')).color!;
-      expect(strip(0), kLuckyCardWin);
-      expect(strip(1), const Color(0xFF8B0000));
-      expect(strip(2), kLuckyCardWin);
-      expect(strip(3), const Color(0xFF8B0000), reason: 'a loss in a bonus round is still a loss');
+      BoxDecoration strip(int i) => tester.widget<Container>(key('history-strip-$i')).decoration! as BoxDecoration;
+      expect(strip(0).gradient, isNotNull, reason: 'green');
+      expect(strip(1).color, kLuckyCardLossRed);
+      expect(strip(2).gradient, isNotNull, reason: 'green');
+      expect(strip(3).color, kLuckyCardLossRed, reason: 'a loss in a bonus round is still a loss');
       await rig.finish();
     });
 
-    testWidgets('the footer adds up exactly the lines above it', (tester) async {
+    testWidgets('the stat boxes add up exactly the lines under them', (tester) async {
       final rig = BetRig(tester);
       await pumpAtSize(tester, phone, host(rig.provider, rowsScript(sampleRows()).history));
       await open(tester);
-      expect(wordsIn(tester, key('history-total-play')), ['480,450']);
-      expect(wordsIn(tester, key('history-total-win')), ['+4,805,000']);
+      expect(wordsIn(tester, key('history-stat-rounds')), ['ROUNDS', '4']);
+      expect(wordsIn(tester, key('history-total-play')), ['TOTAL PLAY', '480,450']);
+      expect(wordsIn(tester, key('history-total-win')), ['TOTAL WIN', '4,805,000']);
       await rig.finish();
     });
 
@@ -278,8 +286,8 @@ void main() {
       final rig = BetRig(tester);
       await pumpAtSize(tester, phone, host(rig.provider, rowsScript([row(stake: 50, payout: 0)]).history));
       await open(tester);
-      expect(wordsIn(tester, key('history-total-win')), ['0']);
-      expect(wordsIn(tester, key('history-total-play')), ['50']);
+      expect(wordsIn(tester, key('history-total-win')), ['TOTAL WIN', '0']);
+      expect(wordsIn(tester, key('history-total-play')), ['TOTAL PLAY', '50']);
       await rig.finish();
     });
 
@@ -296,7 +304,7 @@ void main() {
       rows.insert(0, row(round: 3, stake: 10));
       await open(tester);
       expect(script.reads.length, 2);
-      expect(wordsIn(tester, key('history-row-0')), ['1', '3', '10', '0']);
+      expect(wordsIn(tester, key('history-row-0')), ['1', '3', 'J', 'N', '10', '0']);
       expect(key('history-row-1'), findsOneWidget);
       await rig.finish();
     });
@@ -394,7 +402,7 @@ void main() {
   });
 
   group('a line opens a popup with the details', () {
-    testWidgets('a winning line: the badge, the headline and the five details, and the click hook is told', (tester) async {
+    testWidgets('a winning line: the badge, the amount, the picture and the four facts, and the click hook is told', (tester) async {
       final rig = BetRig(tester);
       final log = Log();
       await pumpAtSize(tester, phone, host(rig.provider, rowsScript(sampleRows()).history, log: log));
@@ -405,12 +413,13 @@ void main() {
       expect(detail, findsOneWidget);
       expect(log.events, ['open', 'row']);
       expect(tester.widget<Text>(key('history-detail-badge')).data, 'NO. 1');
-      expect(tester.widget<Text>(key('history-detail-headline')).data, 'WIN +5,000 coins');
-      expect(tester.widget<Text>(key('history-detail-Round')).data, '17403942');
-      expect(tester.widget<Text>(key('history-detail-Winning card')).data, 'King of Spades');
-      expect(tester.widget<Text>(key('history-detail-Bonus')).data, '5X');
-      expect(tester.widget<Text>(key('history-detail-Total Bet')).data, '100 coins');
-      expect(tester.widget<Text>(key('history-detail-Total Win')).data, '5,000 coins');
+      expect(tester.widget<Text>(key('history-detail-amount')).data, '+5,000');
+      expect(key('history-detail-card-k_spades'), findsOneWidget);
+      expect(find.descendant(of: key('history-detail-bonus'), matching: find.text('5X')), findsOneWidget);
+      expect(tester.widget<Text>(key('history-detail-ROUND')).data, '17403942');
+      expect(tester.widget<Text>(key('history-detail-WINNING CARD')).data, 'King of Spades');
+      expect(tester.widget<Text>(key('history-detail-BONUS')).data, '5X');
+      expect(tester.widget<Text>(key('history-detail-TOTAL BET')).data, '100 coins');
       await rig.finish();
     });
 
@@ -422,9 +431,9 @@ void main() {
       await settle(tester);
       expect(tester.widget<Text>(key('history-detail-badge')).data, 'NO. 4');
       expect(tester.widget<Text>(key('history-detail-headline')).data, 'NO WIN');
-      expect(tester.widget<Text>(key('history-detail-Winning card')).data, 'Queen of Clubs');
-      expect(tester.widget<Text>(key('history-detail-Bonus')).data, '3X');
-      expect(tester.widget<Text>(key('history-detail-Total Win')).data, '0 coins');
+      expect(key('history-detail-amount'), findsNothing);
+      expect(tester.widget<Text>(key('history-detail-WINNING CARD')).data, 'Queen of Clubs');
+      expect(tester.widget<Text>(key('history-detail-BONUS')).data, '3X');
       await rig.finish();
     });
 
@@ -650,7 +659,7 @@ void main() {
   });
 
   group('every device of the matrix', () {
-    for (final d in kDeviceMatrix) {
+    for (final d in [...kDeviceMatrix, ...kPopupSizes]) {
       testWidgets('${d.name} (${d.width.toInt()} x ${d.height.toInt()}): it fits, every tap area is 48 dp, text is 11 dp, every line is reachable', (tester) async {
         final rig = BetRig(tester);
         final many = [for (var i = 0; i < 40; i++) row(round: 17403000 + i, stake: 10 + i, payout: i.isEven ? 100 : 0, bonus: i % 5 + 1)];
@@ -666,8 +675,8 @@ void main() {
         expect(box.width, closeTo(l.canvasRect.width * LuckyCardHistoryDialog.widthShare, 0.5));
 
         final close = tester.getRect(key('history-close'));
-        expect(close.width, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'close width');
-        expect(close.height, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: 'close height');
+        expect(close.width, greaterThanOrEqualTo(kLuckyCardMinTapDp - 0.001), reason: 'close width');
+        expect(close.height, greaterThanOrEqualTo(kLuckyCardMinTapDp - 0.001), reason: 'close height');
         expect(smallestText(tester, dialog), greaterThanOrEqualTo(kLuckyCardMinReadableDp));
 
         // Rows that are on screen are 48 dp tall at least, and inside the dialog.
@@ -677,9 +686,9 @@ void main() {
         expect(row0.height, greaterThanOrEqualTo(kLuckyCardMinTapDp - 0.001), reason: 'a line is a tap area');
         expect(box.contains(row0.topLeft) && box.contains(row0.bottomRight - const Offset(0.01, 0.01)), isTrue);
 
-        // The footer is always on screen, inside the dialog, and the last line can be scrolled to.
+        // The stat boxes are always on screen, inside the dialog, and the last line can be scrolled to.
         final foot = tester.getRect(key('history-total-play'));
-        expect(box.contains(foot.center), isTrue, reason: 'the footer is inside the dialog');
+        expect(box.contains(foot.center), isTrue, reason: 'the stat boxes are inside the dialog');
         await tester.dragUntilVisible(key('history-row-39'), key('history-list'), const Offset(0, -200));
         await tester.pump();
         final last = tester.getRect(key('history-row-39'));
@@ -695,9 +704,29 @@ void main() {
         final pop = tester.getRect(detail);
         expect(screen.contains(pop.topLeft) && screen.contains(pop.bottomRight), isTrue, reason: 'popup inside the screen: $pop');
         final pclose = tester.getRect(key('history-detail-close'));
-        expect(pclose.width, greaterThanOrEqualTo(kLuckyCardMinTapDp));
-        expect(pclose.height, greaterThanOrEqualTo(kLuckyCardMinTapDp));
+        expect(pclose.width, greaterThanOrEqualTo(kLuckyCardMinTapDp - 0.001));
+        expect(pclose.height, greaterThanOrEqualTo(kLuckyCardMinTapDp - 0.001));
         expect(smallestText(tester, detail), greaterThanOrEqualTo(kLuckyCardMinReadableDp));
+        expect(tester.takeException(), isNull);
+        await rig.finish();
+      });
+    }
+
+    for (final d in [...kDeviceMatrix, ...kPopupSizes]) {
+      testWidgets('${d.name}: no stat label is squeezed: each stays on one line beside its figure', (tester) async {
+        final rig = BetRig(tester);
+        await pumpAtSize(tester, d.size, host(rig.provider, rowsScript([row(stake: 600000, payout: 60000000)]).history));
+        await open(tester);
+        for (final (k, label) in const [
+          ('history-stat-rounds', 'ROUNDS'),
+          ('history-total-play', 'TOTAL PLAY'),
+          ('history-total-win', 'TOTAL WIN'),
+        ]) {
+          final box = tester.getRect(key(k));
+          final text = tester.getRect(find.descendant(of: key(k), matching: find.text(label)));
+          expect(box.contains(text.topLeft) && box.contains(text.bottomRight - const Offset(0.01, 0.01)), isTrue, reason: label);
+        }
+        expect(tester.getRect(key('history-total-play')).width, closeTo(tester.getRect(key('history-total-win')).width, 0.5));
         expect(tester.takeException(), isNull);
         await rig.finish();
       });
@@ -714,7 +743,7 @@ void main() {
         expect(r.left, greaterThanOrEqualTo(cell.left - 0.5), reason: (t.widget as Text).data);
         expect(r.right, lessThanOrEqualTo(cell.right + 0.5), reason: (t.widget as Text).data);
       }
-      expect(wordsIn(tester, key('history-row-0')), ['1', '17403942', '600,000', '+60,000,000', '10X']);
+      expect(wordsIn(tester, key('history-row-0')), ['1', '17403942', 'J', '10X', '600,000', '+60,000,000']);
       await rig.finish();
     });
   });
@@ -759,9 +788,14 @@ void main() {
   });
 
   group('a picture to look at', () {
-    Future<void> shoot(WidgetTester tester, Device d, String name, {int? tapRow, List<Map<String, dynamic>>? rows, bool fail = false}) async {
+    Future<void> shoot(WidgetTester tester, Device d, String name, {int? tapRow, List<Map<String, dynamic>>? rows, bool fail = false, bool loading = false}) async {
       final rig = BetRig(tester);
-      final script = fail ? Script(() async => throw StateError('offline')) : rowsScript(rows ?? sampleRows());
+      final gate = Completer<List<dynamic>>();
+      final script = loading
+          ? Script(() => gate.future)
+          : fail
+              ? Script(() async => throw StateError('offline'))
+              : rowsScript(rows ?? sampleRows());
       await pumpAtSize(tester, d.size, host(rig.provider, script.history));
       await open(tester);
       if (tapRow != null) {
@@ -769,17 +803,26 @@ void main() {
         await settle(tester);
       }
       expect(tester.takeException(), isNull);
+      // The cards are real pictures: wait for them, so the picture never depends on which test ran first.
+      await tester.runAsync(() async {
+        for (final e in find.byType(Image).evaluate()) {
+          await precacheImage((e.widget as Image).image, e);
+        }
+      });
+      await tester.pump();
       await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/${name}_${d.width.toInt()}x${d.height.toInt()}.png'));
+      if (loading) gate.complete(const []);
       await rig.finish();
     }
 
-    for (final d in const [Device('small phone', 640, 360), Device('large phone', 915, 412), Device('small tablet', 1024, 768)]) {
-      testWidgets('the list: ${d.name} ${d.width.toInt()}x${d.height.toInt()}', (tester) => shoot(tester, d, 'history_list'));
-      testWidgets('a win\'s popup: ${d.name} ${d.width.toInt()}x${d.height.toInt()}', (tester) => shoot(tester, d, 'history_win', tapRow: 0));
-      testWidgets('a loss\'s popup: ${d.name} ${d.width.toInt()}x${d.height.toInt()}', (tester) => shoot(tester, d, 'history_loss', tapRow: 1));
+    for (final d in const [Device('small phone', 640, 360), ...kPopupSizes]) {
+      final size = '${d.width.toInt()}x${d.height.toInt()}';
+      testWidgets('the list: $size', (tester) => shoot(tester, d, 'history_list'));
+      testWidgets('a win\'s popup: $size', (tester) => shoot(tester, d, 'history_win', tapRow: 0));
+      testWidgets('a loss\'s popup: $size', (tester) => shoot(tester, d, 'history_loss', tapRow: 1));
+      testWidgets('no rounds yet: $size', (tester) => shoot(tester, d, 'history_empty', rows: const []));
+      testWidgets('a failed read: $size', (tester) => shoot(tester, d, 'history_error', fail: true));
+      testWidgets('loading: $size', (tester) => shoot(tester, d, 'history_loading', loading: true));
     }
-
-    testWidgets('no rounds yet: phone 844x390', (tester) => shoot(tester, const Device('phone', 844, 390), 'history_empty', rows: const []));
-    testWidgets('a failed read: phone 844x390', (tester) => shoot(tester, const Device('phone', 844, 390), 'history_error', fail: true));
   });
 }

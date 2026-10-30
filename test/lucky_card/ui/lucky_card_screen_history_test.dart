@@ -162,10 +162,10 @@ void main() {
       await settle(tester);
       expect(key('history-dialog'), findsOneWidget);
       expect(script.reads, [login]);
-      expect(wordsIn(tester, key('history-row-0')), ['1', '17403942', '100', '+5,000', '5X']);
-      expect(wordsIn(tester, key('history-row-1')), ['2', '17403941', '50', '0']);
-      expect(wordsIn(tester, key('history-total-play')), ['150']);
-      expect(wordsIn(tester, key('history-total-win')), ['+5,000']);
+      expect(wordsIn(tester, key('history-row-0')), ['1', '17403942', 'K', '5X', '100', '+5,000']);
+      expect(wordsIn(tester, key('history-row-1')), ['2', '17403941', 'J', 'N', '50', '0']);
+      expect(wordsIn(tester, key('history-total-play')), ['TOTAL PLAY', '150']);
+      expect(wordsIn(tester, key('history-total-win')), ['TOTAL WIN', '5,000']);
       expect(out.events, ['notification']);
       await rig.finish();
     });
@@ -181,7 +181,7 @@ void main() {
       await tester.tap(key('history-row-0'));
       await settle(tester);
       expect(key('history-detail'), findsOneWidget);
-      expect(tester.widget<Text>(key('history-detail-Winning card')).data, 'King of Spades');
+      expect(tester.widget<Text>(key('history-detail-WINNING CARD')).data, 'King of Spades');
       expect(out.events, ['notification']);
       await rig.finish();
     });
@@ -315,7 +315,7 @@ void main() {
       await openGame(tester, rig, setup);
       await tester.tap(key('top-history'));
       await settle(tester);
-      expect(wordsIn(tester, key('history-row-0')), ['1', '17403942', '100', '+5,000', '5X']);
+      expect(wordsIn(tester, key('history-row-0')), ['1', '17403942', 'K', '5X', '100', '+5,000']);
       await tester.tap(key('history-close'));
       await settle(tester);
 
@@ -329,8 +329,8 @@ void main() {
       await tester.tap(key('top-history'));
       await settle(tester);
       expect(script.reads, [login, login], reason: 'asked the database again');
-      expect(wordsIn(tester, key('history-row-0')), ['1', '17403942', '100', '+5,000', '5X']);
-      expect(wordsIn(tester, key('history-row-1')), ['2', '17403941', '50', '0']);
+      expect(wordsIn(tester, key('history-row-0')), ['1', '17403942', 'K', '5X', '100', '+5,000']);
+      expect(wordsIn(tester, key('history-row-1')), ['2', '17403941', 'J', 'N', '50', '0']);
       await rig.finish();
     });
 
@@ -386,6 +386,15 @@ void main() {
         await settle(tester);
       }
       expect(tester.takeException(), isNull);
+      // The popup's cards are real pictures: wait for them, so the picture never depends on which test ran first.
+      await tester.runAsync(() async {
+        for (final popup in ['history-dialog', 'history-detail']) {
+          for (final e in find.descendant(of: key(popup), matching: find.byType(Image)).evaluate()) {
+            await precacheImage((e.widget as Image).image, e);
+          }
+        }
+      });
+      await tester.pump();
       await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/${name}_${size.width.toInt()}x${size.height.toInt()}.png'));
       await rig.finish();
     }

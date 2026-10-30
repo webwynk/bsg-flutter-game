@@ -12,6 +12,7 @@ import 'package:best_smart_game/widgets/lucky_card/lucky_card_info_dialog.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_info_text.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_layout.dart';
 import 'package:best_smart_game/widgets/lucky_card/lucky_card_panel.dart';
+import 'package:best_smart_game/widgets/lucky_card/lucky_card_popup_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,6 +21,18 @@ import '../provider_rig.dart';
 import 'ui_harness.dart';
 
 const Size phone = Size(844, 390);
+
+/// The sizes the new popup design is checked and pictured at, besides the device matrix. The popup is
+/// laid out by screen size alone, so the two desktop sizes need no flag.
+const List<Device> kPopupSizes = [
+  Device('phone 800', 800, 360),
+  Device('phone 844', 844, 390),
+  Device('phone 915', 915, 412),
+  Device('tablet 1180', 1180, 820),
+  Device('tablet 1024', 1024, 768),
+  Device('desktop 1920', 1920, 1080),
+  Device('desktop 1366', 1366, 768),
+];
 
 class Log {
   final List<String> events = [];
@@ -110,33 +123,48 @@ void main() {
       expect(luckyCardChipList(), '5, 10, 50, 100 or 500');
     });
 
-    test('the rules: seven lines, each carrying the real numbers', () {
+    test('the rules: six cards and the buttons card, each carrying the real numbers', () {
       final lines = luckyCardRulesLines();
-      expect(lines.length, 7);
-      expect(lines[0], contains('5, 10, 50, 100 or 500'));
-      expect(lines[1], allOf(contains('Hearts'), contains('3 cards'), contains('4 cards'), contains('Jacks')));
-      expect(lines[2], allOf(contains('12 cards'), contains('from 5 up to 50,000')));
-      expect(lines[3], contains('countdown reaches $kLuckyCardLockCountdown'));
-      expect(lines[3], contains('countdown reaches 5'));
-      expect(lines[4], allOf(contains('one winning card'), contains('2X up to 10X')));
-      expect(lines[5], contains('Chips on the other cards are lost'));
-      expect(lines[6], allOf(contains('DOUBLE'), contains('REBET'), contains('CLEAR'), contains('REMOVE')));
+      expect(lines.length, 6);
+      expect(lines[0].body, contains('5, 10, 50, 100 or 500'));
+      expect(lines[1].body, allOf(contains('3 cards'), contains('4 cards'), contains('Jacks')));
+      expect(lines[2].heading, '12 CARDS');
+      expect(lines[2].body, allOf(contains('Jack, Queen and King'), contains('from 5 to 50,000')));
+      expect(lines[3].heading, 'BETTING CLOSES AT $kLuckyCardLockCountdown');
+      expect(lines[3].body, contains('countdown reaches 5'));
+      expect(lines[4].body, allOf(contains('One winning card'), contains('2X up to 10X')));
+      expect(lines[5].body, allOf(contains('10 times its chips'), contains('Other chips are lost')));
+      expect([for (final b in kLuckyCardButtonLines) b.label], ['DOUBLE', 'REBET', 'CLEAR', 'REMOVE']);
     });
 
-    test('the payout rule, the example and the limits say the right figures', () {
-      expect(luckyCardPayoutRule(), 'A winning card pays 10 times the chips on it, multiplied by the bonus.');
+    test('nothing mentions an Ace: Lucky Card has only Jacks, Queens and Kings', () {
+      final all = [
+        for (final r in luckyCardRulesLines()) ...[r.heading, r.body],
+        for (final b in kLuckyCardButtonLines) b.body,
+        luckyCardExampleText(),
+        luckyCardLimitsText(),
+      ];
+      for (final s in all) {
+        expect(s.toLowerCase(), isNot(matches(RegExp(r'\bace'))), reason: s);
+      }
+    });
+
+    test('the example and the limits say the right figures', () {
       expect(luckyCardExampleText(), 'Example: you put 10 on the Queen of Spades. If it wins you get 100. With a 4X bonus you get 400.');
-      expect(luckyCardTableTitle(), 'What a stake of 10 wins');
+      expect(luckyCardTableTitle(), 'WHAT A STAKE OF 10 WINS');
       expect(
         luckyCardLimitsText(),
-        'The smallest stake on a card, 5, wins 50. The largest, 50,000, wins 500,000 before the bonus; the bonus is added on top.',
+        'The smallest stake on a card, 5, wins 50. The largest, 50,000, wins 500,000 before the bonus, and the bonus multiplies it.',
       );
     });
 
     test('every word is plain letters: the fonts have no card-suit symbols', () {
       final all = [
-        ...luckyCardRulesLines(),
-        luckyCardPayoutRule(),
+        for (final r in luckyCardRulesLines()) ...[r.heading, r.body],
+        kLuckyCardButtonsHeading,
+        for (final b in kLuckyCardButtonLines) ...[b.label, b.body],
+        kLuckyCardInfoTitle,
+        kLuckyCardPayoutKicker,
         luckyCardExampleText(),
         luckyCardTableTitle(),
         luckyCardLimitsText(),
@@ -160,9 +188,10 @@ void main() {
       expect(log.events, ['open']);
       final lines = luckyCardRulesLines();
       for (var i = 0; i < lines.length; i++) {
-        expect(tester.widget<Text>(key('rule-$i')).data, lines[i]);
+        expect(tester.widget<Text>(key('rule-$i')).data, lines[i].body);
       }
-      expect(key('payout-rule'), findsNothing);
+      expect(find.text(kLuckyCardInfoTitle), findsWidgets);
+      expect(key('payout-formula'), findsNothing);
       await rig.finish();
     });
 
@@ -173,9 +202,12 @@ void main() {
       await open(tester);
       await tester.tap(key('info-tab-payouts'));
       await settle(tester);
-      expect(tester.widget<Text>(key('payout-rule')).data, luckyCardPayoutRule());
+      expect(key('payout-formula'), findsOneWidget);
+      expect(find.text('STAKE'), findsWidgets);
+      expect(find.text('BONUS'), findsWidgets);
+      expect(find.text('$kLuckyCardPayoutMultiplier'), findsWidgets);
       expect(tester.widget<Text>(key('payout-example')).data, luckyCardExampleText());
-      expect(tester.widget<Text>(key('payout-table-title')).data, luckyCardTableTitle());
+      expect(find.text(luckyCardTableTitle()), findsOneWidget);
       expect(tester.widget<Text>(key('payout-limits')).data, luckyCardLimitsText());
       for (final row in luckyCardPayoutTable()) {
         final cell = key('payout-${row.bonus}');
@@ -270,26 +302,21 @@ void main() {
       await rig.finish();
     });
 
-    testWidgets('the chosen tab is bright with a line under it; the other is dim with no line', (tester) async {
+    testWidgets('the chosen tab is the gold pill; the other is dim', (tester) async {
       final rig = BetRig(tester);
       await pumpAtSize(tester, phone, host(rig.provider));
       await open(tester);
-      Color colorOf(String tab) => tester.widget<Text>(find.descendant(of: key(tab), matching: find.byType(Text))).style!.color!;
-      bool hasLine(String tab) => find.descendant(of: key(tab), matching: find.byType(ColoredBox)).evaluate().isNotEmpty;
-      expect(colorOf('info-tab-rules'), kLuckyCardGoldBright);
-      expect(colorOf('info-tab-payouts'), isNot(kLuckyCardGoldBright));
-      expect(hasLine('info-tab-rules'), isTrue);
-      expect(hasLine('info-tab-payouts'), isFalse);
+      Color colorOf(String tab) => tester.widget<Text>(find.text(tab).first).style!.color!;
+      expect(colorOf(kLuckyCardRulesTab), kLuckyCardPopupInk);
+      expect(colorOf(kLuckyCardPayoutsTab), isNot(kLuckyCardPopupInk));
       await tester.tap(key('info-tab-payouts'));
       await settle(tester);
-      expect(colorOf('info-tab-payouts'), kLuckyCardGoldBright);
-      expect(colorOf('info-tab-rules'), isNot(kLuckyCardGoldBright));
-      expect(hasLine('info-tab-payouts'), isTrue);
-      expect(hasLine('info-tab-rules'), isFalse);
+      expect(colorOf(kLuckyCardPayoutsTab), kLuckyCardPopupInk);
+      expect(colorOf(kLuckyCardRulesTab), isNot(kLuckyCardPopupInk));
       await rig.finish();
     });
 
-    testWidgets('the rules are numbered 1 to 7 in order', (tester) async {
+    testWidgets('the rule cards are numbered 1 to 6, and the seventh is the buttons', (tester) async {
       final rig = BetRig(tester);
       await pumpAtSize(tester, phone, host(rig.provider));
       await open(tester);
@@ -297,7 +324,8 @@ void main() {
         for (final t in textsOfDialog(tester))
           if (RegExp(r'^[0-9]$').hasMatch(t.data ?? '')) t.data,
       ];
-      expect(numbers, ['1', '2', '3', '4', '5', '6', '7']);
+      expect(numbers, ['1', '2', '3', '4', '5', '6']);
+      expect(find.text('7  $kLuckyCardButtonsHeading'), findsOneWidget);
       await rig.finish();
     });
 
@@ -402,7 +430,7 @@ void main() {
   });
 
   group('every device of the matrix', () {
-    for (final d in kDeviceMatrix) {
+    for (final d in [...kDeviceMatrix, ...kPopupSizes]) {
       testWidgets('${d.name} (${d.width.toInt()} x ${d.height.toInt()}): the dialog fits the screen, 48 dp buttons, 11 dp text, every line reachable', (tester) async {
         final rig = BetRig(tester);
         await pumpAtSize(tester, d.size, host(rig.provider));
@@ -423,8 +451,8 @@ void main() {
 
           for (final k in ['info-tab-rules', 'info-tab-payouts', 'info-close']) {
             final r = tester.getRect(key(k));
-            expect(r.width, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: '$k width on ${d.name}');
-            expect(r.height, greaterThanOrEqualTo(kLuckyCardMinTapDp), reason: '$k height on ${d.name}');
+            expect(r.width, greaterThanOrEqualTo(kLuckyCardMinTapDp - 1e-6), reason: '$k width on ${d.name}');
+            expect(r.height, greaterThanOrEqualTo(kLuckyCardMinTapDp - 1e-6), reason: '$k height on ${d.name}');
             expect(box.contains(r.topLeft) && box.contains(r.bottomRight - const Offset(0.01, 0.01)), isTrue, reason: '$k inside the dialog');
           }
           expect(smallestText(tester), greaterThanOrEqualTo(kLuckyCardMinReadableDp), reason: '$tab on ${d.name}');
@@ -524,11 +552,19 @@ void main() {
         await settle(tester);
       }
       expect(tester.takeException(), isNull);
+      // The example's chip and suit are real pictures: wait for them, so the picture never depends on
+      // which test ran first.
+      await tester.runAsync(() async {
+        for (final e in find.descendant(of: dialog, matching: find.byType(Image)).evaluate()) {
+          await precacheImage((e.widget as Image).image, e);
+        }
+      });
+      await tester.pump();
       await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/${name}_${d.width.toInt()}x${d.height.toInt()}.png'));
       await rig.finish();
     }
 
-    for (final d in const [Device('small phone', 640, 360), Device('large phone', 915, 412), Device('small tablet', 1024, 768)]) {
+    for (final d in const [Device('small phone', 640, 360), ...kPopupSizes]) {
       testWidgets('RULES: ${d.name} ${d.width.toInt()}x${d.height.toInt()}', (tester) => shoot(tester, d, 'rules', 'info_rules'));
       testWidgets('PAYOUTS: ${d.name} ${d.width.toInt()}x${d.height.toInt()}', (tester) => shoot(tester, d, 'payouts', 'info_payouts'));
     }
