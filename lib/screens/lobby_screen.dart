@@ -82,6 +82,14 @@ class _LobbyScreenState extends State<LobbyScreen> {
 }
 
 class _TopBar extends StatelessWidget {
+  /// 35 on each side on a phone held sideways, 16 everywhere else, including a
+  /// phone turned upright for the password popup, which has less room.
+  double _sidePadding(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final phoneSideways = loginDeviceKind() == LoginDeviceKind.phone && size.width > size.height;
+    return phoneSideways ? 35 : 16;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
@@ -103,7 +111,7 @@ class _TopBar extends StatelessWidget {
             ),
           ],
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        padding: EdgeInsets.symmetric(horizontal: _sidePadding(context), vertical: 6),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final double width = constraints.maxWidth;
