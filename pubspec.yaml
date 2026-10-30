@@ -1,6 +1,6 @@
 name: best_smart_game
 description: BSG - Best Smart Game Casino App
-version: 2.0.8+122
+version: 2.0.8+123
 publish_to: none
 
 environment:
@@ -42,6 +42,7 @@ flutter:
     - assets/fonts/
     - assets/lucky_card/images/
     - assets/lucky_card/sounds/
+    - assets/lucky16card/images/
     - assets/spin2win/images/
     - assets/spin2win/sounds/
 

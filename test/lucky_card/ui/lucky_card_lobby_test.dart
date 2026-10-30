@@ -77,15 +77,16 @@ List<String> posters(WidgetTester tester) {
 Finder cardAt(int index) => find.descendant(of: find.byType(GridView), matching: find.byType(GestureDetector)).at(index);
 
 void main() {
-  testWidgets('the lobby shows Triple Chance, then Lucky Card, then Spin2Win, then seven "coming soon" cards', (tester) async {
+  testWidgets('the lobby shows Triple Chance, then Lucky Card, then Spin2Win, then Lucky 16 Card, then six "coming soon" cards', (tester) async {
     await openLobby(tester);
     final shown = posters(tester);
     expect(shown.length, 10);
     expect(shown[0], 'assets/images/card_triple_chance.webp');
     expect(shown[1], 'assets/lucky_card/images/lucky-card-game-card.webp');
     expect(shown[2], 'assets/spin2win/images/spin2win-game-card.webp');
-    expect(shown.sublist(3), everyElement('assets/images/card_coming_soon.webp'));
-    expect(shown.sublist(3).length, 7);
+    expect(shown[3], 'assets/lucky16card/images/lucky-16-game-card.webp');
+    expect(shown.sublist(4), everyElement('assets/images/card_coming_soon.webp'));
+    expect(shown.sublist(4).length, 6);
     expect(tester.takeException(), isNull);
   });
 
@@ -120,7 +121,7 @@ void main() {
 
   testWidgets('a "coming soon" card opens neither game', (tester) async {
     await openLobby(tester);
-    await tester.tap(cardAt(3));
+    await tester.tap(cardAt(4));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.byType(LuckyCardScreen), findsNothing);
