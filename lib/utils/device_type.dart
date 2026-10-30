@@ -1,5 +1,7 @@
 import 'dart:io' show Platform;
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/services.dart' show DeviceOrientation;
 import 'package:flutter/widgets.dart';
 
 /// True for a screen big enough for the tablet arrangement of the Triple
@@ -32,3 +34,44 @@ bool isMobilePhone(BuildContext context) {
   if (!isPhoneOs) return false;
   return MediaQuery.of(context).size.shortestSide < 600;
 }
+
+/// Which arrangement the splash and login screens use. Decided from the device
+/// itself, so it does not change when the screen turns.
+enum LoginDeviceKind { phone, tablet, desktop }
+
+/// The rule behind [loginDeviceKind], with its inputs passed in.
+///
+/// Windows, macOS and Linux are always desktop. Android, iOS and web go by the
+/// shorter side of the screen in dp: under 600 is a phone, 600 or more a
+/// tablet, the same 600 the games use. A size of zero, which a device can
+/// report before its first frame, counts as a phone, so nothing changes for a
+/// phone while the size is still unknown.
+LoginDeviceKind classifyLoginDevice({
+  required bool isWeb,
+  required TargetPlatform platform,
+  required Size logicalSize,
+}) {
+  if (!isWeb &&
+      (platform == TargetPlatform.windows ||
+          platform == TargetPlatform.macOS ||
+          platform == TargetPlatform.linux)) {
+    return LoginDeviceKind.desktop;
+  }
+  return logicalSize.shortestSide >= 600 ? LoginDeviceKind.tablet : LoginDeviceKind.phone;
+}
+
+/// The kind of device this app is running on. Reads the view directly so it
+/// works before any screen exists (from main()) and in any orientation, and
+/// uses [defaultTargetPlatform] rather than dart:io so it is safe on web.
+LoginDeviceKind loginDeviceKind() {
+  final views = WidgetsBinding.instance.platformDispatcher.views;
+  final view = views.isEmpty ? null : views.first;
+  final size = view == null ? Size.zero : view.physicalSize / view.devicePixelRatio;
+  return classifyLoginDevice(isWeb: kIsWeb, platform: defaultTargetPlatform, logicalSize: size);
+}
+
+/// The screen directions for the splash and login screens: portrait on a phone
+/// (as it has always been), landscape on a tablet or desktop.
+List<DeviceOrientation> loginOrientations(LoginDeviceKind kind) => kind == LoginDeviceKind.phone
+    ? const [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]
+    : const [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight];

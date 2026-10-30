@@ -9,6 +9,8 @@ import '../theme/app_text_styles.dart';
 import '../services/sound_service.dart';
 import '../utils/app_exit.dart';
 import '../utils/device_type.dart';
+import '../widgets/login/change_password_form.dart';
+import '../widgets/login/security_wide_dialog.dart';
 import 'lucky_card_screen.dart';
 import 'lucky16_screen.dart';
 import 'spin2win_screen.dart';
@@ -287,8 +289,8 @@ class _TopBar extends StatelessWidget {
   /// Phone-only: forces portrait for the duration of this dialog so the
   /// system keyboard renders in its taller/narrower portrait shape instead
   /// of the wide, short landscape one that was hiding half the form. Never
-  /// fires on desktop/laptop/tablet (see isMobilePhone) -- those layouts
-  /// don't have this problem in the first place.
+  /// fires on desktop/laptop/tablet: those get the wide popup, which stays in
+  /// landscape and moves itself above the keyboard.
   ///
   /// Not dismissible by tapping outside or the back button (see PopScope in
   /// _SecurityAccountDialog) -- only the X icon or a successful password
@@ -296,7 +298,9 @@ class _TopBar extends StatelessWidget {
   void _showSecurityDialog(BuildContext context, AuthProvider auth) async {
     SoundService().playNotification();
 
-    final rotateForPhone = isMobilePhone(context);
+    final kind = loginDeviceKind();
+    final wide = kind != LoginDeviceKind.phone;
+    final rotateForPhone = !wide && isMobilePhone(context);
     if (rotateForPhone) {
       // Let the physical rotation settle BEFORE the dialog's own scale-in
       // animation starts -- running both at once (screen rotating while the
@@ -319,7 +323,11 @@ class _TopBar extends StatelessWidget {
           child: Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-              child: _SecurityAccountDialog(auth: auth, lobbyContext: context),
+              child: _SecurityAccountDialog(
+                auth: auth,
+                lobbyContext: context,
+                kind: kind,
+              ),
             ),
           ),
         );
@@ -348,10 +356,12 @@ class _TopBar extends StatelessWidget {
 class _SecurityAccountDialog extends StatefulWidget {
   final AuthProvider auth;
   final BuildContext lobbyContext;
+  final LoginDeviceKind kind;
 
   const _SecurityAccountDialog({
     required this.auth,
     required this.lobbyContext,
+    required this.kind,
   });
 
   @override
@@ -359,96 +369,21 @@ class _SecurityAccountDialog extends StatefulWidget {
 }
 
 class _SecurityAccountDialogState extends State<_SecurityAccountDialog> {
-  final _currentPasswordCtrl = TextEditingController();
-  final _newPasswordCtrl = TextEditingController();
-  final _confirmPasswordCtrl = TextEditingController();
+  late final ChangePasswordForm _form;
 
-  bool _obscureCurrent = true;
-  bool _obscureNew = true;
-  bool _obscureConfirm = true;
-  bool _isSubmitting = false;
-  String? _statusMessage;
-  bool _isSuccess = false;
+  @override
+  void initState() {
+    super.initState();
+    _form = ChangePasswordForm(
+      auth: widget.auth,
+      onClose: () => Navigator.of(context).pop(),
+    )..addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
-    _currentPasswordCtrl.dispose();
-    _newPasswordCtrl.dispose();
-    _confirmPasswordCtrl.dispose();
+    _form.dispose();
     super.dispose();
-  }
-
-  Future<void> _handleChangePassword() async {
-    final currentPass = _currentPasswordCtrl.text.trim();
-    final newPass = _newPasswordCtrl.text.trim();
-    final confirmPass = _confirmPasswordCtrl.text.trim();
-
-    if (currentPass.isEmpty) {
-      setState(() {
-        _statusMessage = 'Please enter your current password.';
-        _isSuccess = false;
-      });
-      return;
-    }
-    if (newPass.isEmpty) {
-      setState(() {
-        _statusMessage = 'Please enter a new password.';
-        _isSuccess = false;
-      });
-      return;
-    }
-    if (newPass.length < 6) {
-      setState(() {
-        _statusMessage = 'New password must be at least 6 characters.';
-        _isSuccess = false;
-      });
-      return;
-    }
-    if (newPass != confirmPass) {
-      setState(() {
-        _statusMessage = 'New password and confirmation do not match.';
-        _isSuccess = false;
-      });
-      return;
-    }
-    if (currentPass == newPass) {
-      setState(() {
-        _statusMessage = 'New password must be different from current password.';
-        _isSuccess = false;
-      });
-      return;
-    }
-
-    setState(() {
-      _isSubmitting = true;
-      _statusMessage = null;
-    });
-
-    final success = await widget.auth.changePassword(currentPass, newPass);
-
-    if (!mounted) return;
-
-    if (success) {
-      setState(() {
-        _isSubmitting = false;
-        _statusMessage = 'Password updated successfully!';
-        _isSuccess = true;
-        _currentPasswordCtrl.clear();
-        _newPasswordCtrl.clear();
-        _confirmPasswordCtrl.clear();
-      });
-      // Auto-close after a moment so the success message is actually seen --
-      // this used to just sit there with no way out except the X icon.
-      Future.delayed(const Duration(milliseconds: 1200), () {
-        if (mounted) Navigator.of(context).pop();
-      });
-    } else {
-      setState(() {
-        _isSubmitting = false;
-        _statusMessage = widget.auth.error ?? 'Failed to update password.';
-        _isSuccess = false;
-      });
-    }
   }
 
   Future<void> _handleLogout() async {
@@ -464,6 +399,15 @@ class _SecurityAccountDialogState extends State<_SecurityAccountDialog> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.kind != LoginDeviceKind.phone) {
+      return SecurityWideDialog(
+        form: _form,
+        username: widget.auth.username,
+        desktop: widget.kind == LoginDeviceKind.desktop,
+        onClose: () => Navigator.of(context).pop(),
+        onLogout: _handleLogout,
+      );
+    }
     return SingleChildScrollView(
       child: Container(
         constraints: const BoxConstraints(maxWidth: 380),
@@ -591,50 +535,50 @@ class _SecurityAccountDialogState extends State<_SecurityAccountDialog> {
 
                     // Password Form Fields
                     _buildPasswordField(
-                      controller: _currentPasswordCtrl,
+                      controller: _form.currentPassword,
                       label: 'Current Password',
-                      obscure: _obscureCurrent,
-                      onToggleObscure: () => setState(() => _obscureCurrent = !_obscureCurrent),
+                      obscure: _form.obscureCurrent,
+                      onToggleObscure: _form.toggleObscureCurrent,
                     ),
                     const SizedBox(height: 10),
 
                     _buildPasswordField(
-                      controller: _newPasswordCtrl,
+                      controller: _form.newPassword,
                       label: 'New Password (min 6 chars)',
-                      obscure: _obscureNew,
-                      onToggleObscure: () => setState(() => _obscureNew = !_obscureNew),
+                      obscure: _form.obscureNew,
+                      onToggleObscure: _form.toggleObscureNew,
                     ),
                     const SizedBox(height: 10),
 
                     _buildPasswordField(
-                      controller: _confirmPasswordCtrl,
+                      controller: _form.confirmPassword,
                       label: 'Confirm New Password',
-                      obscure: _obscureConfirm,
-                      onToggleObscure: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                      obscure: _form.obscureConfirm,
+                      onToggleObscure: _form.toggleObscureConfirm,
                     ),
                     const SizedBox(height: 14),
 
                     // Status / Error / Success Banner
-                    if (_statusMessage != null) ...[
+                    if (_form.statusMessage != null) ...[
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                         decoration: BoxDecoration(
-                          color: _isSuccess ? const Color(0xFF003810) : const Color(0xFF380000),
+                          color: _form.isSuccess ? const Color(0xFF003810) : const Color(0xFF380000),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: _isSuccess ? const Color(0xFF00FF55) : const Color(0xFFFF5555),
+                            color: _form.isSuccess ? const Color(0xFF00FF55) : const Color(0xFFFF5555),
                             width: 1,
                           ),
                         ),
                         child: Text(
-                          _statusMessage!,
+                          _form.statusMessage!,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontFamily: 'DMSans',
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            color: _isSuccess ? const Color(0xFF88FFB0) : const Color(0xFFFF9999),
+                            color: _form.isSuccess ? const Color(0xFF88FFB0) : const Color(0xFFFF9999),
                           ),
                         ),
                       ),
@@ -643,12 +587,12 @@ class _SecurityAccountDialogState extends State<_SecurityAccountDialog> {
 
                     // UPDATE PASSWORD Button (Metallic Gold 3D Button)
                     GestureDetector(
-                      onTap: _isSubmitting ? null : _handleChangePassword,
+                      onTap: _form.isSubmitting ? null : _form.submit,
                       child: Container(
                         height: 42,
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            colors: _isSubmitting
+                            colors: _form.isSubmitting
                                 ? [const Color(0xFF554400), const Color(0xFF332200)]
                                 : [const Color(0xFFFFE066), const Color(0xFFD4A017), const Color(0xFF7A5200)],
                             begin: Alignment.topCenter,
@@ -665,7 +609,7 @@ class _SecurityAccountDialogState extends State<_SecurityAccountDialog> {
                           ],
                         ),
                         child: Center(
-                          child: _isSubmitting
+                          child: _form.isSubmitting
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,

@@ -13,6 +13,7 @@ import 'screens/lobby_screen.dart';
 import 'screens/game_screen.dart';
 import 'theme/app_colors.dart';
 import 'utils/app_exit.dart';
+import 'utils/device_type.dart';
 import 'widgets/dialogs/action_dialog.dart';
 import 'widgets/dialogs/popup_scale.dart';
 
@@ -29,11 +30,10 @@ void main() async {
     anonKey: kSupabaseAnonKey,
   );
 
-  // Start in portrait on app launch
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+  // Start in portrait on a phone, landscape on a tablet or desktop. If the
+  // screen size is not known yet this picks portrait, and the splash screen
+  // decides again once it is.
+  await SystemChrome.setPreferredOrientations(loginOrientations(loginDeviceKind()));
 
   // Full screen immersive
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
