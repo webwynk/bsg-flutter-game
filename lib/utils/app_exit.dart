@@ -1,6 +1,7 @@
 import 'dart:io' show Platform, exit;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'desktop_window.dart';
 
 /// Set true right before any flow is about to force a full logout + close
 /// (e.g. the away-too-long popup in main.dart). Lets other popups that react
@@ -19,13 +20,15 @@ final ValueNotifier<bool> isClosingApp = ValueNotifier(false);
 /// SystemNavigator.pop() is the correct, standard way to exit on Android
 /// (properly signals the OS to tear the activity down); it has documented,
 /// limited effect on iOS, where dart:io's exit() is the reliable way to
-/// actually terminate the process.
+/// actually terminate the process. Windows uses exit() too: the window ignores
+/// ordinary close requests there, and a normal engine shutdown left the hidden
+/// process running for over 10 seconds.
 ///
 /// Shared by the connection-lost popup (game_screen.dart) and the
 /// blocked-account popup (login_screen.dart) -- one implementation instead
 /// of two copies drifting apart.
 void closeApp() {
-  if (Platform.isIOS) {
+  if (isWindowsApp || Platform.isIOS) {
     exit(0);
   } else {
     SystemNavigator.pop();

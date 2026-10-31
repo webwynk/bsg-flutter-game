@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'providers/auth_provider.dart';
 import 'providers/game_provider.dart';
@@ -13,8 +14,13 @@ import 'screens/lobby_screen.dart';
 import 'screens/game_screen.dart';
 import 'theme/app_colors.dart';
 import 'utils/app_exit.dart';
+import 'utils/desktop_window.dart';
 import 'utils/device_type.dart';
+import 'widgets/desktop_window/desktop_close_guard.dart';
+import 'widgets/desktop_window/desktop_fit_box.dart';
+import 'widgets/desktop_window/desktop_title_bar.dart';
 import 'widgets/dialogs/action_dialog.dart';
+import 'widgets/dialogs/no_internet_dialog.dart';
 import 'widgets/dialogs/popup_scale.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -41,10 +47,33 @@ void main() async {
   // Keep screen on
   await WakelockPlus.enable();
 
+  // Windows only: title, minimum size and 16:9 resizing.
+  if (isWindowsApp) await setUpDesktopWindow();
+
   runApp(const BsgApp());
 }
 
 final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
+/// What closing the Windows window does; see DesktopCloseController.
+final DesktopCloseController _desktopClose = DesktopCloseController(
+  findNavigator: () => _navigatorKey.currentState,
+  endSession: _endDesktopSession,
+  closeOverPopup: () => noInternetShowing.value,
+  hideWindow: windowManager.hide,
+  destroyWindow: () async => closeApp(),
+);
+
+/// Ends the session the same way as the LOGOUT ACCOUNT button, when somebody
+/// is logged in.
+Future<void> _endDesktopSession() async {
+  final context = _navigatorKey.currentContext;
+  if (context == null) return;
+  final auth = context.read<AuthProvider>();
+  if (!auth.isLoggedIn) return;
+  context.read<HistoryProvider>().clearLocal();
+  await auth.logout();
+}
 
 /// Sends the player back to the login screen when the server ends their
 /// session — either the account was blocked, or another device took it over
@@ -92,6 +121,8 @@ class _ForcedLogoutWatcher extends StatelessWidget {
 ///     does), then tell the player plainly they were away and log them out.
 ///     Deliberately no silent "welcome back" path -- every return past the
 ///     threshold ends the same, honest way.
+///
+/// Not on Windows: see countsAsAway.
 ///
 /// Debounced on `paused` (backgrounded) so a brief app-switch -- checking a
 /// notification, answering a call -- does nothing at all. `detached`
@@ -145,6 +176,7 @@ class _AwaySessionGuardState extends State<_AwaySessionGuard> with WidgetsBindin
 
     switch (state) {
       case AppLifecycleState.paused:
+        if (!countsAsAway(state)) return;
         // Already showing the popup from a previous away period? Don't
         // start a whole new 20s cycle on top of an unanswered one -- there's
         // nothing new to detect until the player actually responds to what's
@@ -243,8 +275,16 @@ class BsgApp extends StatelessWidget {
         // displaced player kept tapping numbers on a session that no longer
         // existed, with a stale balance and no explanation.
         navigatorKey: _navigatorKey,
-        builder: (context, child) => _AwaySessionGuard(
-          child: _ForcedLogoutWatcher(child: child),
+        navigatorObservers: [if (isWindowsApp) _desktopClose],
+        builder: (context, child) => DesktopWindowFrame(
+          child: DesktopFitBox(
+            child: DesktopCloseGuard(
+              controller: _desktopClose,
+              child: _AwaySessionGuard(
+                child: _ForcedLogoutWatcher(child: child),
+              ),
+            ),
+          ),
         ),
         theme: ThemeData(
           brightness: Brightness.dark,
