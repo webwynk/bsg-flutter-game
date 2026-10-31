@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
@@ -6,9 +7,11 @@ import '../providers/auth_provider.dart';
 import '../providers/history_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import '../services/connection_watcher.dart';
 import '../services/sound_service.dart';
 import '../utils/app_exit.dart';
 import '../utils/device_type.dart';
+import '../widgets/dialogs/no_internet_dialog.dart';
 import '../widgets/login/change_password_form.dart';
 import '../widgets/login/security_wide_dialog.dart';
 import 'lucky_card_screen.dart';
@@ -18,7 +21,13 @@ import 'spin2win_screen.dart';
 import 'package:flutter/services.dart';
 
 class LobbyScreen extends StatefulWidget {
-  const LobbyScreen({super.key});
+  /// How the lobby checks the connection; tests pass their own.
+  final Future<bool> Function() connectionCheck;
+
+  /// Where the connection check reads the time; tests pass their own.
+  final DateTime Function() clock;
+
+  const LobbyScreen({super.key, this.connectionCheck = serverReachable, this.clock = DateTime.now});
 
   @override
   State<LobbyScreen> createState() => _LobbyScreenState();
@@ -38,6 +47,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
     _GameInfo('assets/images/card_coming_soon.webp', false),
   ];
 
+  late final ConnectionWatcher _connection;
+  Route<void>? _noInternet;
+
   @override
   void initState() {
     super.initState();
@@ -45,6 +57,37 @@ class _LobbyScreenState extends State<LobbyScreen> {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
+    _connection = ConnectionWatcher(
+      ping: widget.connectionCheck,
+      isActive: _lobbyOnShow,
+      onLost: () => _noInternet = showNoInternet(context),
+      onBack: _connectionBack,
+      now: widget.clock,
+    );
+    // dart:io cannot make this check in a web build.
+    if (!kIsWeb) _connection.start();
+  }
+
+  /// The lobby is on show when nothing covers it, or only the NO INTERNET popup
+  /// does. A game, or any other popup, pauses the connection check.
+  bool _lobbyOnShow() => mounted && (_noInternet != null || (ModalRoute.of(context)?.isCurrent ?? false));
+
+  void _connectionBack(bool wasLongOutage) {
+    _closeNoInternet();
+    if (wasLongOutage) context.read<AuthProvider>().endSessionAfterLongOutage();
+  }
+
+  void _closeNoInternet() {
+    final route = _noInternet;
+    _noInternet = null;
+    if (route != null) closeNoInternet(route);
+  }
+
+  @override
+  void dispose() {
+    _connection.stop();
+    noInternetShowing.value = false;
+    super.dispose();
   }
 
   @override

@@ -216,6 +216,12 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> logout() => _endSession(forced: false);
 
+  /// Sends the player to login after the connection was gone so long that the
+  /// server has given the seat away. Uses the same forced-logout path as a
+  /// session the server ended.
+  Future<void> endSessionAfterLongOutage() =>
+      _endSession(forced: true, reason: 'Your session has ended. Please log in again.');
+
   /// Releases the single-device session slot without a full logout --
   /// called once the app has been backgrounded past the away-threshold (see
   /// _AwaySessionGuard in main.dart). Local state (saved credentials,

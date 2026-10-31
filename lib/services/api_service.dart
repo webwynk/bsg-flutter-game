@@ -120,6 +120,14 @@ class ApiService {
       auth = await _db.auth.signInWithPassword(email: emailFor(user), password: pass);
     } on AuthException catch (e) {
       debugPrint('ApiService.login auth failed: ${e.message} (code: ${e.code})');
+      // The sign-in library reports no internet as an AuthException too, so it
+      // must be told apart here or the player reads it as a wrong password.
+      if (e is AuthRetryableFetchException) {
+        return const LoginOutcome(
+          success: false,
+          error: 'Connection error. Please check your network connection.',
+        );
+      }
       // Issue #58: an account whose block has already fully taken effect at
       // the Auth layer (not just profiles.is_active) is rejected right here
       // by Supabase itself -- attempt_player_login above never gets a
