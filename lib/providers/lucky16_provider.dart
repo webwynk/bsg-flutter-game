@@ -38,6 +38,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/lucky16_board.dart';
 import '../models/lucky16_models.dart';
+import '../print_ticket/lucky16_tickets.dart';
 import '../services/lucky16_api_service.dart';
 import '../services/lucky16_round_clock.dart';
 import '../services/lucky16_round_sync.dart';
@@ -109,7 +110,7 @@ enum Lucky16Phase {
 }
 
 /// The kinds of problem the screen has to tell the player about.
-enum Lucky16ProblemKind { betRejected, connectionProblem, roundUnresolved }
+enum Lucky16ProblemKind { notPrinted, betRejected, connectionProblem, roundUnresolved }
 
 /// A problem, with its reason.
 class Lucky16Problem {
@@ -166,6 +167,20 @@ class Lucky16Provider extends ChangeNotifier {
   /// the chips are no longer "unsent", so the background balance check must not
   /// subtract them again.
   bool _submittedBets = false;
+
+  /// True while this round is played with printed tickets. No bet is sent by
+  /// itself: only a ticket counts.
+  bool _printMode = false;
+
+  /// The round this player holds tickets in, and their total there.
+  String? _printedRoundId;
+  int _printedTotal = 0;
+
+  /// Reads the player's tickets for a round; set by the print controller.
+  Future<List<Lucky16Ticket>> Function(String roundId)? ticketsForRound;
+
+  /// The tickets of the round on the win popup.
+  List<Lucky16Ticket> _popupTickets = const [];
 
   bool _attached = false;
 
@@ -248,7 +263,47 @@ class Lucky16Provider extends ChangeNotifier {
   int stakeOn(Lucky16Card card) => _board.stakeOn(card);
   int suitTotal(Lucky16Suit suit) => _board.suitTotal(suit);
   int rankTotal(Lucky16Rank rank) => _board.rankTotal(rank);
-  int get total => _board.total;
+  /// PLAY: the board, plus the tickets already printed this round.
+  int get total => _board.total + _printedTotal;
+
+  bool get printMode => _printMode;
+  List<Lucky16Ticket> get popupTickets => _popupTickets;
+
+  /// Print applies to this round, or stops applying.
+  void setPrintMode(bool on) {
+    if (_printMode == on) return;
+    _printMode = on;
+    notifyListeners();
+  }
+
+  /// The chips on the board, for a Print press.
+  Map<Lucky16Card, int> boardForPrint() =>
+      {for (final e in _board.toBetMap().entries) if (e.value > 0) e.key: e.value};
+
+  /// The server sold a ticket for the board. Its chips were already taken from
+  /// the balance on screen, and the server's figure now replaces that.
+  void ticketSold({
+    required String roundId,
+    required int roundTotal,
+    required int balance,
+    required int ledgerVersion,
+  }) {
+    _board.reset();
+    _printedRoundId = roundId;
+    _printedTotal = roundTotal;
+    _wallet.syncAuthoritativeBalance(balance, ledgerVersion);
+    _lastOutcome = null;
+    notifyListeners();
+  }
+
+  /// Chips still on the board when a print round closes were never a bet.
+  void _returnUnprintedChips() {
+    if (_board.isEmpty) return;
+    final onBoard = _board.reset();
+    _wallet.setLocalBalance(_wallet.balance + onBoard);
+    notifyListeners();
+    onProblem?.call(const Lucky16Problem(Lucky16ProblemKind.notPrinted, Lucky16Error.printRequired));
+  }
   bool get isBoardEmpty => _board.isEmpty;
   Lucky16Chip? get activeChip => _board.activeChip;
   bool get isLocked => _board.isLocked;
@@ -401,6 +456,10 @@ class Lucky16Provider extends ChangeNotifier {
   void _onLockMark() {
     _lastOutcome = null;
     _lockBoard();
+    if (_printMode) {
+      _returnUnprintedChips();
+      return;
+    }
     unawaited(_submitBet());
   }
 
@@ -422,6 +481,9 @@ class Lucky16Provider extends ChangeNotifier {
   void endRound({required bool saveForRebet}) {
     _board.finishRound(saveForRebet: saveForRebet);
     _submittedBets = false;
+    _printedRoundId = null;
+    _printedTotal = 0;
+    _popupTickets = const [];
     _betStatus = Lucky16BetStatus.idle;
     _submittedRoundId = null;
     _applyLockToCountdown();
@@ -460,6 +522,10 @@ class Lucky16Provider extends ChangeNotifier {
     if (_board.isEmpty || _submittedBets) return;
     if (sync.countdown <= kLucky16LockCountdown) {
       _lockBoard();
+      if (_printMode) {
+        _returnUnprintedChips();
+        return;
+      }
       unawaited(_submitBet());
     }
   }
@@ -526,11 +592,13 @@ class Lucky16Provider extends ChangeNotifier {
     final epoch = _epoch;
     bool stale() => epoch != _epoch;
 
-    final stake = _board.total;
+    final printed = _printedRoundId == result.roundId;
+    final stake = printed ? _printedTotal : _board.total;
     // Sent (or still on its way): this player is a bettor. The round to ask about
     // is the one the bet went to, as in Triple Chance's Fix #6; a bet that was
     // still being sent when the result came belongs to the result's own round.
-    final String? betRoundId = _submittedBets ? (_submittedRoundId ?? result.roundId) : null;
+    final String? betRoundId =
+        printed ? result.roundId : (_submittedBets ? (_submittedRoundId ?? result.roundId) : null);
 
     final landed = Completer<void>();
     _wheelLanded = landed;
@@ -600,7 +668,11 @@ class Lucky16Provider extends ChangeNotifier {
     }
 
     if (outcome.won) {
+      // A slow answer only leaves the ticket lines off the popup.
+      final List<Lucky16Ticket>? tickets = await _roundTickets(printed, result.roundId);
+      if (stale()) return;
       if (!await holdUntil(_popupOpensAt)) return;
+      _popupTickets = tickets ?? const [];
       _popup = outcome;
       _showCoinFx = false;
       notifyListeners();
@@ -629,6 +701,17 @@ class Lucky16Provider extends ChangeNotifier {
     _showCoinFx = false;
     _popup = null;
     endRound(saveForRebet: !result.isCatchUpReplay);
+  }
+
+  Future<List<Lucky16Ticket>?> _roundTickets(bool printed, String roundId) async {
+    final read = ticketsForRound;
+    if (!printed || read == null) return null;
+    try {
+      return await read(roundId).timeout(const Duration(milliseconds: 1200));
+    } catch (e) {
+      debugPrint('Lucky16Provider: tickets for the win popup: $e');
+      return null;
+    }
   }
 
   /// Asks the server what this player's bet came to, at Triple Chance's gaps

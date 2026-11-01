@@ -23,6 +23,7 @@ import 'lucky16_art.dart';
 import 'lucky16_layout.dart';
 import 'lucky16_messages.dart';
 import 'lucky16_palette.dart';
+import 'lucky16_print_bar.dart';
 import 'lucky16_top_bar.dart';
 
 /// What the table is doing, in words.
@@ -155,7 +156,11 @@ class Lucky16TopBarBinding extends StatelessWidget {
     this.onInfo,
     this.onHistory,
     this.notice,
+    this.printSlot,
   });
+
+  /// The Print and Tickets buttons; null unless this player prints.
+  final Widget? printSlot;
 
   final Lucky16Provider provider;
   final Lucky16Layout layout;
@@ -180,7 +185,8 @@ class Lucky16TopBarBinding extends StatelessWidget {
     return Lucky16Selector<Lucky16TopBarSnapshot>(
       provider: provider,
       select: Lucky16TopBarSnapshot.of,
-      builder: (context, s) => Lucky16TopBar(
+      builder: (context, s) {
+        final bar = Lucky16TopBar(
         layout: layout,
         art: art,
         bleed: bleed,
@@ -193,7 +199,15 @@ class Lucky16TopBarBinding extends StatelessWidget {
         onToggleSound: onToggleSound,
         onInfo: onInfo,
         onHistory: onHistory,
-      ),
+      );
+        final slot = printSlot;
+        if (slot == null) return bar;
+        return Stack(
+          fit: StackFit.expand,
+          clipBehavior: Clip.none,
+          children: [bar, Positioned.fromRect(rect: Lucky16PrintBar.slot(layout), child: slot)],
+        );
+      },
     );
   }
 }

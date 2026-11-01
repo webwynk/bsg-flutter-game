@@ -228,7 +228,7 @@ class _Lucky16RevealOverlayState extends State<Lucky16RevealOverlay> {
                 ),
               ),
             if (popup != null)
-              Lucky16WinPopup(key: const ValueKey('win-popup'), outcome: popup, layout: layout, art: widget.art),
+              Lucky16WinPopup(key: const ValueKey('win-popup'), outcome: popup, tickets: widget.provider.popupTickets, layout: layout, art: widget.art),
           ],
         );
       },

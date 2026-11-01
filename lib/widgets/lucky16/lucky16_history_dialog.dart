@@ -25,6 +25,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../models/lucky16_history_model.dart';
+import '../../print_ticket/lucky16_tickets.dart';
 import '../../providers/lucky16_history_provider.dart';
 import '../../providers/lucky16_provider.dart';
 import 'lucky16_art.dart';
@@ -45,6 +46,7 @@ class Lucky16HistoryDialog extends StatefulWidget {
     required this.provider,
     required this.history,
     required this.since,
+    this.tickets = const [],
     required this.art,
     this.onRow,
   });
@@ -54,6 +56,9 @@ class Lucky16HistoryDialog extends StatefulWidget {
 
   /// Where the lines come from; asked to read each time the popup opens.
   final Lucky16HistoryProvider history;
+
+  /// A print player's tickets, shown under their rounds.
+  final List<Lucky16Ticket> tickets;
 
   /// The start of this login: only rounds bet on since then are listed.
   final DateTime? since;
@@ -72,6 +77,7 @@ class Lucky16HistoryDialog extends StatefulWidget {
     required Lucky16Provider provider,
     required Lucky16HistoryProvider history,
     required DateTime? since,
+    List<Lucky16Ticket> tickets = const [],
     required Lucky16Art art,
     VoidCallback? onOpen,
     VoidCallback? onRow,
@@ -79,7 +85,7 @@ class Lucky16HistoryDialog extends StatefulWidget {
     onOpen?.call();
     return showLucky16Popup<void>(
       context,
-      builder: (_) => Lucky16HistoryDialog(provider: provider, history: history, since: since, art: art, onRow: onRow),
+      builder: (_) => Lucky16HistoryDialog(provider: provider, history: history, since: since, tickets: tickets, art: art, onRow: onRow),
     );
   }
 
@@ -370,14 +376,18 @@ class _Lucky16HistoryDialogState extends State<Lucky16HistoryDialog>
               padding: EdgeInsets.symmetric(horizontal: side),
               itemCount: records.length,
               separatorBuilder: (_, __) => SizedBox(height: layout.dp(10)),
-              itemBuilder: (context, i) => _Lucky16HistoryRow(
-                key: ValueKey('history-row-$i'),
-                layout: layout,
-                art: widget.art,
-                entry: records[i],
-                serial: i + 1,
-                onTap: () => _openDetail(records[i], i + 1),
-              ),
+              itemBuilder: (context, i) {
+                final row = _Lucky16HistoryRow(
+                  key: ValueKey('history-row-$i'),
+                  layout: layout,
+                  art: widget.art,
+                  entry: records[i],
+                  serial: i + 1,
+                  onTap: () => _openDetail(records[i], i + 1),
+                );
+                final tickets = [for (final t in widget.tickets) if (t.roundId == records[i].roundId) t];
+                return tickets.isEmpty ? row : _TicketRows(layout: layout, tickets: tickets, row: row);
+              },
             ),
           ),
         ),
@@ -392,6 +402,61 @@ class _Lucky16HistoryDialogState extends State<Lucky16HistoryDialog>
             color: kLucky16Cream.withValues(alpha: 0.6),
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// A round with printed tickets: its usual row with an arrow, which opens one line per ticket.
+class _TicketRows extends StatefulWidget {
+  const _TicketRows({required this.layout, required this.tickets, required this.row});
+
+  final Lucky16Layout layout;
+  final List<Lucky16Ticket> tickets;
+  final Widget row;
+
+  @override
+  State<_TicketRows> createState() => _TicketRowsState();
+}
+
+class _TicketRowsState extends State<_TicketRows> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = widget.layout;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(child: widget.row),
+            IconButton(
+              key: const ValueKey('history-tickets-arrow'),
+              tooltip: _open ? 'Hide tickets' : 'Show tickets',
+              icon: Icon(_open ? Icons.expand_less : Icons.expand_more, color: kLucky16Gold, size: layout.dp(44)),
+              onPressed: () => setState(() => _open = !_open),
+            ),
+          ],
+        ),
+        if (_open)
+          for (final t in widget.tickets)
+            Container(
+              key: ValueKey('history-ticket-${t.id}'),
+              margin: EdgeInsets.only(top: layout.dp(6)),
+              padding: EdgeInsets.symmetric(horizontal: layout.dp(22), vertical: layout.dp(8)),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(layout.dp(10)),
+                color: t.win > 0 ? const Color(0x3300AA00) : const Color(0x0DFFFFFF),
+              ),
+              child: Row(
+                children: [
+                  Expanded(flex: 3, child: lucky16PopupText(t.code, layout, family: 'Oswald', units: 26, color: kLucky16Cream)),
+                  Expanded(child: lucky16PopupText('${t.totalStake}', layout, family: 'Oswald', units: 26, align: TextAlign.right, color: kLucky16Cream)),
+                  Expanded(child: lucky16PopupText(t.win > 0 ? '+${t.win}' : '0', layout, family: 'Oswald', units: 26, align: TextAlign.right, color: t.win > 0 ? kLucky16GoldBright : kLucky16Cream)),
+                ],
+              ),
+            ),
       ],
     );
   }

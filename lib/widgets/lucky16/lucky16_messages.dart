@@ -109,6 +109,14 @@ Lucky16ProblemDialog lucky16ProblemDialog(Lucky16Problem problem) {
         endsSession: false,
         autoDismiss: _kAutoDismiss,
       );
+    case Lucky16ProblemKind.notPrinted:
+      return const Lucky16ProblemDialog(
+        icon: Icons.print_disabled_rounded,
+        title: 'NOT PRINTED',
+        message: 'Betting closed before these chips were printed. Your chips were returned.',
+        endsSession: false,
+        autoDismiss: _kAutoDismiss,
+      );
     case Lucky16ProblemKind.connectionProblem:
       return problem.reason == Lucky16Error.accountBlocked ? lucky16BlockedDialog : lucky16ConnectionLostDialog;
     case Lucky16ProblemKind.betRejected:

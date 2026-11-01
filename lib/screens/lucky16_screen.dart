@@ -56,10 +56,16 @@ import '../providers/lucky16_history_provider.dart';
 import '../providers/lucky16_provider.dart';
 import '../services/lucky16_api_service.dart';
 import '../services/lucky16_auth_wallet.dart';
+import '../print_ticket/lucky16_print_controller.dart';
+import '../print_ticket/lucky16_print_service.dart';
+import '../print_ticket/printer_readiness.dart';
+import '../print_ticket/ticket_pdf.dart';
+import '../print_ticket/ticket_renderer.dart';
 import '../services/lucky16_round_sync.dart';
 import '../services/lucky16_sound.dart';
 import '../services/lucky16_sound_director.dart';
 import '../utils/app_exit.dart';
+import '../utils/desktop_window.dart';
 import '../widgets/dialogs/action_dialog.dart';
 import '../widgets/lucky16/lucky16_art.dart';
 import '../widgets/lucky16/lucky16_background.dart';
@@ -72,11 +78,13 @@ import '../widgets/lucky16/lucky16_history_dialog.dart';
 import '../widgets/lucky16/lucky16_info_dialog.dart';
 import '../widgets/lucky16/lucky16_layout.dart';
 import '../widgets/lucky16/lucky16_messages.dart';
+import '../widgets/lucky16/lucky16_print_bar.dart';
 import '../widgets/lucky16/lucky16_readouts_binding.dart';
 import '../widgets/lucky16/lucky16_region_swap.dart';
 import '../widgets/lucky16/lucky16_reveal_binding.dart';
 import '../widgets/lucky16/lucky16_wheel_binding.dart';
 import '../widgets/lucky16/lucky16_controls_binding.dart';
+import '../widgets/lucky16/lucky16_tickets_dialog.dart';
 import '../widgets/lucky16/lucky16_top_bar_binding.dart';
 
 /// What the screen is built on. The real app lets the screen make its own; a test hands in a
@@ -158,6 +166,10 @@ class _Lucky16ScreenState extends State<Lucky16Screen> with WidgetsBindingObserv
   Lucky16SoundDirector? _director;
   late final Future<void> Function()? _endSession;
   final Lucky16Notice _notice = Lucky16Notice();
+  Lucky16PrintController? _print;
+  Future<TicketRenderer>? _renderer;
+  final PrinterStatusReader _printerStatus = PrinterStatusReader();
+  final PrintSettingsStore _printSettings = PrintSettingsStore();
   bool _connectionDialogShowing = false;
   bool _wasBalanceFailed = false;
   bool _ready = false;
@@ -213,6 +225,7 @@ class _Lucky16ScreenState extends State<Lucky16Screen> with WidgetsBindingObserv
 
   /// Preloads the background, then starts the game.
   Future<void> _open() async {
+    _startPrint();
     if (!mounted) return;
     final layout = Lucky16Layout.of(MediaQuery.sizeOf(context), desktopPlatform: _desktopPlatform);
     try {
@@ -247,6 +260,8 @@ class _Lucky16ScreenState extends State<Lucky16Screen> with WidgetsBindingObserv
     _provider.sync.removeListener(_onSync);
     _provider.removeListener(_onProviderChanged);
     _provider.onProblem = null;
+    _print?.removeListener(_onPrintChange);
+    _print?.dispose();
     _notice.dispose();
     _sound.leaveGame();
     _provider.leave();
@@ -409,11 +424,55 @@ class _Lucky16ScreenState extends State<Lucky16Screen> with WidgetsBindingObserv
   void _showHistory() => Lucky16HistoryDialog.show(
         context,
         provider: _provider,
+        tickets: _print?.tickets ?? const [],
         history: _history,
         since: _sessionStart(),
         art: _art,
         onOpen: _sound.notification,
         onRow: _sound.notification,
+      );
+
+  /// The Windows app only: a phone or a test screen has no print controller, so nothing below
+  /// changes for it.
+  void _startPrint() {
+    final auth = _auth;
+    if (!mounted || !isWindowsApp || auth == null) return;
+    final controller = Lucky16PrintController(
+      game: _provider,
+      api: SupabaseLucky16PrintApi(),
+      renderer: _ticketRenderer,
+      status: _printerStatus,
+      settings: _printSettings,
+      player: auth.username,
+      sessionStart: _sessionStart,
+    );
+    controller.addListener(_onPrintChange);
+    controller.attach();
+    setState(() => _print = controller);
+  }
+
+  Future<TicketRenderer> _ticketRenderer() =>
+      _renderer ??= TicketFonts.load().then<TicketRenderer>(PdfTicketRenderer.new);
+
+  void _onPrintChange() {
+    final message = _print?.takeMessage();
+    if (message == null || !mounted) return;
+    showActionDialog(
+      context,
+      icon: Icons.print_rounded,
+      title: 'PRINT',
+      message: message,
+      barrierDismissible: true,
+      autoDismissAfter: const Duration(seconds: 5),
+    );
+  }
+
+  void _showTickets() => Lucky16TicketsDialog.show(
+        context,
+        controller: _print!,
+        renderer: _ticketRenderer,
+        settings: _printSettings,
+        status: _printerStatus,
       );
 
   @override
@@ -467,6 +526,9 @@ class _Lucky16ScreenState extends State<Lucky16Screen> with WidgetsBindingObserv
             onToggleSound: _toggleSound,
             onInfo: _showInfo,
             onHistory: _showHistory,
+            printSlot: _print == null || !layout.isDesktop
+                ? null
+                : Lucky16PrintBar(controller: _print!, layout: layout, onTickets: _showTickets),
             // The header carries the round's status and, for a moment, a refused tap's warning.
             notice: _notice,
           ),

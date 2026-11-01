@@ -21,6 +21,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
+import '../../print_ticket/lucky16_tickets.dart';
 import '../../providers/lucky16_provider.dart';
 import 'lucky16_art.dart';
 import 'lucky16_layout.dart';
@@ -31,9 +32,13 @@ class Lucky16WinPopup extends StatelessWidget {
     required this.outcome,
     required this.layout,
     required this.art,
+    this.tickets = const [],
   });
 
   final Lucky16Outcome outcome;
+
+  /// A print player's tickets in this round; empty for a normal bet.
+  final List<Lucky16Ticket> tickets;
   final Lucky16Layout layout;
   final Lucky16Art art;
 
@@ -69,11 +74,104 @@ class Lucky16WinPopup extends StatelessWidget {
                   opacity: math.min(1.0, t / 0.75),
                   child: Transform.scale(scale: 0.5 + 0.5 * Curves.easeOutCubic.transform(t), child: child),
                 ),
-                child: _Body(outcome: outcome, layout: layout, art: art, size: rect.size),
+                child: tickets.isEmpty
+                    ? _Body(outcome: outcome, layout: layout, art: art, size: rect.size)
+                    : _TicketBody(outcome: outcome, tickets: tickets, layout: layout, art: art, size: rect.size),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// How many winning tickets the popup lists; the rest are counted, and all are in History.
+const int kLucky16PopupTickets = 3;
+
+/// The popup for a print player: the same frame, the total first, the winning card with its bonus,
+/// then the tickets that won on it, in a fixed height.
+class _TicketBody extends StatelessWidget {
+  const _TicketBody({
+    required this.outcome,
+    required this.tickets,
+    required this.layout,
+    required this.art,
+    required this.size,
+  });
+
+  final Lucky16Outcome outcome;
+  final List<Lucky16Ticket> tickets;
+  final Lucky16Layout layout;
+  final Lucky16Art art;
+  final Size size;
+
+  @override
+  Widget build(BuildContext context) {
+    final w = size.width;
+    final h = size.height;
+    final winners = [for (final t in tickets) if (t.win > 0) t];
+    final shown = winners.take(kLucky16PopupTickets).toList();
+    final more = winners.length - shown.length;
+    final play = tickets.fold<int>(0, (s, t) => s + t.totalStake);
+    final line = h * 0.052;
+    final card = outcome.winningCard;
+    TextStyle style(double size, Color color, {FontWeight weight = FontWeight.w700}) =>
+        TextStyle(fontFamily: 'Oswald', fontWeight: weight, fontSize: size, height: 1.1, color: color);
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFD4AF37), width: 3),
+        gradient: const RadialGradient(colors: [Color(0xFF5A0508), Color(0xFF0C0000)]),
+      ),
+      padding: EdgeInsets.symmetric(horizontal: w * 0.07, vertical: h * 0.05),
+      child: Column(
+        children: [
+          Text('YOU HAVE WON', maxLines: 1, style: style(h * 0.085, const Color(0xFFFFD700))),
+          SizedBox(height: h * 0.02),
+          Container(
+            key: const ValueKey('win-popup-total'),
+            width: w * 0.46,
+            height: h * 0.16,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(h * 0.08),
+              gradient: const LinearGradient(
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF55FF55), Color(0xFF005500)]),
+            ),
+            child: Text('${outcome.payout}', maxLines: 1, style: style(h * 0.11, Colors.white)),
+          ),
+          SizedBox(height: h * 0.025),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('${card.rank.dbValue} of ${card.suit.label}', maxLines: 1, style: style(line * 1.3, Colors.white)),
+              if (outcome.bonusMultiplier > 1) ...[
+                SizedBox(width: w * 0.02),
+                Text('${outcome.bonusMultiplier}X', style: style(line * 1.3, const Color(0xFFFFE14A))),
+              ],
+            ],
+          ),
+          SizedBox(height: h * 0.012),
+          for (final t in shown)
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: h * 0.004),
+              child: Row(
+                key: ValueKey('win-ticket-${t.id}'),
+                children: [
+                  Expanded(child: Text(t.code, maxLines: 1, style: style(line, const Color(0xFFFFE58A)))),
+                  Text('${t.win}', maxLines: 1, style: style(line, const Color(0xFF7CFF9A))),
+                ],
+              ),
+            ),
+          if (more > 0)
+            Text('and $more more ticket${more == 1 ? '' : 's'}',
+                key: const ValueKey('win-more-tickets'), maxLines: 1, style: style(line * 0.85, const Color(0xFFF5E6C4))),
+          const Spacer(),
+          Text('Round total play $play - all tickets in History',
+              maxLines: 1, overflow: TextOverflow.ellipsis, style: style(line * 0.8, const Color(0xFFC9B58F), weight: FontWeight.w500)),
+        ],
       ),
     );
   }
