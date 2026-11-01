@@ -66,3 +66,6 @@ build/
 # Symbolication & Obfuscation
 app.*.symbols
 app.*.map.json
+
+# Picture diffs written by failed golden tests
+**/failures/
