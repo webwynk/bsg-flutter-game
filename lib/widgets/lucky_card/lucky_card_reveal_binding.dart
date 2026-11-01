@@ -215,6 +215,7 @@ class _LuckyCardRevealOverlayState extends State<LuckyCardRevealOverlay> {
               ),
             if (popup != null)
               LuckyCardWinPopup(
+                tickets: widget.provider.popupTickets,
                 key: const ValueKey('win-popup'),
                 outcome: popup,
                 layout: layout,

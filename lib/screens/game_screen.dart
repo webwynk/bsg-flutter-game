@@ -26,6 +26,15 @@ import '../utils/device_type.dart';
 import '../widgets/overlays/coin_fountain.dart';
 import '../widgets/overlays/result_overlay.dart';
 import '../models/play_limits_config.dart';
+import '../print_ticket/print_settings_store.dart';
+import '../print_ticket/printer_readiness.dart';
+import '../print_ticket/tc_print_controller.dart';
+import '../print_ticket/tc_print_service.dart';
+import '../print_ticket/ticket_pdf.dart';
+import '../print_ticket/ticket_renderer.dart';
+import '../utils/desktop_window.dart';
+import '../widgets/desktop/tc_print_bar.dart';
+import '../widgets/desktop/tc_tickets_dialog.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
@@ -52,6 +61,10 @@ class _GameScreenState extends State<GameScreen> {
   // layouts; keeping one key lets it keep its state (a spin in progress, the
   // landed result) when a resized window switches from one layout to another.
   final GlobalKey _wheelKey = GlobalKey();
+  TcPrintController? _print;
+  Future<TicketRenderer>? _renderer;
+  final PrinterStatusReader _printerStatus = PrinterStatusReader();
+  final PrintSettingsStore _printSettings = PrintSettingsStore();
 
   @override
   void initState() {
@@ -81,7 +94,66 @@ class _GameScreenState extends State<GameScreen> {
       game.setAutoSpinCallback(_handleSpin, noBetsCallback: _handleEarlyBetSubmission);
       // Attach RoundSyncService — syncs timer to server and listens for results
       RoundSyncService().attach(game, auth);
+      _startPrint(game, auth);
     });
+  }
+
+  /// The Windows app only: a phone has no print controller, so nothing below
+  /// changes for it.
+  void _startPrint(GameProvider game, AuthProvider auth) {
+    if (!isWindowsApp) return;
+    final controller = TcPrintController(
+      game: game,
+      auth: auth,
+      api: SupabaseTcPrintApi(),
+      renderer: _ticketRenderer,
+      status: _printerStatus,
+      settings: _printSettings,
+      player: auth.username,
+      sessionStart: () => auth.sessionStartAt,
+    );
+    controller.addListener(_onPrintChange);
+    controller.attach();
+    setState(() => _print = controller);
+  }
+
+  Future<TicketRenderer> _ticketRenderer() =>
+      _renderer ??= TicketFonts.load().then<TicketRenderer>(PdfTicketRenderer.new);
+
+  void _onPrintChange() {
+    final message = _print?.takeMessage();
+    if (message == null || !mounted) return;
+    showActionDialog(
+      context,
+      icon: Icons.print_rounded,
+      title: 'PRINT',
+      message: message,
+      barrierDismissible: true,
+      autoDismissAfter: const Duration(seconds: 5),
+    );
+  }
+
+  void _showTickets() => TcTicketsDialog.show(
+        context,
+        controller: _print!,
+        renderer: _ticketRenderer,
+        settings: _printSettings,
+        status: _printerStatus,
+      );
+
+  /// Chips still on the board when a print round closes were never a bet.
+  void _returnUnprintedChips(GameProvider game, AuthProvider auth) {
+    if (game.board.isEmpty) return;
+    game.refundRejectedBets(auth);
+    if (!mounted) return;
+    showActionDialog(
+      context,
+      icon: Icons.print_disabled_rounded,
+      title: 'NOT PRINTED',
+      message: 'Betting closed before these chips were printed. Your chips were returned.',
+      barrierDismissible: true,
+      autoDismissAfter: const Duration(seconds: 5),
+    );
   }
 
   Future<void> _handleEarlyBetSubmission() async {
@@ -89,6 +161,10 @@ class _GameScreenState extends State<GameScreen> {
     final auth = context.read<AuthProvider>();
 
     if (game.isSpinning || game.board.isEmpty) return;
+    if (game.printMode) {
+      _returnUnprintedChips(game, auth);
+      return;
+    }
 
     // Issue #110 (defence in depth): never auto-submit a board whose bet was
     // already submitted for a DIFFERENT round. submitBets()'s own idempotency
@@ -164,6 +240,8 @@ class _GameScreenState extends State<GameScreen> {
 
     final sync = RoundSyncService();
 
+    if (game.printMode) _returnUnprintedChips(game, auth);
+
     // 1. Submit bets to server if player placed any that haven't been submitted yet
     if (!game.board.isEmpty && game.betStatus != BetSubmissionStatus.submitted) {
       game.markBetsSubmitted();
@@ -238,6 +316,8 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   void dispose() {
+    _print?.removeListener(_onPrintChange);
+    _print?.dispose();
     SoundService().setInGameScreen(false);
     SoundService().stopAll();
     RoundSyncService().detach();
@@ -884,7 +964,11 @@ class _GameScreenState extends State<GameScreen> {
               // parts; every other screen gets the phone layout below,
               // unchanged. All game logic stays in this State.
               if (isDesktopScreen(MediaQuery.of(context).size))
-                DesktopGameLayout(onSpin: _handleSpin, wheelKey: _wheelKey)
+                DesktopGameLayout(
+                  onSpin: _handleSpin,
+                  wheelKey: _wheelKey,
+                  printSlot: _print == null ? null : TcPrintBar(controller: _print!, onTickets: _showTickets),
+                )
               else if (isTabletScreen(MediaQuery.of(context).size))
                 TabletGameLayout(onSpin: _handleSpin, wheelKey: _wheelKey)
               else

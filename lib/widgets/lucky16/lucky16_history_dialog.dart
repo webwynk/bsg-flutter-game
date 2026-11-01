@@ -26,6 +26,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/lucky16_history_model.dart';
 import '../../print_ticket/lucky16_tickets.dart';
+import '../../utils/round_id.dart';
 import '../../providers/lucky16_history_provider.dart';
 import '../../providers/lucky16_provider.dart';
 import 'lucky16_art.dart';
@@ -452,8 +453,8 @@ class _TicketRowsState extends State<_TicketRows> {
               child: Row(
                 children: [
                   Expanded(flex: 3, child: lucky16PopupText(t.code, layout, family: 'Oswald', units: 26, color: kLucky16Cream)),
-                  Expanded(child: lucky16PopupText('${t.totalStake}', layout, family: 'Oswald', units: 26, align: TextAlign.right, color: kLucky16Cream)),
-                  Expanded(child: lucky16PopupText(t.win > 0 ? '+${t.win}' : '0', layout, family: 'Oswald', units: 26, align: TextAlign.right, color: t.win > 0 ? kLucky16GoldBright : kLucky16Cream)),
+                  Expanded(child: lucky16PopupText(lucky16Grouped(t.totalStake), layout, family: 'Oswald', units: 26, align: TextAlign.right, color: kLucky16Cream)),
+                  Expanded(child: lucky16PopupText(t.win > 0 ? '+${lucky16Grouped(t.win)}' : '0', layout, family: 'Oswald', units: 26, align: TextAlign.right, color: t.win > 0 ? kLucky16GoldBright : kLucky16Cream)),
                 ],
               ),
             ),
@@ -543,7 +544,7 @@ class _Lucky16HistoryRow extends StatelessWidget {
                             lucky16PopupText('$serial', layout,
                                 weight: FontWeight.w600, units: 30, color: kLucky16Cream.withValues(alpha: 0.7)),
                           ),
-                          cell(1, lucky16PopupText('${e.roundNumber}', layout, units: 32)),
+                          cell(1, lucky16PopupText(GameRound.lucky16.id(e.roundNumber), layout, units: 32)),
                           cell(
                             2,
                             Row(
@@ -737,7 +738,7 @@ class _Lucky16HistoryDetailState extends State<_Lucky16HistoryDetail>
         scopesRoute: true,
         namesRoute: true,
         explicitChildNodes: true,
-        label: 'Round ${e.roundNumber} details',
+        label: 'Round ${GameRound.lucky16.id(e.roundNumber)} details',
         child: Center(
           child: ConstrainedBox(
             key: const ValueKey('history-detail'),

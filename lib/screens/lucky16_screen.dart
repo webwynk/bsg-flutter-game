@@ -58,6 +58,7 @@ import '../services/lucky16_api_service.dart';
 import '../services/lucky16_auth_wallet.dart';
 import '../print_ticket/lucky16_print_controller.dart';
 import '../print_ticket/lucky16_print_service.dart';
+import '../print_ticket/print_settings_store.dart';
 import '../print_ticket/printer_readiness.dart';
 import '../print_ticket/ticket_pdf.dart';
 import '../print_ticket/ticket_renderer.dart';
@@ -421,7 +422,11 @@ class _Lucky16ScreenState extends State<Lucky16Screen> with WidgetsBindingObserv
       );
 
   /// The HISTORY button: the popup reads the database itself and closes by itself when betting closes.
-  void _showHistory() => Lucky16HistoryDialog.show(
+  Future<void> _showHistory() async {
+    // Read again here: a ticket's win is known only once its round is drawn.
+    await _print?.reloadTickets();
+    if (!mounted) return;
+    await Lucky16HistoryDialog.show(
         context,
         provider: _provider,
         tickets: _print?.tickets ?? const [],
@@ -431,6 +436,7 @@ class _Lucky16ScreenState extends State<Lucky16Screen> with WidgetsBindingObserv
         onOpen: _sound.notification,
         onRow: _sound.notification,
       );
+  }
 
   /// The Windows app only: a phone or a test screen has no print controller, so nothing below
   /// changes for it.

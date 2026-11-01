@@ -234,9 +234,9 @@ void main() {
       expect(key('history-net'), findsNothing, reason: 'Hasan: only ROUNDS, TOTAL PLAY and TOTAL WIN');
       expect(find.text('NET'), findsNothing);
       final first = textsIn(tester, 'history-row-0');
-      expect(first, containsAllInOrder(['1', '17403945', 'A', '4X', '200', '+560']));
+      expect(first, containsAllInOrder(['1', 'LS-17403945', 'A', '4X', '200', '+560']));
       final second = textsIn(tester, 'history-row-1');
-      expect(second, containsAllInOrder(['2', '17403944', 'Q', 'N', '100', '0']));
+      expect(second, containsAllInOrder(['2', 'LS-17403944', 'Q', 'N', '100', '0']));
       expect(find.text(kLucky16HistoryHint), findsOneWidget);
       expect(tester.takeException(), isNull);
       await rig.finish();
@@ -307,7 +307,7 @@ void main() {
       expect(textOf(tester, 'history-detail-badge'), 'NO. 1');
       expect(textOf(tester, 'history-detail-amount'), '+560');
       expect(key('history-detail-card-a_spades'), findsOneWidget);
-      expect(textOf(tester, 'history-detail-ROUND'), '17403945');
+      expect(textOf(tester, 'history-detail-ROUND'), 'LS-17403945');
       expect(textOf(tester, 'history-detail-WINNING CARD'), 'Ace of Spades');
       expect(textOf(tester, 'history-detail-BONUS'), '4X');
       expect(textOf(tester, 'history-detail-TOTAL BET'), '200 coins');

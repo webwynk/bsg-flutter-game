@@ -47,10 +47,17 @@ import '../providers/lucky_card_history_provider.dart';
 import '../providers/lucky_card_provider.dart';
 import '../services/lucky_card_api_service.dart';
 import '../services/lucky_card_auth_wallet.dart';
+import '../print_ticket/lucky_card_print_controller.dart';
+import '../print_ticket/lucky_card_print_service.dart';
+import '../print_ticket/print_settings_store.dart';
+import '../print_ticket/printer_readiness.dart';
+import '../print_ticket/ticket_pdf.dart';
+import '../print_ticket/ticket_renderer.dart';
 import '../services/lucky_card_round_sync.dart';
 import '../services/lucky_card_sound.dart';
 import '../services/lucky_card_sound_director.dart';
 import '../utils/app_exit.dart';
+import '../utils/desktop_window.dart';
 import '../widgets/dialogs/action_dialog.dart';
 import '../widgets/lucky_card/lucky_card_art.dart';
 import '../widgets/lucky_card/lucky_card_background.dart';
@@ -64,9 +71,11 @@ import '../widgets/lucky_card/lucky_card_history_dialog.dart';
 import '../widgets/lucky_card/lucky_card_info_dialog.dart';
 import '../widgets/lucky_card/lucky_card_layout.dart';
 import '../widgets/lucky_card/lucky_card_messages.dart';
+import '../widgets/lucky_card/lucky_card_print_bar.dart';
 import '../widgets/lucky_card/lucky_card_readouts_binding.dart';
 import '../widgets/lucky_card/lucky_card_region_swap.dart';
 import '../widgets/lucky_card/lucky_card_reveal_binding.dart';
+import '../widgets/lucky_card/lucky_card_tickets_dialog.dart';
 import '../widgets/lucky_card/lucky_card_wheel_binding.dart';
 
 /// What the screen is built on. The real app lets the screen make its own; a test hands in
@@ -153,6 +162,10 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
   late final bool _desktopPlatform;
   AuthProvider? _auth;
   final LuckyCardNotice _notice = LuckyCardNotice();
+  LuckyCardPrintController? _print;
+  Future<TicketRenderer>? _renderer;
+  final PrinterStatusReader _printerStatus = PrinterStatusReader();
+  final PrintSettingsStore _printSettings = PrintSettingsStore();
   bool _connectionDialogShowing = false;
   bool _wasBalanceFailed = false;
 
@@ -207,6 +220,7 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
 
   /// Preloads the pictures, then starts the game.
   Future<void> _open() async {
+    _startPrint();
     if (!mounted) return;
     final layout = LuckyCardLayout.of(MediaQuery.sizeOf(context), desktopPlatform: _desktopPlatform);
     try {
@@ -241,6 +255,8 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
     _provider.sync.removeListener(_onSync);
     _provider.removeListener(_onProviderChanged);
     _provider.onProblem = null;
+    _print?.removeListener(_onPrintChange);
+    _print?.dispose();
     _notice.dispose();
     _sound.leaveGame();
     _provider.leave();
@@ -298,14 +314,20 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
   /// The HISTORY button: opens the list of this login's rounds with the notification sound, as
   /// Triple Chance's history does; tapping a line makes the same sound as its detail popup does there.
   /// The dialog reads the database itself and closes by itself when betting closes.
-  void _showHistory() => LuckyCardHistoryDialog.show(
+  Future<void> _showHistory() async {
+    // Read again here: a ticket's win is known only once its round is drawn.
+    await _print?.reloadTickets();
+    if (!mounted) return;
+    await LuckyCardHistoryDialog.show(
         context,
         provider: _provider,
         history: _history,
         since: _sessionStart(),
+        tickets: _print?.tickets ?? const [],
         onOpen: _sound.notification,
         onRow: _sound.notification,
       );
+  }
 
   /// The SOUND button: mutes or unmutes Lucky Card's own sounds (haptics are not affected).
   void _toggleSound() {
@@ -407,6 +429,49 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
   /// The light click of Triple Chance's card taps and buttons.
   void _lightClick() => HapticFeedback.selectionClick();
 
+  /// The Windows app only: a phone or a test screen has no print controller, so nothing below
+  /// changes for it.
+  void _startPrint() {
+    final auth = _auth;
+    if (!mounted || !isWindowsApp || auth == null) return;
+    final controller = LuckyCardPrintController(
+      game: _provider,
+      api: SupabaseLuckyCardPrintApi(),
+      renderer: _ticketRenderer,
+      status: _printerStatus,
+      settings: _printSettings,
+      player: auth.username,
+      sessionStart: _sessionStart,
+    );
+    controller.addListener(_onPrintChange);
+    controller.attach();
+    setState(() => _print = controller);
+  }
+
+  Future<TicketRenderer> _ticketRenderer() =>
+      _renderer ??= TicketFonts.load().then<TicketRenderer>(PdfTicketRenderer.new);
+
+  void _onPrintChange() {
+    final message = _print?.takeMessage();
+    if (message == null || !mounted) return;
+    showActionDialog(
+      context,
+      icon: Icons.print_rounded,
+      title: 'PRINT',
+      message: message,
+      barrierDismissible: true,
+      autoDismissAfter: const Duration(seconds: 5),
+    );
+  }
+
+  void _showTickets() => LuckyCardTicketsDialog.show(
+        context,
+        controller: _print!,
+        renderer: _ticketRenderer,
+        settings: _printSettings,
+        status: _printerStatus,
+      );
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -462,6 +527,9 @@ class _LuckyCardScreenState extends State<LuckyCardScreen> with WidgetsBindingOb
             onToggleSound: _toggleSound,
             onInfo: _showInfo,
             onHistory: _showHistory,
+            printSlot: _print == null || !layout.isDesktop
+                ? null
+                : LuckyCardPrintBar(controller: _print!, layout: layout, onTickets: _showTickets),
             // The reference design has no strip under the board: the header carries the
             // round's status and, for a moment, a refused tap's warning.
             notice: _notice,

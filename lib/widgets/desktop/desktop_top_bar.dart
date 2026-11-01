@@ -20,7 +20,10 @@ import '../tablet/tablet_status_pill.dart';
 /// confirmation and then the lobby), the message is the tablet's status pill,
 /// and the info icon opens `InfoDialog`.
 class DesktopTopBar extends StatelessWidget {
-  const DesktopTopBar({super.key});
+  const DesktopTopBar({super.key, this.printSlot});
+
+  /// The Print and Tickets buttons, between the balance and the countdown.
+  final Widget? printSlot;
 
   static const double height = 64;
 
@@ -41,9 +44,9 @@ class DesktopTopBar extends StatelessWidget {
         ],
       ),
       child: Stack(
-        children: const [
+        children: [
           // Exit key: 40 design units drawn 1.5 times bigger, like the demo's 46px key.
-          Positioned(
+          const Positioned(
             left: 6,
             top: 0,
             child: ScaledBox(
@@ -53,10 +56,11 @@ class DesktopTopBar extends StatelessWidget {
               child: ExitCornerButton(bordered: false),
             ),
           ),
-          Positioned(left: 76, top: 10, child: _CoinsPill()),
-          Positioned(left: 520, top: 6, child: _Countdown()),
-          Positioned(right: 76, top: 10, child: _StatusSlot()),
-          Positioned(right: 16, top: 9, child: _InfoButton()),
+          const Positioned(left: 76, top: 10, child: _CoinsPill()),
+          if (printSlot != null) Positioned(left: 280, top: 12, width: 230, height: 40, child: printSlot!),
+          const Positioned(left: 520, top: 6, child: _Countdown()),
+          const Positioned(right: 76, top: 10, child: _StatusSlot()),
+          const Positioned(right: 16, top: 9, child: _InfoButton()),
         ],
       ),
     );

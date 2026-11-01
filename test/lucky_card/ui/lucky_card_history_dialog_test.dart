@@ -182,13 +182,13 @@ void main() {
 
     test('the detail has four facts: the round, the card in words, the bonus and the total bet', () {
       expect(luckyCardHistoryDetailLines(win), [
-        ('ROUND', '17403942'),
+        ('ROUND', 'LC-17403942'),
         ('WINNING CARD', 'King of Spades'),
         ('BONUS', '5X'),
         ('TOTAL BET', '100 coins'),
       ]);
       expect(luckyCardHistoryDetailLines(loss), [
-        ('ROUND', '17403941'),
+        ('ROUND', 'LC-17403941'),
         ('WINNING CARD', 'Jack of Hearts'),
         ('BONUS', '3X'),
         ('TOTAL BET', '50 coins'),
@@ -198,8 +198,8 @@ void main() {
     });
 
     test('what a screen reader says for a line', () {
-      expect(luckyCardHistoryRowSemantics(win, 1), 'Line 1, round 17403942, played 100, won 5,000. Tap for details.');
-      expect(luckyCardHistoryRowSemantics(loss, 2), 'Line 2, round 17403941, played 50, no win. Tap for details.');
+      expect(luckyCardHistoryRowSemantics(win, 1), 'Line 1, round LC-17403942, played 100, won 5,000. Tap for details.');
+      expect(luckyCardHistoryRowSemantics(loss, 2), 'Line 2, round LC-17403941, played 50, no win. Tap for details.');
     });
 
     test('every word is plain letters: the fonts have no card-suit symbols', () {
@@ -253,10 +253,10 @@ void main() {
       final rig = BetRig(tester);
       await pumpAtSize(tester, phone, host(rig.provider, rowsScript(sampleRows()).history));
       await open(tester);
-      expect(wordsIn(tester, key('history-row-0')), ['1', '17403942', 'K', '5X', '100', '+5,000']);
-      expect(wordsIn(tester, key('history-row-1')), ['2', '17403941', 'J', 'N', '50', '0']);
-      expect(wordsIn(tester, key('history-row-2')), ['3', '17403940', 'Q', 'N', '480,000', '+4,800,000']);
-      expect(wordsIn(tester, key('history-row-3')), ['4', '17403939', 'Q', '3X', '300', '0']);
+      expect(wordsIn(tester, key('history-row-0')), ['1', 'LC-17403942', 'K', '5X', '100', '+5,000']);
+      expect(wordsIn(tester, key('history-row-1')), ['2', 'LC-17403941', 'J', 'N', '50', '0']);
+      expect(wordsIn(tester, key('history-row-2')), ['3', 'LC-17403940', 'Q', 'N', '480,000', '+4,800,000']);
+      expect(wordsIn(tester, key('history-row-3')), ['4', 'LC-17403939', 'Q', '3X', '300', '0']);
       await rig.finish();
     });
 
@@ -304,7 +304,7 @@ void main() {
       rows.insert(0, row(round: 3, stake: 10));
       await open(tester);
       expect(script.reads.length, 2);
-      expect(wordsIn(tester, key('history-row-0')), ['1', '3', 'J', 'N', '10', '0']);
+      expect(wordsIn(tester, key('history-row-0')), ['1', 'LC-3', 'J', 'N', '10', '0']);
       expect(key('history-row-1'), findsOneWidget);
       await rig.finish();
     });
@@ -416,7 +416,7 @@ void main() {
       expect(tester.widget<Text>(key('history-detail-amount')).data, '+5,000');
       expect(key('history-detail-card-k_spades'), findsOneWidget);
       expect(find.descendant(of: key('history-detail-bonus'), matching: find.text('5X')), findsOneWidget);
-      expect(tester.widget<Text>(key('history-detail-ROUND')).data, '17403942');
+      expect(tester.widget<Text>(key('history-detail-ROUND')).data, 'LC-17403942');
       expect(tester.widget<Text>(key('history-detail-WINNING CARD')).data, 'King of Spades');
       expect(tester.widget<Text>(key('history-detail-BONUS')).data, '5X');
       expect(tester.widget<Text>(key('history-detail-TOTAL BET')).data, '100 coins');
@@ -743,7 +743,7 @@ void main() {
         expect(r.left, greaterThanOrEqualTo(cell.left - 0.5), reason: (t.widget as Text).data);
         expect(r.right, lessThanOrEqualTo(cell.right + 0.5), reason: (t.widget as Text).data);
       }
-      expect(wordsIn(tester, key('history-row-0')), ['1', '17403942', 'J', '10X', '600,000', '+60,000,000']);
+      expect(wordsIn(tester, key('history-row-0')), ['1', 'LC-17403942', 'J', '10X', '600,000', '+60,000,000']);
       await rig.finish();
     });
   });
@@ -779,9 +779,9 @@ void main() {
       await open(tester);
       expect(find.bySemanticsLabel('Game history'), findsWidgets);
       expect(find.bySemanticsLabel('Close'), findsWidgets);
-      final line = tester.getSemantics(find.bySemanticsLabel('Line 1, round 17403942, played 100, won 5,000. Tap for details.'));
+      final line = tester.getSemantics(find.bySemanticsLabel('Line 1, round LC-17403942, played 100, won 5,000. Tap for details.'));
       expect(line.getSemanticsData().flagsCollection.isButton, isTrue);
-      expect(find.bySemanticsLabel('Line 2, round 17403941, played 50, no win. Tap for details.'), findsOneWidget);
+      expect(find.bySemanticsLabel('Line 2, round LC-17403941, played 50, no win. Tap for details.'), findsOneWidget);
       handle.dispose();
       await rig.finish();
     });

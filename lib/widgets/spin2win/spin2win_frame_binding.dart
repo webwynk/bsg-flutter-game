@@ -108,6 +108,7 @@ class Spin2WinFrameBinding extends StatelessWidget {
     this.onExit,
     this.onRecords,
     this.onSound,
+    this.printSlot,
     this.onRefused,
     this.onTapped,
     this.animateIdle = true,
@@ -122,6 +123,9 @@ class Spin2WinFrameBinding extends StatelessWidget {
   final VoidCallback? onExit;
   final VoidCallback? onRecords;
   final VoidCallback? onSound;
+
+  /// The Print and Tickets buttons; null unless this player prints.
+  final Widget? printSlot;
 
   /// A tap the board could not fully do (not enough coins, a number at its maximum, ...).
   final void Function(Set<Spin2WinBoardIssue> issues)? onRefused;
@@ -156,6 +160,7 @@ class Spin2WinFrameBinding extends StatelessWidget {
               child: Spin2WinZoom(
                 zoom: Spin2WinLayoutScope.of(context).popupZoom,
                 child: Spin2WinWinOverlay(
+                  tickets: provider.popupTickets,
                   key: ValueKey('popup-${win.roundId}'),
                   number: win.winningNumber,
                   bonusMultiplier: win.bonusMultiplier,
@@ -181,6 +186,7 @@ class Spin2WinFrameBinding extends StatelessWidget {
       data: spin2WinFrameDataOf(provider, muted: muted),
       chipImage: chipImage,
       animate: animateIdle,
+      printSlot: printSlot,
       wheel: Spin2WinSpinningWheel(
         cue: spin2WinWheelCueOf(provider),
         onLanded: provider.wheelLanded,

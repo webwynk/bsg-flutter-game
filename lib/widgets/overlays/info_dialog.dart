@@ -1,3 +1,6 @@
+import '../../print_ticket/tc_tickets.dart';
+import '../../utils/round_id.dart';
+import '../desktop/tc_tickets_dialog.dart' show tcAmount;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,6 +21,8 @@ class InfoDialog extends StatefulWidget {
   const InfoDialog({super.key});
 
   static void show(BuildContext context) {
+    // A ticket's win is known only once its round is drawn.
+    context.read<GameProvider>().reloadPrintTickets?.call();
     SoundService().playNotification();
     showGeneralDialog(
       context: context,
@@ -366,6 +371,7 @@ class _HistoryTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     final history = Provider.of<HistoryProvider>(context);
+    final printTickets = Provider.of<GameProvider>(context).printTickets;
 
     // Issue #11 fix: previously fell back to GameProvider.spinHistory when
     // `history.records` was empty. That local list wasn't session-scoped (it
@@ -449,7 +455,7 @@ class _HistoryTab extends StatelessWidget {
         child: Row(children: [
           _HeaderCell('S.No', 8),
           _vDiv(),
-          _HeaderCell('Hand ID', 18),
+          _HeaderCell('Round ID', 18),
           _vDiv(),
           _HeaderCell('PLAY', 10),
           _vDiv(),
@@ -480,12 +486,17 @@ class _HistoryTab extends StatelessWidget {
                         itemBuilder: (_, i) {
                           final item = displayRecords[i];
                           final sno = i + 1;
-                          return _HistoryRow(
+                          final row = _HistoryRow(
                             record: item,
                             serialNo: sno,
                             onTap: () =>
                                 _showDetailDialog(context, item, sno),
                           );
+                          final tickets = [
+                            for (final t in printTickets)
+                              if (t.roundId == item.id) t,
+                          ];
+                          return tickets.isEmpty ? row : _TicketRows(tickets: tickets, row: row);
                         },
                       ),
                     ),
@@ -595,6 +606,64 @@ class _HistoryTab extends StatelessWidget {
 }
 
 // ── History Row ───────────────────────────────────────────────────────────────
+/// A round with printed tickets: its usual row with an arrow, which opens one
+/// line per ticket: its number, bet and win.
+class _TicketRows extends StatefulWidget {
+  final List<TcTicket> tickets;
+  final Widget row;
+  const _TicketRows({required this.tickets, required this.row});
+
+  @override
+  State<_TicketRows> createState() => _TicketRowsState();
+}
+
+class _TicketRowsState extends State<_TicketRows> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Stack(
+          children: [
+            widget.row,
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: GestureDetector(
+                key: const ValueKey('tc-history-arrow'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _open = !_open),
+                child: SizedBox(
+                  width: 28,
+                  child: Icon(_open ? Icons.expand_less : Icons.expand_more,
+                      size: 18, color: AppColors.goldBright),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (_open)
+          for (final t in widget.tickets)
+            Container(
+              key: ValueKey('tc-history-ticket-${t.id}'),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              color: t.win > 0 ? const Color(0x3300AA00) : const Color(0x0DFFFFFF),
+              child: Row(
+                children: [
+                  Expanded(flex: 3, child: Text(t.code, maxLines: 1, style: GoogleFonts.oswald(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFFFFE58A)))),
+                  Expanded(child: Text(tcAmount(t.totalStake), maxLines: 1, textAlign: TextAlign.right, style: GoogleFonts.oswald(fontSize: 11, color: Colors.white70))),
+                  Expanded(child: Text(t.win > 0 ? '+${tcAmount(t.win)}' : '0', maxLines: 1, textAlign: TextAlign.right, style: GoogleFonts.oswald(fontSize: 11, fontWeight: FontWeight.w700, color: t.win > 0 ? const Color(0xFF44D680) : Colors.white30))),
+                ],
+              ),
+            ),
+      ],
+    );
+  }
+}
+
 class _HistoryRow extends StatefulWidget {
   final SpinResult record;
   final int serialNo;
@@ -662,7 +731,7 @@ class _HistoryRowState extends State<_HistoryRow> {
                   center: true),
               Container(width: 1, color: Colors.white10),
               _BodyCell(
-                  text: _shortenId(widget.record.id),
+                  text: GameRound.tripleChance.id(widget.record.roundNumber),
                   flex: 18,
                   color: Colors.white60,
                   bold: false),
@@ -728,12 +797,6 @@ class _HistoryRowState extends State<_HistoryRow> {
       ),
     );
   }
-}
-
-String _shortenId(String id) {
-  final clean = id.replaceAll('-', '').replaceFirst('round_', '');
-  if (clean.length <= 8) return clean;
-  return '...${clean.substring(clean.length - 8)}';
 }
 
 // ── Cell widgets ──────────────────────────────────────────────────────────────
@@ -981,7 +1044,7 @@ class _HistoryDetailDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            _DetailRow('Hand ID', _shortenId(record.id), color: Colors.white54),
+            _DetailRow('Round ID', GameRound.tripleChance.id(record.roundNumber), color: Colors.white54),
             _DetailRow('Mode', record.modeLabel,
                 color: AppColors.goldBright),
             _DetailRow('Result',

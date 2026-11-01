@@ -25,6 +25,7 @@ import '../../print_ticket/lucky16_tickets.dart';
 import '../../providers/lucky16_provider.dart';
 import 'lucky16_art.dart';
 import 'lucky16_layout.dart';
+import 'lucky16_top_bar.dart' show lucky16GroupedBalance;
 
 class Lucky16WinPopup extends StatelessWidget {
   const Lucky16WinPopup({
@@ -140,7 +141,7 @@ class _TicketBody extends StatelessWidget {
               gradient: const LinearGradient(
                   begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF55FF55), Color(0xFF005500)]),
             ),
-            child: Text('${outcome.payout}', maxLines: 1, style: style(h * 0.11, Colors.white)),
+            child: Text(lucky16GroupedBalance(outcome.payout), maxLines: 1, style: style(h * 0.11, Colors.white)),
           ),
           SizedBox(height: h * 0.025),
           Row(
@@ -154,14 +155,22 @@ class _TicketBody extends StatelessWidget {
             ],
           ),
           SizedBox(height: h * 0.012),
+          Row(
+            children: [
+              Expanded(flex: 2, child: Text('TICKET', maxLines: 1, style: style(line * 0.72, const Color(0xFFD4AF37)))),
+              Expanded(child: Text('BET', maxLines: 1, textAlign: TextAlign.right, style: style(line * 0.72, const Color(0xFFD4AF37)))),
+              Expanded(child: Text('WIN', maxLines: 1, textAlign: TextAlign.right, style: style(line * 0.72, const Color(0xFFD4AF37)))),
+            ],
+          ),
           for (final t in shown)
             Padding(
               padding: EdgeInsets.symmetric(vertical: h * 0.004),
               child: Row(
                 key: ValueKey('win-ticket-${t.id}'),
                 children: [
-                  Expanded(child: Text(t.code, maxLines: 1, style: style(line, const Color(0xFFFFE58A)))),
-                  Text('${t.win}', maxLines: 1, style: style(line, const Color(0xFF7CFF9A))),
+                  Expanded(flex: 2, child: Text(t.code, maxLines: 1, style: style(line, const Color(0xFFFFE58A)))),
+                  Expanded(child: Text(lucky16GroupedBalance(t.totalStake), maxLines: 1, textAlign: TextAlign.right, style: style(line, Colors.white))),
+                  Expanded(child: Text(lucky16GroupedBalance(t.win), maxLines: 1, textAlign: TextAlign.right, style: style(line, const Color(0xFF7CFF9A)))),
                 ],
               ),
             ),
@@ -169,7 +178,7 @@ class _TicketBody extends StatelessWidget {
             Text('and $more more ticket${more == 1 ? '' : 's'}',
                 key: const ValueKey('win-more-tickets'), maxLines: 1, style: style(line * 0.85, const Color(0xFFF5E6C4))),
           const Spacer(),
-          Text('Round total play $play - all tickets in History',
+          Text('Round total play ${lucky16GroupedBalance(play)} - all tickets in History',
               maxLines: 1, overflow: TextOverflow.ellipsis, style: style(line * 0.8, const Color(0xFFC9B58F), weight: FontWeight.w500)),
         ],
       ),

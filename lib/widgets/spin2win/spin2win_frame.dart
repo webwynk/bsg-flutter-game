@@ -140,7 +140,11 @@ class Spin2WinFrame extends StatelessWidget {
     this.chipImage = spin2WinAssetChipImage,
     this.wheel,
     this.animate = true,
+    this.printSlot,
   });
+
+  /// The Print and Tickets buttons, on the large boards; null unless this player prints.
+  final Widget? printSlot;
 
   final Spin2WinFrameData data;
 
@@ -254,6 +258,7 @@ class Spin2WinFrame extends StatelessWidget {
         muted: data.muted,
         winKey: data.winKey,
         sidePadding: board.barSidePadding,
+        printSlot: board.isLarge ? printSlot : null,
         onExit: actions.onExit,
         onRecords: actions.onRecords,
         onSound: actions.onSound,

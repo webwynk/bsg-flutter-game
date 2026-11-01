@@ -26,7 +26,11 @@ class Spin2WinTopBar extends StatelessWidget {
     this.onRecords,
     this.onSound,
     this.sidePadding = 30,
+    this.printSlot,
   });
+
+  /// The Print and Tickets buttons; null unless this player prints.
+  final Widget? printSlot;
 
   /// In from each side: the phone's 30 dp (the tablet's 21, the desktop's none).
   final double sidePadding;
@@ -84,6 +88,10 @@ class Spin2WinTopBar extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(child: _PlayWinBar(play: play, win: win, winKey: winKey)),
           const SizedBox(width: 8),
+          if (printSlot != null) ...[
+            SizedBox(width: 205, height: 34, child: printSlot),
+            const SizedBox(width: 8),
+          ],
           _RoundButton(
             key: const ValueKey('spin2win-records'),
             label: 'Open records',

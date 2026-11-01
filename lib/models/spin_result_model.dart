@@ -22,6 +22,9 @@ class SpinResult {
   // bonus round, which is a real bug, not a safe fallback.
   final int bonusMultiplier;
 
+  /// The round's number; 0 where a result was not read with it.
+  final int roundNumber;
+
   const SpinResult({
     required this.id,
     required this.red,
@@ -39,6 +42,7 @@ class SpinResult {
     required this.netChange,
     required this.createdAt,
     this.bonusMultiplier = 1,
+    this.roundNumber = 0,
   });
 
   String get resultString => '$red$green$black';

@@ -23,6 +23,8 @@ import 'package:flutter/material.dart';
 
 import '../../models/spin2win_board.dart';
 import '../../models/spin2win_history_model.dart';
+import '../../print_ticket/spin2win_tickets.dart';
+import '../../utils/round_id.dart';
 import '../../models/spin2win_models.dart';
 import '../../providers/spin2win_history_provider.dart';
 import '../../providers/spin2win_provider.dart';
@@ -40,8 +42,8 @@ const String kSpin2WinRecordsLoading = 'Loading history...';
 /// The chip the Payout tab shows when none is in hand (the design's own example).
 const Spin2WinChip kSpin2WinPayoutDefaultChip = Spin2WinChip.ten;
 
-/// The round's id as the table writes it ("R-1082451").
-String spin2WinRoundIdText(int roundNumber) => 'R-$roundNumber';
+/// The round's id as the table writes it ("SW-1082451").
+String spin2WinRoundIdText(int roundNumber) => GameRound.spin2win.id(roundNumber);
 
 class Spin2WinRecordsDialog extends StatefulWidget {
   const Spin2WinRecordsDialog({
@@ -49,6 +51,7 @@ class Spin2WinRecordsDialog extends StatefulWidget {
     required this.provider,
     required this.history,
     required this.since,
+    this.tickets = const [],
     this.chipImage = spin2WinAssetChipImage,
     this.initialTab = Spin2WinRecordsTab.history,
     this.load = true,
@@ -56,6 +59,9 @@ class Spin2WinRecordsDialog extends StatefulWidget {
 
   final Spin2WinProvider provider;
   final Spin2WinHistoryProvider history;
+
+  /// A print player's tickets, shown under their rounds.
+  final List<Spin2WinTicket> tickets;
 
   /// The start of this login: the list holds the rounds played since then.
   final DateTime? since;
@@ -72,13 +78,14 @@ class Spin2WinRecordsDialog extends StatefulWidget {
     required Spin2WinProvider provider,
     required Spin2WinHistoryProvider history,
     required DateTime? since,
+    List<Spin2WinTicket> tickets = const [],
     ImageProvider Function(Spin2WinChip chip) chipImage = spin2WinAssetChipImage,
   }) {
     return spin2WinShowDialog<void>(
       context,
       label: 'My records',
       barrierDismissible: true,
-      builder: (_) => Spin2WinRecordsDialog(provider: provider, history: history, since: since, chipImage: chipImage),
+      builder: (_) => Spin2WinRecordsDialog(provider: provider, history: history, since: since, tickets: tickets, chipImage: chipImage),
     );
   }
 
@@ -137,7 +144,7 @@ class _Spin2WinRecordsDialogState extends State<Spin2WinRecordsDialog> {
               child: ListenableBuilder(
                 listenable: Listenable.merge([widget.history, widget.provider]),
                 builder: (context, _) => _tab == Spin2WinRecordsTab.history
-                    ? _HistoryTab(history: widget.history, since: widget.since)
+                    ? _HistoryTab(history: widget.history, since: widget.since, tickets: widget.tickets)
                     : _PayoutTab(
                         chip: widget.provider.activeChip ?? kSpin2WinPayoutDefaultChip, chipImage: widget.chipImage),
               ),
@@ -253,9 +260,12 @@ const TextStyle _kDigits =
     TextStyle(fontFamily: kSpin2WinDigitsFont, fontWeight: FontWeight.w600, fontSize: 13, height: 1);
 
 class _HistoryTab extends StatelessWidget {
-  const _HistoryTab({required this.history, required this.since});
+  const _HistoryTab({required this.history, required this.since, required this.tickets});
 
   final Spin2WinHistoryProvider history;
+
+  /// A print player's tickets, shown under their rounds.
+  final List<Spin2WinTicket> tickets;
 
   /// The start of this login (a retry reads from the same moment as the first read).
   final DateTime? since;
@@ -369,8 +379,11 @@ class _HistoryTab extends StatelessWidget {
           child: ListView.builder(
             padding: EdgeInsets.zero,
             itemCount: records.length,
-            itemExtent: 30,
-            itemBuilder: (context, i) => _row(i, records[i]),
+            itemBuilder: (context, i) {
+              final row = SizedBox(height: 30, child: _row(i, records[i]));
+              final tickets = [for (final t in this.tickets) if (t.roundId == records[i].roundId) t];
+              return tickets.isEmpty ? row : _TicketRows(tickets: tickets, row: row);
+            },
           ),
         ),
       ],
@@ -954,6 +967,60 @@ class _OswaldOutlined extends StatelessWidget {
           Text(text, maxLines: 1, style: style(null)),
         ],
       ),
+    );
+  }
+}
+
+/// A round with printed tickets: tap its row or the arrow to open one line per ticket in place.
+class _TicketRows extends StatefulWidget {
+  const _TicketRows({required this.tickets, required this.row});
+
+  final List<Spin2WinTicket> tickets;
+  final Widget row;
+
+  @override
+  State<_TicketRows> createState() => _TicketRowsState();
+}
+
+class _TicketRowsState extends State<_TicketRows> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GestureDetector(
+          key: const ValueKey('spin2win-records-arrow'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _open = !_open),
+          child: Stack(
+            children: [
+              widget.row,
+              Positioned(
+                right: 0,
+                top: 7,
+                child: Icon(_open ? Icons.expand_less : Icons.expand_more, size: 16, color: kS2wGold),
+              ),
+            ],
+          ),
+        ),
+        if (_open)
+          for (final t in widget.tickets)
+            Container(
+              key: ValueKey('spin2win-records-ticket-${t.id}'),
+              height: 26,
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              color: t.win > 0 ? const Color(0x3300AA00) : const Color(0x0DFFFFFF),
+              child: Row(
+                children: [
+                  Expanded(flex: 3, child: Text(t.code, style: _kDigits.copyWith(color: const Color(0xFFFFE58A)))),
+                  Expanded(child: Text(spin2WinAmountText(t.totalStake), textAlign: TextAlign.right, style: _kDigits)),
+                  Expanded(child: Text(spin2WinAmountText(t.win), textAlign: TextAlign.right, style: _kDigits.copyWith(color: t.win > 0 ? kS2wGold : null))),
+                ],
+              ),
+            ),
+      ],
     );
   }
 }

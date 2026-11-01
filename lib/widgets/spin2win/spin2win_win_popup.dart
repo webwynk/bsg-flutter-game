@@ -9,6 +9,8 @@
 //
 // Belongs to Spin2Win only.
 
+import '../../print_ticket/spin2win_tickets.dart';
+import 'spin2win_tickets_dialog.dart' show spin2WinTicketAmount;
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
@@ -23,14 +25,65 @@ Spin2WinShades _bonusTileShades(int multiplier) => switch (multiplier) {
       _ => const Spin2WinShades(Color(0xFFE3E9F7), Color(0xFFC7D3EE), Color(0xFF7A8AAE), Color(0xFF5A6A8E), Color(0xFF2A3450)),
     };
 
+/// How many winning tickets the popup lists; the rest are counted, and all are in the records.
+const int kSpin2WinPopupTickets = 3;
+
+/// How much taller the card grows for a print player's tickets.
+double spin2WinTicketsHeight(List<Spin2WinTicket> tickets) {
+  if (tickets.isEmpty) return 0;
+  final winners = tickets.where((t) => t.win > 0).length;
+  final rows = winners.clamp(0, kSpin2WinPopupTickets) + (winners > kSpin2WinPopupTickets ? 1 : 0);
+  return 44 + rows * 21.0;
+}
+
+/// Inside the card, under WIN AMOUNT: the tickets that won, and the round's total play.
+class Spin2WinWinTickets extends StatelessWidget {
+  const Spin2WinWinTickets({super.key, required this.tickets});
+
+  final List<Spin2WinTicket> tickets;
+
+  @override
+  Widget build(BuildContext context) {
+    final winners = [for (final t in tickets) if (t.win > 0) t];
+    final shown = winners.take(kSpin2WinPopupTickets);
+    final more = winners.length - shown.length;
+    final play = tickets.fold<int>(0, (s, t) => s + t.totalStake);
+    const line = TextStyle(fontFamily: kSpin2WinFont, fontWeight: FontWeight.w800, fontSize: 14, height: 1.4, color: Color(0xFFFFE58A), decoration: TextDecoration.none);
+    final head = line.copyWith(fontSize: 11, height: 1.5, letterSpacing: 1.2, color: const Color(0xFF6FF3FF));
+    Widget row(Widget a, Widget b, Widget c) => Row(
+          children: [Expanded(flex: 2, child: a), Expanded(child: b), Expanded(child: c)],
+        );
+    return Column(
+      key: const ValueKey('spin2win-win-tickets'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        row(Text('TICKET', style: head), Text('BET', textAlign: TextAlign.right, style: head),
+            Text('WIN', textAlign: TextAlign.right, style: head)),
+        for (final t in shown)
+          row(
+            Text(t.code, key: ValueKey('spin2win-win-ticket-${t.id}'), maxLines: 1, style: line),
+            Text(spin2WinTicketAmount(t.totalStake), maxLines: 1, textAlign: TextAlign.right, style: line.copyWith(color: const Color(0xFFFFFFFF))),
+            Text(spin2WinTicketAmount(t.win), maxLines: 1, textAlign: TextAlign.right, style: line.copyWith(color: const Color(0xFF7CFF9A))),
+          ),
+        if (more > 0) Text('and $more more ticket${more == 1 ? '' : 's'}', maxLines: 1, style: line.copyWith(color: const Color(0xFFFFFFFF))),
+        Text('Round total play ${spin2WinTicketAmount(play)} - all tickets in Records',
+            maxLines: 1, style: line.copyWith(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFFC7D3EE))),
+      ],
+    );
+  }
+}
+
 /// The darkened screen with the turning rays, and the popup in the middle. Fills its box (and
 /// reaches past it, so a screen wider or taller than the design is darkened too).
 class Spin2WinWinOverlay extends StatefulWidget {
-  const Spin2WinWinOverlay({super.key, required this.number, required this.bonusMultiplier, required this.amount});
+  const Spin2WinWinOverlay({super.key, this.tickets = const [], required this.number, required this.bonusMultiplier, required this.amount});
 
   final int number;
   final int bonusMultiplier;
   final int amount;
+
+  /// A print player's tickets in this round; empty for a normal bet.
+  final List<Spin2WinTicket> tickets;
 
   @override
   State<Spin2WinWinOverlay> createState() => _Spin2WinWinOverlayState();
@@ -108,6 +161,7 @@ class _Spin2WinWinOverlayState extends State<Spin2WinWinOverlay> with TickerProv
                       bonusMultiplier: widget.bonusMultiplier,
                       amount: widget.amount,
                       beat: _beat.value,
+                      tickets: widget.tickets,
                     ),
                   ),
                 ),
@@ -162,6 +216,7 @@ class Spin2WinWinPopup extends StatelessWidget {
     required this.bonusMultiplier,
     required this.amount,
     this.beat = 0,
+    this.tickets = const [],
   });
 
   final int number;
@@ -171,9 +226,13 @@ class Spin2WinWinPopup extends StatelessWidget {
   /// Where the sparkles and floating coins are in their slow beat, 0 to 1.
   final double beat;
 
+  /// A print player's tickets in this round; they grow the card.
+  final List<Spin2WinTicket> tickets;
+
   @override
   Widget build(BuildContext context) {
     final t = Curves.easeInOut.transform(beat);
+    final extra = spin2WinTicketsHeight(tickets);
     Widget sparkle(double left, double top, double size, Color color, double phase) {
       final p = (t + phase) % 1;
       return Positioned(
@@ -222,7 +281,7 @@ class Spin2WinWinPopup extends StatelessWidget {
     return SizedBox(
       key: const ValueKey('spin2win-win-popup'),
       width: 420,
-      height: 326,
+      height: 326 + extra,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -231,7 +290,7 @@ class Spin2WinWinPopup extends StatelessWidget {
             left: 20,
             top: 40,
             width: 380,
-            height: 272,
+            height: 272 + extra,
             child: Container(
               padding: const EdgeInsets.all(5),
               decoration: BoxDecoration(
@@ -251,6 +310,8 @@ class Spin2WinWinPopup extends StatelessWidget {
               child: _CardFace(number: number, bonusMultiplier: bonusMultiplier, amount: amount),
             ),
           ),
+          if (tickets.isNotEmpty)
+            Positioned(left: 50, right: 50, top: 300, height: extra, child: Spin2WinWinTickets(tickets: tickets)),
           // The ribbons, then the banner over them.
           Positioned(left: 44, top: 30, width: 70, height: 44, child: CustomPaint(painter: _RibbonPainter(left: true))),
           Positioned(right: 44, top: 30, width: 70, height: 44, child: CustomPaint(painter: _RibbonPainter(left: false))),

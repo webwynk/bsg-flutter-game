@@ -668,11 +668,13 @@ class Lucky16Provider extends ChangeNotifier {
     }
 
     if (outcome.won) {
-      // A slow answer only leaves the ticket lines off the popup.
-      final List<Lucky16Ticket>? tickets = await _roundTickets(printed, result.roundId);
-      if (stale()) return;
+      // A slow answer fills the ticket lines in while the popup is open.
+      unawaited(_roundTickets(printed, result.roundId).then((tickets) {
+        if (tickets == null || stale() || _spinTarget?.roundId != result.roundId) return;
+        _popupTickets = tickets;
+        notifyListeners();
+      }));
       if (!await holdUntil(_popupOpensAt)) return;
-      _popupTickets = tickets ?? const [];
       _popup = outcome;
       _showCoinFx = false;
       notifyListeners();
@@ -707,7 +709,7 @@ class Lucky16Provider extends ChangeNotifier {
     final read = ticketsForRound;
     if (!printed || read == null) return null;
     try {
-      return await read(roundId).timeout(const Duration(milliseconds: 1200));
+      return await read(roundId).timeout(const Duration(seconds: 4));
     } catch (e) {
       debugPrint('Lucky16Provider: tickets for the win popup: $e');
       return null;

@@ -6,6 +6,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../common/ticket_count_bubble.dart';
 import '../../print_ticket/lucky16_print_controller.dart';
 import 'lucky16_layout.dart';
 
@@ -30,19 +31,30 @@ class Lucky16PrintBar extends StatelessWidget {
       builder: (context, _) {
         if (!controller.showButtons) return const SizedBox.shrink();
         final look = controller.look;
-        final count = controller.tickets.where((t) => t.roundNumber == controller.tickets.first.roundNumber);
         return LayoutBuilder(
           builder: (context, box) {
             final font = box.maxHeight * 0.42;
             return Row(
               children: [
                 Expanded(
-                  child: _PrintButton(
-                    key: const ValueKey('print-tickets'),
-                    label: 'TICKETS (${count.length})',
-                    fontSize: font,
-                    colors: const [Color(0xFFB65CFF), Color(0xFF7B2FD6), Color(0xFF4F1596)],
-                    onTap: onTickets,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    fit: StackFit.expand,
+                    children: [
+                      _PrintButton(
+                        key: const ValueKey('print-tickets'),
+                        label: 'TICKETS',
+                        fontSize: font,
+                        colors: const [Color(0xFFB65CFF), Color(0xFF7B2FD6), Color(0xFF4F1596)],
+                        onTap: onTickets,
+                      ),
+                      if (controller.tickets.isNotEmpty)
+                        Positioned(
+                          top: -font * 0.55,
+                          right: -font * 0.3,
+                          child: TicketCountBubble(count: controller.tickets.length, fontSize: font * 0.62),
+                        ),
+                    ],
                   ),
                 ),
                 SizedBox(width: box.maxWidth * 0.03),

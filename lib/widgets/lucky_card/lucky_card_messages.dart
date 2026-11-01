@@ -107,6 +107,14 @@ LuckyCardProblemDialog luckyCardProblemDialog(LuckyCardProblem problem) {
         endsSession: false,
         autoDismiss: _kAutoDismiss,
       );
+    case LuckyCardProblemKind.notPrinted:
+      return const LuckyCardProblemDialog(
+        icon: Icons.print_disabled_rounded,
+        title: 'NOT PRINTED',
+        message: 'Betting closed before these chips were printed. Your chips were returned.',
+        endsSession: false,
+        autoDismiss: _kAutoDismiss,
+      );
     case LuckyCardProblemKind.connectionProblem:
       return problem.reason == LuckyCardError.accountBlocked ? luckyCardBlockedDialog : luckyCardConnectionLostDialog;
     case LuckyCardProblemKind.betRejected:

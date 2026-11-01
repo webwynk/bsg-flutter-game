@@ -56,8 +56,37 @@ double ticketCodeSize(TicketPaper paper) => paper == TicketPaper.mm58 ? 13 : 16;
 double ticketTotalSize(TicketPaper paper) => paper == TicketPaper.mm58 ? 12 : 14;
 const double ticketLetterSpacing = 0.8;
 
+/// Longer than this is past what the printer driver's default page holds, so the
+/// real height has to be sent with the print.
+const double kTicketDefaultPageMm = 280;
+
+/// The most a Windows paper length can say: 3276 mm, written in tenths of a mm.
+const double kTicketLongestMm = 3270;
+
+/// The page to ask the printer for. A normal ticket keeps the roll page, so the
+/// driver's own setting decides, as it always has. A longer one sends its real
+/// height, or Windows cuts it at the driver's default page.
+PdfPageFormat ticketPrintFormat(TicketPaper paper, double contentHeight) {
+  final roll = ticketPageFormat(paper);
+  if (contentHeight <= kTicketDefaultPageMm * PdfPageFormat.mm) return roll;
+  final longest = kTicketLongestMm * PdfPageFormat.mm;
+  return roll.copyWith(height: contentHeight > longest ? longest : contentHeight);
+}
+
+/// A drawn ticket and the height it came to, in PDF points.
+class TicketPdf {
+  final Uint8List bytes;
+  final double height;
+
+  const TicketPdf(this.bytes, this.height);
+}
+
 /// Draws [ticket] as a PDF for [paper]. Black on white only, for a thermal head.
-Future<Uint8List> buildTicketPdf(TicketContent ticket, TicketPaper paper, TicketFonts fonts) {
+Future<Uint8List> buildTicketPdf(TicketContent ticket, TicketPaper paper, TicketFonts fonts) async =>
+    (await measureTicketPdf(ticket, paper, fonts)).bytes;
+
+/// Draws [ticket] and reads its real height back from the finished page.
+Future<TicketPdf> measureTicketPdf(TicketContent ticket, TicketPaper paper, TicketFonts fonts) async {
   final narrow = paper == TicketPaper.mm58;
   final body = narrow ? 8.5 : 10.0;
 
@@ -115,27 +144,37 @@ Future<Uint8List> buildTicketPdf(TicketContent ticket, TicketPaper paper, Ticket
           )
         else
           dash(),
-        centred('TICKET', style(narrow ? 7.5 : 8.5)),
-        // Shrinks rather than clips if a code ever grows past the line.
-        pw.FittedBox(
-          fit: pw.BoxFit.scaleDown,
-          child: pw.Text(ticket.code, style: style(ticketCodeSize(paper), bold: true, spacing: ticketLetterSpacing)),
-        ),
-        dash(),
-        info('Player', ticket.player),
-        info('Round', '${ticket.roundNumber}'),
+        if (ticket.idLine != null)
+          pw.FittedBox(
+            fit: pw.BoxFit.scaleDown,
+            child: pw.Text(ticket.idLine!, style: style(body, bold: true)),
+          )
+        else ...[
+          centred('TICKET', style(narrow ? 7.5 : 8.5)),
+          // Shrinks rather than clips if a code ever grows past the line.
+          pw.FittedBox(
+            fit: pw.BoxFit.scaleDown,
+            child: pw.Text(ticket.code, style: style(ticketCodeSize(paper), bold: true, spacing: ticketLetterSpacing)),
+          ),
+          dash(),
+          info('Player', ticket.player),
+          info('Round', ticket.roundId ?? '${ticket.roundNumber}'),
+        ],
         info('Time', ticketTime(ticket.printedAt, paper)),
         if (ticket.copyAt != null) info('Copy', ticketTime(ticket.copyAt!, paper)),
         dash(),
         for (final group in ticket.groups) ...[
           if (group.heading != null) pw.Text(group.heading!, style: style(body, bold: true)),
-          for (final line in group.lines) row(line.text, '${line.amount}'),
+          if (group.flow != null)
+            pw.Text(group.flow!, style: style(body))
+          else
+            for (final line in group.lines) row(line.text, '${line.amount}'),
           if (group != ticket.groups.last) pw.SizedBox(height: 3),
         ],
         dash(),
         row(
           'TOTAL',
-          '${ticket.total}',
+          ticketAmount(ticket.total),
           leftStyle: style(ticketTotalSize(paper), bold: true),
           rightStyle: style(ticketTotalSize(paper), bold: true),
         ),
@@ -146,7 +185,8 @@ Future<Uint8List> buildTicketPdf(TicketContent ticket, TicketPaper paper, Ticket
       ],
     ),
   ));
-  return doc.save();
+  final bytes = await doc.save();
+  return TicketPdf(bytes, doc.document.pdfPageList.pages.first.pageFormat.height);
 }
 
 /// Prints through the Windows printer driver, using the `printing` package.
@@ -180,13 +220,13 @@ class PdfTicketRenderer implements TicketRenderer {
       return TicketPrintResult(TicketPrintStatus.notReady, 'Printer not ready: ${printer.name}');
     }
     try {
-      final format = ticketPageFormat(paper);
+      final pdf = await measureTicketPdf(ticket, paper, fonts);
       final printed = await Printing.directPrintPdf(
         printer: Printer(url: printer.name, name: printer.name),
         name: ticket.code,
-        format: format,
+        format: ticketPrintFormat(paper, pdf.height),
         dynamicLayout: false,
-        onLayout: (_) => buildTicketPdf(ticket, paper, fonts),
+        onLayout: (_) async => pdf.bytes,
       );
       return printed
           ? TicketPrintResult(TicketPrintStatus.sent, 'Sent to ${printer.name}. Check the paper came out.')

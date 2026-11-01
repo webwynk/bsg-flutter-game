@@ -29,7 +29,10 @@ class DesktopGameLayout extends StatelessWidget {
   /// (a spin in progress, the landed result) if the window is resized and
   /// another layout takes over.
   final Key? wheelKey;
-  const DesktopGameLayout({super.key, required this.onSpin, this.wheelKey});
+  const DesktopGameLayout({super.key, required this.onSpin, this.wheelKey, this.printSlot});
+
+  /// The Print and Tickets buttons; null unless this player prints.
+  final Widget? printSlot;
 
   static const double designWidth = 1280;
   static const double designHeight = 720;
@@ -104,7 +107,7 @@ class DesktopGameLayout extends StatelessWidget {
                 // The four action buttons, bottom right.
                 Positioned(left: 890, top: 572, width: 380, height: 128, child: RightPanelParts.desktopButtons()),
 
-                const Positioned(left: 0, top: 0, right: 0, child: DesktopTopBar()),
+                Positioned(left: 0, top: 0, right: 0, child: DesktopTopBar(printSlot: printSlot)),
               ],
             ),
           ),

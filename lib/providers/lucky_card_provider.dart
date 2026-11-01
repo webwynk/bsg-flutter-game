@@ -31,6 +31,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/lucky_card_board.dart';
 import '../models/lucky_card_models.dart';
+import '../print_ticket/lucky_card_tickets.dart';
 import '../services/lucky_card_api_service.dart';
 import '../services/lucky_card_round_clock.dart';
 import '../services/lucky_card_round_sync.dart';
@@ -101,7 +102,7 @@ enum LuckyCardPhase {
 }
 
 /// The kinds of problem the screen has to tell the player about.
-enum LuckyCardProblemKind { betRejected, connectionProblem, roundUnresolved }
+enum LuckyCardProblemKind { notPrinted, betRejected, connectionProblem, roundUnresolved }
 
 /// A problem, with its reason.
 class LuckyCardProblem {
@@ -158,6 +159,20 @@ class LuckyCardProvider extends ChangeNotifier {
   /// the chips are no longer "unsent", so the background balance check must not
   /// subtract them again.
   bool _submittedBets = false;
+
+  /// True while this round is played with printed tickets. No bet is sent by
+  /// itself: only a ticket counts.
+  bool _printMode = false;
+
+  /// The round this player holds tickets in, and their total there.
+  String? _printedRoundId;
+  int _printedTotal = 0;
+
+  /// Reads the player's tickets for a round; set by the print controller.
+  Future<List<LuckyCardTicket>> Function(String roundId)? ticketsForRound;
+
+  /// The tickets of the round on the win popup.
+  List<LuckyCardTicket> _popupTickets = const [];
 
   bool _attached = false;
 
@@ -240,7 +255,47 @@ class LuckyCardProvider extends ChangeNotifier {
   int stakeOn(LuckyCard card) => _board.stakeOn(card);
   int suitTotal(LuckyCardSuit suit) => _board.suitTotal(suit);
   int rankTotal(LuckyCardRank rank) => _board.rankTotal(rank);
-  int get total => _board.total;
+  /// PLAY: the board, plus the tickets already printed this round.
+  int get total => _board.total + _printedTotal;
+
+  bool get printMode => _printMode;
+  List<LuckyCardTicket> get popupTickets => _popupTickets;
+
+  /// Print applies to this round, or stops applying.
+  void setPrintMode(bool on) {
+    if (_printMode == on) return;
+    _printMode = on;
+    notifyListeners();
+  }
+
+  /// The chips on the board, for a Print press.
+  Map<LuckyCard, int> boardForPrint() =>
+      {for (final e in _board.toBetMap().entries) if (e.value > 0) e.key: e.value};
+
+  /// The server sold a ticket for the board. Its chips were already taken from
+  /// the balance on screen, and the server's figure now replaces that.
+  void ticketSold({
+    required String roundId,
+    required int roundTotal,
+    required int balance,
+    required int ledgerVersion,
+  }) {
+    _board.reset();
+    _printedRoundId = roundId;
+    _printedTotal = roundTotal;
+    _wallet.syncAuthoritativeBalance(balance, ledgerVersion);
+    _lastOutcome = null;
+    notifyListeners();
+  }
+
+  /// Chips still on the board when a print round closes were never a bet.
+  void _returnUnprintedChips() {
+    if (_board.isEmpty) return;
+    final onBoard = _board.reset();
+    _wallet.setLocalBalance(_wallet.balance + onBoard);
+    notifyListeners();
+    onProblem?.call(const LuckyCardProblem(LuckyCardProblemKind.notPrinted, LuckyCardError.printRequired));
+  }
   bool get isBoardEmpty => _board.isEmpty;
   LuckyCardChip? get activeChip => _board.activeChip;
   bool get isLocked => _board.isLocked;
@@ -393,6 +448,10 @@ class LuckyCardProvider extends ChangeNotifier {
   void _onLockMark() {
     _lastOutcome = null;
     _lockBoard();
+    if (_printMode) {
+      _returnUnprintedChips();
+      return;
+    }
     unawaited(_submitBet());
   }
 
@@ -414,6 +473,9 @@ class LuckyCardProvider extends ChangeNotifier {
   void endRound({required bool saveForRebet}) {
     _board.finishRound(saveForRebet: saveForRebet);
     _submittedBets = false;
+    _printedRoundId = null;
+    _printedTotal = 0;
+    _popupTickets = const [];
     _betStatus = LuckyCardBetStatus.idle;
     _submittedRoundId = null;
     _applyLockToCountdown();
@@ -452,6 +514,10 @@ class LuckyCardProvider extends ChangeNotifier {
     if (_board.isEmpty || _submittedBets) return;
     if (sync.countdown <= kLuckyCardLockCountdown) {
       _lockBoard();
+      if (_printMode) {
+        _returnUnprintedChips();
+        return;
+      }
       unawaited(_submitBet());
     }
   }
@@ -518,11 +584,13 @@ class LuckyCardProvider extends ChangeNotifier {
     final epoch = _epoch;
     bool stale() => epoch != _epoch;
 
-    final stake = _board.total;
+    final printed = _printedRoundId == result.roundId;
+    final stake = printed ? _printedTotal : _board.total;
     // Sent (or still on its way): this player is a bettor. The round to ask about
     // is the one the bet went to, as in Triple Chance's Fix #6; a bet that was
     // still being sent when the result came belongs to the result's own round.
-    final String? betRoundId = _submittedBets ? (_submittedRoundId ?? result.roundId) : null;
+    final String? betRoundId =
+        printed ? result.roundId : (_submittedBets ? (_submittedRoundId ?? result.roundId) : null);
 
     final landed = Completer<void>();
     _wheelLanded = landed;
@@ -592,6 +660,12 @@ class LuckyCardProvider extends ChangeNotifier {
     }
 
     if (outcome.won) {
+      // A slow answer fills the ticket lines in while the popup is open.
+      unawaited(_roundTickets(printed, result.roundId).then((tickets) {
+        if (tickets == null || stale() || _spinTarget?.roundId != result.roundId) return;
+        _popupTickets = tickets;
+        notifyListeners();
+      }));
       if (!await holdUntil(_popupOpensAt)) return;
       _popup = outcome;
       _showCoinFx = false;
@@ -621,6 +695,17 @@ class LuckyCardProvider extends ChangeNotifier {
     _showCoinFx = false;
     _popup = null;
     endRound(saveForRebet: !result.isCatchUpReplay);
+  }
+
+  Future<List<LuckyCardTicket>?> _roundTickets(bool printed, String roundId) async {
+    final read = ticketsForRound;
+    if (!printed || read == null) return null;
+    try {
+      return await read(roundId).timeout(const Duration(seconds: 4));
+    } catch (e) {
+      debugPrint('LuckyCardProvider: tickets for the win popup: $e');
+      return null;
+    }
   }
 
   /// Asks the server what this player's bet came to, at Triple Chance's gaps

@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import '../providers/lucky16_provider.dart';
-import 'lucky16_print_service.dart';
+import 'print_settings_store.dart';
 import 'lucky16_tickets.dart';
 import 'printer_readiness.dart';
 import 'ticket_renderer.dart';
@@ -85,7 +85,11 @@ class Lucky16PrintController extends ChangeNotifier {
   void _onGame() {
     final now = game.countdown;
     // A new round has begun: Print may have changed for it.
-    if (now > _lastCountdown + 30) unawaited(refresh());
+    if (now > _lastCountdown + 30) {
+      unawaited(refresh());
+      // A ticket's win is known only once its round is drawn.
+      unawaited(reloadTickets());
+    }
     _lastCountdown = now;
     if (!_disposed) notifyListeners();
   }
@@ -104,7 +108,7 @@ class Lucky16PrintController extends ChangeNotifier {
 
   Future<void> reloadTickets() async {
     try {
-      final list = await api.tickets(since: sessionStart());
+      final list = await api.tickets(since: sessionStart()).timeout(const Duration(seconds: 3));
       if (_disposed) return;
       _tickets = list;
       notifyListeners();

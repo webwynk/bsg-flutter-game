@@ -7,11 +7,12 @@
 import 'package:flutter/material.dart';
 
 import '../../print_ticket/lucky16_print_controller.dart';
-import '../../print_ticket/lucky16_print_service.dart';
+import '../../print_ticket/print_settings_store.dart';
 import '../../print_ticket/lucky16_tickets.dart';
 import '../../print_ticket/printer_readiness.dart';
 import '../../print_ticket/ticket_model.dart';
 import '../../print_ticket/ticket_renderer.dart';
+import '../../utils/round_id.dart';
 import 'lucky16_top_bar.dart';
 
 const Color _kGold = Color(0xFFD4AF37);
@@ -236,7 +237,7 @@ class _TicketRow extends StatelessWidget {
             child: Text(ticket.code,
                 style: const TextStyle(fontFamily: 'Oswald', fontWeight: FontWeight.w700, fontSize: 22, color: Color(0xFFFFE58A))),
           ),
-          SizedBox(width: 130, child: Text('${ticket.roundNumber}', style: body)),
+          SizedBox(width: 130, child: Text(GameRound.lucky16.id(ticket.roundNumber), style: body)),
           SizedBox(width: 110, child: Text(_clock(ticket.createdAt), style: body)),
           Expanded(child: Text(ticket.betsText, maxLines: 2, overflow: TextOverflow.ellipsis, style: body)),
           SizedBox(

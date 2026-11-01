@@ -5,7 +5,7 @@
 import 'package:best_smart_game/models/lucky16_board.dart';
 import 'package:best_smart_game/models/lucky16_models.dart';
 import 'package:best_smart_game/print_ticket/lucky16_print_controller.dart';
-import 'package:best_smart_game/print_ticket/lucky16_print_service.dart';
+import 'package:best_smart_game/print_ticket/print_settings_store.dart';
 import 'package:best_smart_game/print_ticket/lucky16_tickets.dart';
 import 'package:best_smart_game/print_ticket/printer_readiness.dart';
 import 'package:best_smart_game/print_ticket/ticket_model.dart';
@@ -239,6 +239,10 @@ void main() {
     await rig.world.run(const Duration(seconds: 3));
     expect(p.total, 0);
     expect(p.popupTickets, isEmpty);
+    await rig.world.run(const Duration(seconds: 12));
+    final wins = print.controller.tickets.fold<int>(0, (s, t) => s + t.win);
+    expect(wins, p.lastOutcome?.payout ?? wins, reason: 'the list is read again once the round is drawn');
+    expect(wins, greaterThan(0));
     print.controller.dispose();
     rig.provider.leave();
     await rig.world.run(const Duration(seconds: 1));
@@ -321,6 +325,32 @@ void main() {
     expect(print.renderer.printed.last.isCopy, isTrue);
     expect(print.api.marks.last, ('id1', 'printed', true));
     expect(print.api.requests, hasLength(1), reason: 'a reprint never charges');
+    print.controller.dispose();
+    rig.provider.leave();
+    await rig.world.run(const Duration(seconds: 1));
+  });
+
+  testWidgets('wins by ticket: a winner, a loser, and all add up to the round', (tester) async {
+    final rig = BetRig(tester);
+    await rig.open();
+    final print = Print(rig);
+    await rig.world.run(const Duration(milliseconds: 100));
+    final p = rig.provider;
+    p.selectChip(Lucky16Chip.ten);
+    p.tapCard(winner);
+    await print.press(tester);
+    p.tapCard(Lucky16Card.all.firstWhere((c) => c != winner));
+    p.tapCard(Lucky16Card.all.firstWhere((c) => c != winner));
+    await print.press(tester);
+    await rig.world.runUntil(87);
+    await landWheelAt(rig, 95);
+    await rig.world.run(const Duration(seconds: 2));
+    final paid = p.lastOutcome!.payout;
+    await rig.world.run(const Duration(seconds: 18));
+    final tickets = {for (final t in print.controller.tickets) t.code: t.win};
+    expect(tickets['LS-R01-0001'], 10 * 14 * bonus);
+    expect(tickets['LS-R01-0002'], 0, reason: 'a ticket on a losing place wins nothing, bonus or not');
+    expect(tickets.values.fold<int>(0, (a, b) => a + b), paid);
     print.controller.dispose();
     rig.provider.leave();
     await rig.world.run(const Duration(seconds: 1));

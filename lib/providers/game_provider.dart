@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../models/spin_result_model.dart';
 import '../models/bet_model.dart';
 import '../models/play_limits_config.dart';
+import '../print_ticket/tc_tickets.dart';
 import '../services/round_api_service.dart';
 import '../services/sound_service.dart';
 import '../services/round_sync_service.dart';
@@ -222,7 +223,73 @@ class GameProvider extends ChangeNotifier {
   int get triplePage         => _triplePage;
 
   /// Total stake across all three boards.
-  int get totalBet => _board.total;
+  /// PLAY: the board, plus the tickets already printed this round.
+  int get totalBet => _board.total + _printedTotal;
+
+  // ── Print ──────────────────────────────────────────────────────────────
+  // True while this round is played with printed tickets: no bet is sent by
+  // itself, only a ticket counts. All of this stays at its default for a
+  // player who does not print, so nothing below changes for them.
+  bool _printMode = false;
+  String? _printedRoundId;
+  int _printedTotal = 0;
+  List<TcTicket> _popupTickets = const [];
+  List<TcTicket> _printTickets = const [];
+
+  /// Reads the player's tickets for a round; set by the print controller.
+  Future<List<TcTicket>> Function(String roundId)? ticketsForRound;
+
+  /// Reads the session's tickets again; set by the print controller.
+  Future<void> Function()? reloadPrintTickets;
+
+  bool get printMode => _printMode;
+  List<TcTicket> get popupTickets => _popupTickets;
+  List<TcTicket> get printTickets => _printTickets;
+
+  void setPrintMode(bool on) {
+    if (_printMode == on) return;
+    _printMode = on;
+    notifyListeners();
+  }
+
+  /// The print controller has gone with its screen.
+  void leavePrint() {
+    _printMode = false;
+    _printedRoundId = null;
+    _printedTotal = 0;
+    _popupTickets = const [];
+    _printTickets = const [];
+  }
+
+  void setPrintTickets(List<TcTicket> tickets) {
+    _printTickets = tickets;
+    notifyListeners();
+  }
+
+  /// The chips on the board, for a Print press.
+  Map<String, Map<String, int>> boardForPrint() => {
+        'single': Map<String, int>.from(_board.single),
+        'double': Map<String, int>.from(_board.double_),
+        'triple': Map<String, int>.from(_board.triple),
+      };
+
+  /// The server sold a ticket for the board. Its chips were already taken from
+  /// the balance on screen, and the server's figure now replaces that.
+  void ticketSold(
+    AuthProvider auth, {
+    required String roundId,
+    required int roundTotal,
+    required int balance,
+    required int ledgerVersion,
+  }) {
+    _board.clearAll();
+    _history.clear();
+    _printedRoundId = roundId;
+    _printedTotal = roundTotal;
+    auth.syncAuthoritativeBalance(balance, ledgerVersion);
+    _checkAndRestoreActiveChip();
+    notifyListeners();
+  }
 
   /// Per-mode play amount for the left tab strip badges.
   int playForMode(String m) {
@@ -1011,7 +1078,8 @@ class GameProvider extends ChangeNotifier {
     final singleSnap = Map<String, int>.from(_board.single);
     final doubleSnap  = Map<String, int>.from(_board.double_);
     final tripleSnap  = Map<String, int>.from(_board.triple);
-    final totalDeducted = _board.total; // already deducted server-side via submitBets
+    final printedRound = _printedRoundId != null && _printedRoundId == serverResult.id.replaceFirst('round_', '');
+    final totalDeducted = printedRound ? _printedTotal : _board.total; // already deducted server-side
 
     // Issue #22 resolution: no local win calculation anymore. The drawn
     // digits are shown immediately (everyone sees the same digits at the
@@ -1077,7 +1145,7 @@ class GameProvider extends ChangeNotifier {
       // FIX BUG #6: Use the round ID bets were submitted to, NOT the result round ID.
       // After a round transition, serverResult.id may point to a DIFFERENT round than
       // the one the bet was placed on, causing get_my_round_result to return placed_bet=false.
-      final betRoundId = RoundSyncService().betRoundId;
+      final betRoundId = printedRound ? _printedRoundId : RoundSyncService().betRoundId;
       final cleanRoundId = (betRoundId ?? serverResult.id).replaceFirst('round_', '');
       final results = await Future.wait([
         _fetchConfirmedResult(cleanRoundId, pendingSpin, epoch),
@@ -1187,6 +1255,8 @@ class GameProvider extends ChangeNotifier {
     }
 
     if (resolvedResult.won) {
+      // A slow answer fills the ticket lines in while the popup is open.
+      if (printedRound) unawaited(_loadPopupTickets(_printedRoundId!, stale));
       // Popup opens at W+1.800 and plays its win sound. Issue #106: the coin
       // fountain is cleared in this same notifyListeners(), so the two can
       // never be on screen together. The cut is invisible because the popup's
@@ -1255,6 +1325,9 @@ class GameProvider extends ChangeNotifier {
     _submittedBets = false;
     _betStatus = BetSubmissionStatus.idle;
     _submittedRoundId = null;
+    _printedRoundId = null;
+    _printedTotal = 0;
+    _popupTickets = const [];
     _board.clearAll();
     _history.clear();
     _checkAndRestoreActiveChip();
@@ -1408,6 +1481,19 @@ class GameProvider extends ChangeNotifier {
   /// of betting. If that call is rejected the stake was never actually taken —
   /// the RAISE rolls the deduction back — so the local balance must be restored
   /// or the player sees coins missing that they still have.
+  Future<void> _loadPopupTickets(String roundId, bool Function() stale) async {
+    final read = ticketsForRound;
+    if (read == null) return;
+    try {
+      final tickets = await read(roundId).timeout(const Duration(seconds: 4));
+      if (stale()) return;
+      _popupTickets = tickets;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('GameProvider: tickets for the win popup: $e');
+    }
+  }
+
   void refundRejectedBets(AuthProvider auth) {
     if (_board.isEmpty) return;
     auth.updateBalance(auth.coinBalance + _board.total);

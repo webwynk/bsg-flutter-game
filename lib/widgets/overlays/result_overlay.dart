@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../models/spin_result_model.dart';
+import '../../print_ticket/tc_tickets.dart';
 import '../../providers/game_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_decorations.dart';
@@ -50,7 +51,7 @@ class ResultOverlay extends StatelessWidget {
                     maxWidth: 420,
                     maxHeight: constraints.maxHeight * 0.96,
                   ),
-                  child: _buildCard(context, result).animate()
+                  child: _buildCard(context, result, game.popupTickets).animate()
                     .scale(begin: const Offset(0.5, 0.5),
                       curve: Curves.easeOutCubic, duration: 400.ms)
                     .fadeIn(duration: 300.ms),
@@ -73,7 +74,7 @@ class ResultOverlay extends StatelessWidget {
   /// `NoSuchMethodError` on screen, in the one widget whose job is to show the
   /// player what they just won. It is always `GameProvider.lastResult`, a
   /// `SpinResult`, by the time this is reached (the caller null-checks it).
-  Widget _buildCard(BuildContext context, SpinResult result) {
+  Widget _buildCard(BuildContext context, SpinResult result, List<TcTicket> tickets) {
     return Container(
       decoration: AppDecorations.resultCard.copyWith(
         image: const DecorationImage(
@@ -123,14 +124,17 @@ class ResultOverlay extends StatelessWidget {
           const SizedBox(height: 18),
 
           // 3. Bottom Row: Single, Double, Triple breakdowns
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _breakdownText('Single', result.singleWinAmount),
-              _breakdownText('Double', result.doubleWinAmount),
-              _breakdownText('Triple', result.tripleWinAmount),
-            ],
-          ),
+          if (tickets.isEmpty)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _breakdownText('Single', result.singleWinAmount),
+                _breakdownText('Double', result.doubleWinAmount),
+                _breakdownText('Triple', result.tripleWinAmount),
+              ],
+            )
+          else
+            _TicketWins(result: result, tickets: tickets),
           const SizedBox(height: 12),
         ],
       ),
@@ -163,5 +167,70 @@ class ResultOverlay extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// How many ticket lines the popup lists; the rest are counted, and all are in History.
+const int kTcPopupTickets = 3;
+
+/// For a print player: each board that won with its winning number, the tickets
+/// that won on it, and the round's total play. A set height, so it never overflows.
+class _TicketWins extends StatelessWidget {
+  const _TicketWins({required this.result, required this.tickets});
+
+  final SpinResult result;
+  final List<TcTicket> tickets;
+
+  @override
+  Widget build(BuildContext context) {
+    final boards = <(String, String, int Function(TcTicket))>[
+      ('SINGLE', '${result.black}', (t) => t.singleWin),
+      ('DOUBLE', '${result.green}${result.black}', (t) => t.doubleWin),
+      ('TRIPLE', '${result.red}${result.green}${result.black}', (t) => t.tripleWin),
+    ];
+    var left = kTcPopupTickets;
+    var hidden = 0;
+    final rows = <Widget>[];
+    const line = TextStyle(fontFamily: 'Oswald', fontSize: 13, height: 1.35, fontWeight: FontWeight.w600, color: Colors.white);
+    for (final (name, number, winOf) in boards) {
+      final winners = [for (final t in tickets) if (winOf(t) > 0) t];
+      if (winners.isEmpty) continue;
+      rows.add(Text('$name  $number', maxLines: 1, style: line.copyWith(color: AppColors.goldBright)));
+      for (final t in winners) {
+        if (left == 0) {
+          hidden++;
+          continue;
+        }
+        left--;
+        rows.add(Row(
+          key: ValueKey('tc-win-ticket-${t.id}-$name'),
+          children: [
+            Expanded(flex: 2, child: Text(t.code, maxLines: 1, style: line.copyWith(color: const Color(0xFFFFE58A)))),
+            Expanded(child: Text(_grouped(t.totalStake), maxLines: 1, textAlign: TextAlign.right, style: line)),
+            Expanded(child: Text(_grouped(winOf(t)), maxLines: 1, textAlign: TextAlign.right, style: line.copyWith(color: const Color(0xFF7CFF9A)))),
+          ],
+        ));
+      }
+    }
+    final play = tickets.fold<int>(0, (s, t) => s + t.totalStake);
+    return Column(
+      key: const ValueKey('tc-win-tickets'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ...rows,
+        if (hidden > 0) Text('and $hidden more ticket${hidden == 1 ? '' : 's'}', maxLines: 1, style: line),
+        Text('Round total play ${_grouped(play)} - all tickets in History', maxLines: 1, style: line.copyWith(fontSize: 11, color: Colors.white70)),
+      ],
+    );
+  }
+
+  static String _grouped(int value) {
+    final digits = value.toString();
+    final out = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) out.write(',');
+      out.write(digits[i]);
+    }
+    return out.toString();
   }
 }

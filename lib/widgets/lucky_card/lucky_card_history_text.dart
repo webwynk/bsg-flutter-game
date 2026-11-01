@@ -11,6 +11,7 @@
 //
 // Belongs to Lucky Card only.
 
+import '../../utils/round_id.dart';
 import '../../models/lucky_card_history_model.dart';
 import '../../models/lucky_card_models.dart';
 import 'lucky_card_panel.dart';
@@ -63,7 +64,7 @@ String luckyCardCardWords(LuckyCard card) => '${card.rank.label} of ${card.suit.
 
 /// The round detail's four facts, label then value, in the order they are shown.
 List<(String, String)> luckyCardHistoryDetailLines(LuckyCardHistoryEntry e) => [
-      ('ROUND', '${e.roundNumber}'),
+      ('ROUND', GameRound.luckyCard.id(e.roundNumber)),
       ('WINNING CARD', luckyCardCardWords(e.winningCard)),
       ('BONUS', luckyCardBonusLabel(e.bonusMultiplier)),
       ('TOTAL BET', '${luckyCardGrouped(e.stake)} coins'),
@@ -71,5 +72,5 @@ List<(String, String)> luckyCardHistoryDetailLines(LuckyCardHistoryEntry e) => [
 
 /// What a screen reader says for one line of the list.
 String luckyCardHistoryRowSemantics(LuckyCardHistoryEntry e, int serial) =>
-    'Line $serial, round ${e.roundNumber}, played ${luckyCardGrouped(e.stake)}, '
+    'Line $serial, round ${GameRound.luckyCard.id(e.roundNumber)}, played ${luckyCardGrouped(e.stake)}, '
     '${e.won ? 'won ${luckyCardGrouped(e.payout)}' : 'no win'}. Tap for details.';

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -6,7 +5,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/lucky16_models.dart';
 import 'lucky16_tickets.dart';
-import 'ticket_model.dart';
 
 typedef Lucky16PrintRpc = Future<dynamic> Function(String function, Map<String, dynamic>? params);
 
@@ -72,34 +70,5 @@ class SupabaseLucky16PrintApi implements Lucky16PrintApi {
   @override
   Future<void> mark(String ticketId, String status, {bool reprint = false}) async {
     await _rpc('print_mark_ticket', {'p_ticket_id': ticketId, 'p_status': status, 'p_reprint': reprint});
-  }
-}
-
-/// The printer and paper chosen on this computer.
-class PrintSettingsStore {
-  /// The settings file; replaced in tests.
-  final File file;
-
-  PrintSettingsStore({File? file})
-      : file = file ?? File('${Platform.environment['APPDATA'] ?? '.'}\\BSG\\print_settings.json');
-
-  Future<Map<String, dynamic>> _read() async {
-    try {
-      return Map<String, dynamic>.from(jsonDecode(await file.readAsString()) as Map);
-    } catch (_) {
-      return const {};
-    }
-  }
-
-  Future<String?> printer() async => (await _read())['printer'] as String?;
-
-  Future<TicketPaper> paper() async {
-    final saved = (await _read())['paper'];
-    return TicketPaper.values.firstWhere((p) => p.name == saved, orElse: () => TicketPaper.mm80);
-  }
-
-  Future<void> save(String printer, TicketPaper paper) async {
-    await file.parent.create(recursive: true);
-    await file.writeAsString(jsonEncode({'printer': printer, 'paper': paper.name}));
   }
 }

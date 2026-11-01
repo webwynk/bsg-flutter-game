@@ -25,6 +25,7 @@ import 'lucky_card_layout.dart';
 import 'lucky_card_messages.dart';
 import 'lucky_card_palette.dart';
 import 'lucky_card_panel.dart';
+import 'lucky_card_print_bar.dart';
 import 'lucky_card_readouts.dart';
 import 'lucky_card_status_strip.dart';
 import 'lucky_card_top_bar.dart';
@@ -183,7 +184,11 @@ class LuckyCardTopBarBinding extends StatelessWidget {
     this.onInfo,
     this.onHistory,
     this.notice,
+    this.printSlot,
   });
+
+  /// The Print and Tickets buttons; null unless this player prints.
+  final Widget? printSlot;
 
   final LuckyCardProvider provider;
   final LuckyCardLayout layout;
@@ -211,7 +216,8 @@ class LuckyCardTopBarBinding extends StatelessWidget {
     return LuckyCardSelector<LuckyCardTopBarSnapshot>(
       provider: provider,
       select: LuckyCardTopBarSnapshot.of,
-      builder: (context, s) => LuckyCardTopBar(
+      builder: (context, s) {
+        final bar = LuckyCardTopBar(
         layout: layout,
         art: art,
         bleed: bleed,
@@ -224,7 +230,15 @@ class LuckyCardTopBarBinding extends StatelessWidget {
         onToggleSound: onToggleSound,
         onInfo: onInfo,
         onHistory: onHistory,
-      ),
+      );
+        final slot = printSlot;
+        if (slot == null) return bar;
+        return Stack(
+          fit: StackFit.expand,
+          clipBehavior: Clip.none,
+          children: [bar, Positioned.fromRect(rect: LuckyCardPrintBar.slot(layout), child: slot)],
+        );
+      },
     );
   }
 }

@@ -254,9 +254,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(s.shows('records-dialog'), isTrue);
       expect(s.reads, [_Screen.login]);
-      expect(s.text('records-row-0'), allOf(contains('R-1082451'), contains('900'), contains('7'), contains('2x'), contains('WIN')));
-      expect(s.text('records-row-1'), allOf(contains('R-1082450'), contains('LOSE'), contains('N')));
-      expect(s.text('records-row-2'), contains('R-1082449'));
+      expect(s.text('records-row-0'), allOf(contains('SW-1082451'), contains('900'), contains('7'), contains('2x'), contains('WIN')));
+      expect(s.text('records-row-1'), allOf(contains('SW-1082450'), contains('LOSE'), contains('N')));
+      expect(s.text('records-row-2'), contains('SW-1082449'));
       expect(s.text('records-total-play'), contains('160'));
       expect(s.text('records-total-win'), contains('990'));
 

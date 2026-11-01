@@ -5,7 +5,33 @@ class TicketGroup {
   final String? heading;
   final List<TicketLine> lines;
 
-  const TicketGroup({this.heading, required this.lines});
+  /// The bets as printed, in place of [lines] and with no line amounts. [lines]
+  /// still give the ticket's total.
+  final String? flow;
+
+  const TicketGroup({this.heading, required this.lines, this.flow});
+}
+
+/// A Triple Chance board on paper, in the order given: each chip amount once,
+/// smallest first, after the numbers on it: "2, 6, 700 (5) | 40, 60, 70 (500)".
+String ticketFlow(List<(String, int)> bets) {
+  final byAmount = <int, List<String>>{};
+  for (final (name, amount) in bets) {
+    byAmount.putIfAbsent(amount, () => []).add(name);
+  }
+  final amounts = byAmount.keys.toList()..sort();
+  return [for (final a in amounts) '${byAmount[a]!.join(', ')} (${ticketAmount(a)})'].join(' | ');
+}
+
+/// A coin amount with a comma every three digits.
+String ticketAmount(int value) {
+  final digits = value.toString();
+  final out = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) out.write(',');
+    out.write(digits[i]);
+  }
+  return out.toString();
 }
 
 /// A printed line: the compact bets on the left, their total on the right.
@@ -28,7 +54,7 @@ class TicketLine {
         same.add(bets[i].$1);
         i++;
       }
-      parts.add('${same.join(', ')} ($amount)');
+      parts.add('${same.join(', ')} (${ticketAmount(amount)})');
     }
     return TicketLine(parts.join(', '), bets.fold(0, (sum, bet) => sum + bet.$2));
   }
@@ -45,6 +71,12 @@ class TicketContent {
   final DateTime? copyAt;
   final List<TicketGroup> groups;
 
+  /// The round as printed, such as LS-17345678.
+  final String? roundId;
+
+  /// Ticket id, round id and player id on one line, in place of their own lines.
+  final String? idLine;
+
   const TicketContent({
     required this.gameTitle,
     required this.code,
@@ -53,6 +85,8 @@ class TicketContent {
     required this.printedAt,
     required this.groups,
     this.copyAt,
+    this.roundId,
+    this.idLine,
   });
 
   bool get isCopy => copyAt != null;
@@ -68,6 +102,8 @@ class TicketContent {
         roundNumber: roundNumber,
         printedAt: printedAt,
         groups: groups,
+        roundId: roundId,
+        idLine: idLine,
         copyAt: at,
       );
 }

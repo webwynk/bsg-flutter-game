@@ -92,6 +92,14 @@ Spin2WinProblemDialog spin2WinProblemDialog(Spin2WinProblem problem) {
       return kSpin2WinServerErrorDialog;
     case Spin2WinProblemKind.connectionProblem:
       return spin2WinDialogForConnection(problem.reason);
+    case Spin2WinProblemKind.notPrinted:
+      return const Spin2WinProblemDialog(
+        icon: Icons.print_disabled_rounded,
+        title: 'NOT PRINTED',
+        message: 'Betting closed before these chips were printed. Your chips were returned.',
+        endsSession: false,
+        autoDismiss: _kAutoDismiss,
+      );
     case Spin2WinProblemKind.betRejected:
       final (title, message) = switch (problem.reason) {
         Spin2WinError.insufficientCoins => (

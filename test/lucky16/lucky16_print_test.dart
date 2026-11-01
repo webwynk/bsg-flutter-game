@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:best_smart_game/models/lucky16_models.dart';
 import 'package:best_smart_game/print_ticket/lucky16_print_controller.dart';
-import 'package:best_smart_game/print_ticket/lucky16_print_service.dart';
+import 'package:best_smart_game/print_ticket/print_settings_store.dart';
 import 'package:best_smart_game/print_ticket/lucky16_tickets.dart';
 import 'package:best_smart_game/print_ticket/printer_readiness.dart';
 import 'package:best_smart_game/print_ticket/ticket_model.dart';

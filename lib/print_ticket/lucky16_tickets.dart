@@ -1,4 +1,5 @@
 import '../models/lucky16_models.dart';
+import '../utils/round_id.dart';
 import 'ticket_model.dart';
 
 /// One printed Lucky 16 Card ticket, as the server holds it.
@@ -70,6 +71,24 @@ class Lucky16Ticket {
     return out;
   }
 
+  /// The bets on paper, each with its own amount: smallest amount first, then
+  /// spades, hearts, diamonds, clubs, then rank: "Spades J (35), Hearts A (200)".
+  /// Wraps by itself.
+  String get flow {
+    const suits = [Lucky16Suit.spades, Lucky16Suit.hearts, Lucky16Suit.diamonds, Lucky16Suit.clubs];
+    final cards = items.keys.toList()
+      ..sort((a, b) {
+        final byAmount = items[a]!.compareTo(items[b]!);
+        if (byAmount != 0) return byAmount;
+        final bySuit = suits.indexOf(a.suit).compareTo(suits.indexOf(b.suit));
+        return bySuit != 0 ? bySuit : a.rank.index.compareTo(b.rank.index);
+      });
+    return [
+      for (final card in cards)
+        if (items[card]! > 0) '${card.suit.label} ${card.rank.dbValue} (${ticketAmount(items[card]!)})',
+    ].join(', ');
+  }
+
   String get betsText => lines.map((l) => l.text).join(', ');
 
   TicketContent content(String player) => TicketContent(
@@ -77,8 +96,10 @@ class Lucky16Ticket {
         code: code,
         player: player,
         roundNumber: roundNumber,
+        roundId: GameRound.lucky16.id(roundNumber),
+        idLine: '$code | ${GameRound.lucky16.id(roundNumber)} | ${code.split('-')[1]}',
         printedAt: createdAt,
-        groups: [TicketGroup(lines: lines)],
+        groups: [TicketGroup(lines: lines, flow: flow)],
       );
 
   Lucky16Ticket marked(String status, {int? reprints}) => Lucky16Ticket(

@@ -44,16 +44,26 @@ import '../providers/spin2win_history_provider.dart';
 import '../providers/spin2win_provider.dart';
 import '../services/spin2win_api_service.dart';
 import '../services/spin2win_auth_wallet.dart';
+import '../print_ticket/print_settings_store.dart';
+import '../print_ticket/printer_readiness.dart';
+import '../print_ticket/spin2win_print_controller.dart';
+import '../print_ticket/spin2win_print_service.dart';
+import '../print_ticket/ticket_pdf.dart';
+import '../print_ticket/ticket_renderer.dart';
 import '../services/spin2win_round_sync.dart';
 import '../services/spin2win_sound.dart';
 import '../services/spin2win_sound_director.dart';
 import '../utils/app_exit.dart';
+import '../utils/desktop_window.dart';
+import '../widgets/dialogs/action_dialog.dart';
 import '../widgets/spin2win/spin2win_bet_panel.dart';
 import '../widgets/spin2win/spin2win_exit_dialog.dart';
 import '../widgets/spin2win/spin2win_frame.dart';
 import '../widgets/spin2win/spin2win_frame_binding.dart';
 import '../widgets/spin2win/spin2win_messages.dart';
+import '../widgets/spin2win/spin2win_print_bar.dart';
 import '../widgets/spin2win/spin2win_records_dialog.dart';
+import '../widgets/spin2win/spin2win_tickets_dialog.dart';
 
 /// What the screen is built on. The real app lets the screen make its own; a test hands in a
 /// provider on a simulated server and chip pictures read from memory.
@@ -130,6 +140,10 @@ class _Spin2WinScreenState extends State<Spin2WinScreen> with WidgetsBindingObse
   Spin2WinSoundDirector? _director;
 
   bool _ready = false;
+  Spin2WinPrintController? _print;
+  Future<TicketRenderer>? _renderer;
+  final PrinterStatusReader _printerStatus = PrinterStatusReader();
+  final PrintSettingsStore _printSettings = PrintSettingsStore();
 
   Timer? _awayTimer;
   bool _awayPastThreshold = false;
@@ -176,10 +190,53 @@ class _Spin2WinScreenState extends State<Spin2WinScreen> with WidgetsBindingObse
     if (!mounted) return;
     await _provider.attach();
     if (!mounted) return;
+    _startPrint();
     _sound.enterGame();
     _director = Spin2WinSoundDirector(provider: _provider, sound: _sound);
     setState(() => _ready = true);
   }
+
+  /// The Windows app only: a phone or a test screen has no print controller, so nothing below
+  /// changes for it.
+  void _startPrint() {
+    if (!isWindowsApp || widget.setup != null) return;
+    final controller = Spin2WinPrintController(
+      game: _provider,
+      api: SupabaseSpin2WinPrintApi(),
+      renderer: _ticketRenderer,
+      status: _printerStatus,
+      settings: _printSettings,
+      player: context.read<AuthProvider>().username,
+      sessionStart: _sessionStart,
+    );
+    controller.addListener(_onPrintChange);
+    controller.attach();
+    _print = controller;
+  }
+
+  Future<TicketRenderer> _ticketRenderer() =>
+      _renderer ??= TicketFonts.load().then<TicketRenderer>(PdfTicketRenderer.new);
+
+  void _onPrintChange() {
+    final message = _print?.takeMessage();
+    if (message == null || !mounted) return;
+    showActionDialog(
+      context,
+      icon: Icons.print_rounded,
+      title: 'PRINT',
+      message: message,
+      barrierDismissible: true,
+      autoDismissAfter: const Duration(seconds: 5),
+    );
+  }
+
+  void _showTickets() => Spin2WinTicketsDialog.show(
+        context,
+        controller: _print!,
+        renderer: _ticketRenderer,
+        settings: _printSettings,
+        status: _printerStatus,
+      );
 
   Future<void> _precacheChips() async {
     try {
@@ -199,6 +256,8 @@ class _Spin2WinScreenState extends State<Spin2WinScreen> with WidgetsBindingObse
     _provider.removeListener(_onProviderChanged);
     _provider.sync.removeListener(_onSync);
     _provider.onProblem = null;
+    _print?.removeListener(_onPrintChange);
+    _print?.dispose();
     _director?.dispose();
     _sound.leaveGame();
     if (_setup.history == null) _history.dispose();
@@ -350,14 +409,18 @@ class _Spin2WinScreenState extends State<Spin2WinScreen> with WidgetsBindingObse
   }
 
   /// The trophy: MY RECORDS, only while betting is open (it closes by itself when betting closes).
-  void _showRecords() {
+  Future<void> _showRecords() async {
     if (_provider.isLocked) return;
+    // Read again here: a ticket's win is known only once its round is drawn.
+    await _print?.reloadTickets();
+    if (!mounted) return;
     _sound.notification();
     Spin2WinRecordsDialog.show(
       context,
       provider: _provider,
       history: _history,
       since: _sessionStart(),
+      tickets: _print?.tickets ?? const [],
       chipImage: _setup.chipImage,
     );
   }
@@ -380,6 +443,7 @@ class _Spin2WinScreenState extends State<Spin2WinScreen> with WidgetsBindingObse
                   onExit: _requestExit,
                   onRecords: _showRecords,
                   onSound: _toggleSound,
+                  printSlot: _print == null ? null : Spin2WinPrintBar(controller: _print!, onTickets: _showTickets),
                   onRefused: _onRefused,
                   onTapped: _onTapped,
                 )
