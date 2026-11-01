@@ -102,6 +102,10 @@ Spin2WinProblemDialog spin2WinProblemDialog(Spin2WinProblem problem) {
             'ROUND CLOSED',
             'Betting for that round closed before your bet arrived. Your coins have been returned — please try the next round.',
           ),
+        Spin2WinError.printRequired => (
+            'USE THE DESKTOP APP',
+            'Your account plays with printed tickets. Please open BSG on your Windows computer.',
+          ),
         Spin2WinError.notAPlayer => (
             'ACCOUNT NOT ELIGIBLE',
             'This account cannot place bets. Please contact your agent or support.',

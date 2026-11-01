@@ -179,6 +179,8 @@ class RoundApiService {
     final code = e is PostgrestException ? (e.code ?? '') : '';
     final msg = e.toString().toLowerCase();
 
+    if (code == ErrCode.printRequired) return BetError.printRequired;
+
     bool has(String c, String text) => code == c || msg.contains(text.toLowerCase());
 
     if (has(ErrCode.unauthenticated, 'unauthenticated') ||

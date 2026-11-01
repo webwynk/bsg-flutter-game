@@ -87,6 +87,8 @@ class Spin2WinApiService implements Spin2WinApi {
           return Spin2WinError.accountBlocked;
         case Spin2WinErrCode.notAPlayer:
           return Spin2WinError.notAPlayer;
+        case Spin2WinErrCode.printRequired:
+          return Spin2WinError.printRequired;
         case Spin2WinErrCode.roundNotFound:
         case Spin2WinErrCode.roundClosed:
           return Spin2WinError.roundClosed;

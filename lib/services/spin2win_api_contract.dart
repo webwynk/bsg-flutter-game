@@ -107,6 +107,9 @@ class Spin2WinErrCode {
   /// `Only players may place bets`: an agent or superadmin account.
   static const notAPlayer = 'P0114';
 
+  /// `PRINT_REQUIRED`: this account plays with printed tickets.
+  static const printRequired = 'P0155';
+
   /// `ROUND_NOT_FOUND`.
   static const roundNotFound = 'P0120';
 

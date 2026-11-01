@@ -17,6 +17,8 @@ dependencies:
   flutter_animate: ^4.3.0
   window_manager: ^0.5.2
   screen_retriever: 0.2.2
+  printing: ^5.15.1
+  pdf: ^3.13.1
 
 dev_dependencies:
   flutter_test:

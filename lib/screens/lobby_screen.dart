@@ -1,5 +1,5 @@
 import 'dart:ui';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
@@ -11,7 +11,10 @@ import '../services/connection_watcher.dart';
 import '../services/sound_service.dart';
 import '../utils/app_exit.dart';
 import '../utils/device_type.dart';
+import '../print_ticket/print_status.dart';
+import '../widgets/dialogs/action_dialog.dart';
 import '../widgets/dialogs/no_internet_dialog.dart';
+import '../widgets/dialogs/popup_scale.dart';
 import '../widgets/login/change_password_form.dart';
 import '../widgets/login/security_wide_dialog.dart';
 import 'lucky_card_screen.dart';
@@ -27,7 +30,15 @@ class LobbyScreen extends StatefulWidget {
   /// Where the connection check reads the time; tests pass their own.
   final DateTime Function() clock;
 
-  const LobbyScreen({super.key, this.connectionCheck = serverReachable, this.clock = DateTime.now});
+  /// Whether this account must use the desktop app; tests pass their own.
+  final Future<bool> Function() desktopCheck;
+
+  const LobbyScreen({
+    super.key,
+    this.connectionCheck = serverReachable,
+    this.clock = DateTime.now,
+    this.desktopCheck = printRequiresDesktop,
+  });
 
   @override
   State<LobbyScreen> createState() => _LobbyScreenState();
@@ -50,6 +61,11 @@ class _LobbyScreenState extends State<LobbyScreen> {
   late final ConnectionWatcher _connection;
   Route<void>? _noInternet;
 
+  /// True when a game must not open here, because this account prints tickets
+  /// from the Windows app. The server refuses its bets either way; this only
+  /// explains why, before the player starts.
+  final ValueNotifier<bool> _useDesktop = ValueNotifier(false);
+
   @override
   void initState() {
     super.initState();
@@ -66,6 +82,12 @@ class _LobbyScreenState extends State<LobbyScreen> {
     );
     // dart:io cannot make this check in a web build.
     if (!kIsWeb) _connection.start();
+    _checkDesktopOnly();
+  }
+
+  Future<void> _checkDesktopOnly() async {
+    final useDesktop = await widget.desktopCheck();
+    if (mounted) _useDesktop.value = useDesktop;
   }
 
   /// The lobby is on show when nothing covers it, or only the NO INTERNET popup
@@ -87,6 +109,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
   void dispose() {
     _connection.stop();
     noInternetShowing.value = false;
+    _useDesktop.dispose();
     super.dispose();
   }
 
@@ -113,6 +136,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   itemBuilder: (ctx, i) => _GameCard(
                     game: _games[i],
                     index: i,
+                    useDesktop: _useDesktop,
                   ),
                 ),
               ),
@@ -810,7 +834,8 @@ class _SecurityAccountDialogState extends State<_SecurityAccountDialog> {
 class _GameCard extends StatefulWidget {
   final _GameInfo game;
   final int index;
-  const _GameCard({required this.game, required this.index});
+  final ValueListenable<bool> useDesktop;
+  const _GameCard({required this.game, required this.index, required this.useDesktop});
 
   @override
   State<_GameCard> createState() => _GameCardState();
@@ -1041,7 +1066,15 @@ class _GameCardState extends State<_GameCard> {
     return GestureDetector(
       onTap: () {
         SoundService().playButtonClick();
-        if (widget.game.isActive) {
+        if (widget.game.isActive && widget.useDesktop.value) {
+          showActionDialog(
+            context,
+            icon: Icons.desktop_windows_rounded,
+            title: 'USE THE DESKTOP APP',
+            message: 'Your account plays with printed tickets. Please open BSG on your Windows computer.',
+            scale: popupScaleFor(MediaQuery.of(context).size),
+          );
+        } else if (widget.game.isActive) {
           if (widget.game.luckyCard) {
             // Lucky Card has no named route (main.dart is not touched): its screen is opened directly.
             Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const LuckyCardScreen()));

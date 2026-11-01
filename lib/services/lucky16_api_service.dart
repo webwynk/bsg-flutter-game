@@ -90,6 +90,8 @@ class Lucky16ApiService implements Lucky16Api {
           return Lucky16Error.accountBlocked;
         case Lucky16ErrCode.notAPlayer:
           return Lucky16Error.notAPlayer;
+        case Lucky16ErrCode.printRequired:
+          return Lucky16Error.printRequired;
         case Lucky16ErrCode.roundNotFound:
         case Lucky16ErrCode.roundClosed:
           return Lucky16Error.roundClosed;

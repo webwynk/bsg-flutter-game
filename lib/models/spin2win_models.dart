@@ -88,6 +88,10 @@ enum Spin2WinError {
   /// A staff account tried to bet (P0114).
   notAPlayer,
 
+  /// This account plays with printed tickets, so a normal bet is refused
+  /// (P0155). Nothing was charged. A final answer, never retried.
+  printRequired,
+
   /// No answer: the device is offline or the request timed out.
   offline,
 

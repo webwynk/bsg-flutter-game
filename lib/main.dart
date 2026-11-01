@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'print_ticket/printer_test_app.dart';
 import 'providers/auth_provider.dart';
 import 'providers/game_provider.dart';
 import 'providers/history_provider.dart';
@@ -26,8 +27,15 @@ import 'widgets/dialogs/popup_scale.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'constants.dart';
 
-void main() async {
+void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Windows only, and only when started by hand with this argument. It opens a
+  // printer test tool that uses no account, game or database.
+  if (isWindowsApp && args.contains('--printer-test')) {
+    runApp(const PrinterTestApp());
+    return;
+  }
 
   // Initialize Supabase official SDK (auto token refresh + native RPC + connection pooling)
   await Supabase.initialize(

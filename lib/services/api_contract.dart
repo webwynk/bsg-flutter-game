@@ -192,6 +192,7 @@ class ErrCode {
   static const unauthenticated  = 'P0100';  // auth.uid() was null
   static const accountBlocked   = 'P0113';
   static const notAPlayer       = 'P0114';
+  static const printRequired    = 'P0155';  // account plays with printed tickets
   static const insufficient     = 'P0112';  // INSUFFICIENT_COINS
   static const roundNotFound    = 'P0120';
   static const roundClosed      = 'P0121';  // digits exist, or past the cutoff
@@ -225,6 +226,10 @@ class BetError {
   /// answer from the server, not a connectivity problem -- never retried,
   /// never routed to the connection-lost treatment.
   static const notAPlayer        = 'NOT_A_PLAYER';
+
+  /// This account plays with printed tickets (P0155). A real, final answer
+  /// from the server: nothing was charged, and it is never retried.
+  static const printRequired     = 'PRINT_REQUIRED';
 
   /// Issue #23: mapError's honest catch-all for any error this app doesn't
   /// specifically recognize. Previously defaulted to [offline], which

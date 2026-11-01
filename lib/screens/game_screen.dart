@@ -501,6 +501,12 @@ class _GameScreenState extends State<GameScreen> {
       // so there is nothing to "return" here, unlike the other cases above.
       // A genuine account/permissions problem, not a transient one -- worth
       // telling the player to contact support rather than "try next round".
+      // This account plays with printed tickets: the server refused the bet
+      // before touching the balance, and retrying can not change the answer.
+      'PRINT_REQUIRED' => (
+        'USE THE DESKTOP APP',
+        'Your account plays with printed tickets. Please open BSG on your Windows computer.'
+      ),
       'NOT_A_PLAYER' => (
         'ACCOUNT NOT ELIGIBLE',
         'This account cannot place bets. Please contact your agent or support.'

@@ -86,6 +86,8 @@ class LuckyCardApiService implements LuckyCardApi {
           return LuckyCardError.accountBlocked;
         case LuckyCardErrCode.notAPlayer:
           return LuckyCardError.notAPlayer;
+        case LuckyCardErrCode.printRequired:
+          return LuckyCardError.printRequired;
         case LuckyCardErrCode.roundNotFound:
         case LuckyCardErrCode.roundClosed:
           return LuckyCardError.roundClosed;

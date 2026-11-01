@@ -121,6 +121,10 @@ Lucky16ProblemDialog lucky16ProblemDialog(Lucky16Problem problem) {
             'ROUND CLOSED',
             'Betting for that round closed before your bet arrived. Your coins have been returned — please try the next round.',
           ),
+        Lucky16Error.printRequired => (
+            'USE THE DESKTOP APP',
+            'Your account plays with printed tickets. Please open BSG on your Windows computer.',
+          ),
         Lucky16Error.notAPlayer => (
             'ACCOUNT NOT ELIGIBLE',
             'This account cannot place bets. Please contact your agent or support.',
