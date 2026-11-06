@@ -6,6 +6,7 @@
 
 import 'package:best_smart_game/models/spin2win_models.dart';
 import 'package:best_smart_game/services/spin2win_round_sync.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'sim_server.dart';
@@ -22,13 +23,16 @@ class Rig {
     double skew = 0,
     Duration latency = const Duration(milliseconds: 100),
     int resultFromSecond = 90,
+    Duration? pollInterval,
   })  : world = SimWorld(tester, cycleNumber: cycleNumber, startInto: startInto, skewSeconds: skew) {
     server = SimulatedSpin2WinServer(
       now: () => world.serverNow,
       latency: latency,
       resultFromSecond: resultFromSecond,
     );
-    sync = Spin2WinRoundSync(api: server, now: () => world.deviceNow);
+    sync = pollInterval == null
+        ? Spin2WinRoundSync(api: server, now: () => world.deviceNow)
+        : Spin2WinRoundSync(api: server, now: () => world.deviceNow, pollInterval: pollInterval);
     sync.onLockMark = () {
       lockMarks.add(world.cyclePosition);
       countdownAtLock.add(sync.countdown);
@@ -73,7 +77,7 @@ class Rig {
 
 void main() {
   group('opening the screen', () {
-    testWidgets('connects, corrects its clock, and then polls every 2 seconds', (tester) async {
+    testWidgets('connects, corrects its clock, and then asks every 10 seconds while betting', (tester) async {
       final rig = Rig(tester, startInto: 10);
       await rig.open();
       expect(rig.sync.isConnected, isTrue);
@@ -83,7 +87,7 @@ void main() {
 
       final before = rig.server.polls;
       await rig.world.run(const Duration(seconds: 20));
-      expect(rig.server.polls - before, inInclusiveRange(9, 11));
+      expect(rig.server.polls - before, inInclusiveRange(1, 3));
       await rig.finish();
     });
 
@@ -156,8 +160,9 @@ void main() {
     testWidgets('a winner a poll sees before this screen reads 00 is held until 00', (tester) async {
       // Spin2Win draws at second 90, the same second the countdown reaches 00;
       // a winner can still be in hand early when this device's clock is behind
-      // the server's. Simulated here by a server that answers with it from 88.
-      final rig = Rig(tester, startInto: 80, resultFromSecond: 88);
+      // the server's. Simulated here by a server that answers with it from 88,
+      // and an opening at 78.6 so the 10-second poll lands at about 88.6.
+      final rig = Rig(tester, startInto: 78.6, resultFromSecond: 88);
       await rig.open();
       await rig.world.run(const Duration(seconds: 25));
       expect(rig.results.length, 1);
@@ -268,9 +273,10 @@ void main() {
       await rig.open();
       expect(rig.sync.isConnected, isTrue);
       rig.server.offline = true;
-      await rig.world.run(const Duration(seconds: 3)); // about one failed poll
+      await rig.world.run(const Duration(seconds: 3)); // at most one failed poll
       expect(rig.sync.isConnected, isTrue, reason: 'one or two failures are tolerated');
-      await rig.world.run(const Duration(seconds: 6)); // three or more
+      // The next 10-second poll fails (by second ~21), then two more 2 s apart.
+      await rig.world.run(const Duration(seconds: 13));
       expect(rig.sync.isConnected, isFalse);
       expect(rig.sync.connectionError, Spin2WinError.offline);
       rig.server.offline = false;
@@ -293,7 +299,7 @@ void main() {
       final rig = Rig(tester, startInto: 10);
       await rig.open();
       rig.server.failNext(6, error: Spin2WinError.unauthenticated);
-      await rig.world.run(const Duration(seconds: 12));
+      await rig.world.run(const Duration(seconds: 18));
       expect(rig.sync.isConnected, isFalse);
       expect(rig.sync.connectionError, Spin2WinError.unauthenticated);
       await rig.finish();
@@ -364,6 +370,60 @@ void main() {
       await rig.world.run(const Duration(seconds: 20));
       expect(rig.results, isEmpty);
       expect(rig.unavailableAt, isEmpty, reason: 'a left screen must not report a missing result');
+      await rig.finish();
+    });
+  });
+
+  group('how often the server is asked (2026-11-03 load reduction)', () {
+    /// Plays three whole rounds from second 0.5 and returns the requests per
+    /// round, checking every round still delivered once, at 00, as a live result.
+    Future<double> requestsPerRound(WidgetTester tester, {Duration? pollInterval, required int cycleNumber}) async {
+      final rig = Rig(tester, cycleNumber: cycleNumber, startInto: 0.5, pollInterval: pollInterval);
+      await rig.open();
+      final before = rig.server.polls;
+      await rig.world.run(const Duration(seconds: 300));
+      final perRound = (rig.server.polls - before) / 3;
+      expect(rig.results.map((r) => r.roundNumber), [cycleNumber, cycleNumber + 1, cycleNumber + 2]);
+      expect(rig.countdownAtResult, [0, 0, 0]);
+      expect(rig.results.every((r) => !r.isCatchUpReplay), isTrue);
+      expect(rig.lockMarks.length, 3);
+      expect(rig.unavailableAt, isEmpty);
+      await rig.finish();
+      return perRound;
+    }
+
+    testWidgets('a healthy 100-second round takes about 11 requests instead of about 50', (tester) async {
+      final now = await requestsPerRound(tester, cycleNumber: cycle + 40);
+      final before = await requestsPerRound(tester, cycleNumber: cycle + 50, pollInterval: const Duration(seconds: 2));
+      debugPrint('Spin2Win get_current_round requests per round: before (2 s rhythm) $before, now $now');
+      expect(before, inInclusiveRange(48.0, 52.0), reason: 'the old 2-second rhythm, for comparison');
+      expect(now, inInclusiveRange(9.0, 14.0));
+    });
+
+    testWidgets('a new round is asked for at once, so its id is fresh before the player bets', (tester) async {
+      final rig = Rig(tester, startInto: 95);
+      await rig.open();
+      await rig.world.run(const Duration(milliseconds: 5700)); // to about second 1.7 of the next round
+      expect(rig.world.cyclePosition, lessThan(2.5));
+      expect(rig.sync.currentRound!.roundNumber, cycle + 1);
+      await rig.finish();
+    });
+
+    testWidgets('once a poll fails it asks every 2 seconds, and goes back to 10 when it recovers', (tester) async {
+      final rig = Rig(tester, startInto: 10);
+      await rig.open();
+      await rig.world.runUntil(22.0); // the 10-second poll at ~20 has happened
+      rig.server.offline = true;
+      await rig.world.runUntil(31.0); // the poll at ~30 fails
+      final failing = rig.server.polls;
+      await rig.world.run(const Duration(seconds: 6));
+      expect(rig.server.polls - failing, inInclusiveRange(2, 4), reason: 'every 2 seconds while failing');
+      rig.server.offline = false;
+      await rig.world.run(const Duration(seconds: 3));
+      expect(rig.sync.isConnected, isTrue);
+      final healthy = rig.server.polls;
+      await rig.world.run(const Duration(seconds: 8));
+      expect(rig.server.polls - healthy, lessThanOrEqualTo(1), reason: 'back to every 10 seconds');
       await rig.finish();
     });
   });

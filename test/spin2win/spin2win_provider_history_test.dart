@@ -153,7 +153,10 @@ void main() {
       p.selectChip(Spin2WinChip.fifty);
       p.tapNumber(0);
       expect(p.balance, balanceAfterRound - 50);
-      await rig.world.runUntil(99.6);
+      // 99.0, not later: the device's clock is calibrated in whole seconds and
+      // may run up to a second ahead of the server's, so from about 99.0 on its
+      // next round (and an unlocked board) can already have begun.
+      await rig.world.runUntil(99.0);
 
       expect(rig.problems.length, 1);
       expect(rig.problems.single.kind, Spin2WinProblemKind.roundUnresolved);

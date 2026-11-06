@@ -1,6 +1,6 @@
 // Keeps the Spin2Win screen in step with the server's round: the countdown,
-// "what round is it?" every 2 seconds, the lock mark, and the moment the result
-// may be shown.
+// "what round is it?" on a smart schedule (see [Spin2WinRoundSync.pollInterval]),
+// the lock mark, and the moment the result may be shown.
 //
 // It holds NO bet, balance or animation. It only watches the round and tells
 // the game provider four things, through callbacks:
@@ -15,15 +15,21 @@
 // 100-second round runs in a test on a fake clock.
 //
 // A copy of Lucky Card's round sync, which mirrors Triple Chance's RoundSyncService, whose hard-won rules are kept from
-// the start: a 2-second poll, three failed polls before "disconnected", the
-// clock calibrated from every answer, one delivery per round, an 8-attempt
-// result fetch, and a generation counter so a screen that was left can never be
-// brought back to life by an old, still-running call. The deliberate differences:
+// the start: three failed polls before "disconnected", the clock calibrated
+// from every answer, one delivery per round, an 8-attempt result fetch, and a
+// generation counter so a screen that was left can never be brought back to
+// life by an old, still-running call. The deliberate differences:
 //   * the result is HELD until the countdown reads 00. Spin2Win draws at
 //     second 90, the same second the countdown reaches 00, and the device's
 //     clock can be a second off the server's, so a poll can return the winner
 //     a moment before this screen reads 00; the wheel must not start before 00;
-//   * it is an ordinary object created per screen, not a shared singleton.
+//   * it is an ordinary object created per screen, not a shared singleton;
+//   * the round is not asked for every 2 seconds but on a smart schedule
+//     (2026-11-03, load reduction): once at the start of each round, every 10
+//     seconds while betting (to keep the clock calibrated), every second from
+//     the draw second until the result is in hand, and every 2 seconds while
+//     the connection is failing. About 11 requests per 100-second round instead
+//     of 50; the countdown runs from the device's own clock either way.
 //
 // Belongs to Spin2Win only.
 
@@ -39,20 +45,39 @@ class Spin2WinRoundSync extends ChangeNotifier {
   Spin2WinRoundSync({
     required Spin2WinApi api,
     DateTime Function()? now,
-    this.pollInterval = const Duration(seconds: 2),
+    this.pollInterval = const Duration(seconds: 10),
+    this.resultPollInterval = const Duration(seconds: 1),
+    this.failingPollInterval = const Duration(seconds: 2),
+    this.scheduleInterval = const Duration(milliseconds: 500),
     this.tickInterval = const Duration(seconds: 1),
   })  : _api = api,
+        _now = now ?? DateTime.now,
         clock = Spin2WinRoundClock(now: now);
 
   final Spin2WinApi _api;
+  final DateTime Function() _now;
 
   /// The round clock; the countdown and the second of the cycle come from it.
   final Spin2WinRoundClock clock;
 
-  /// How often the round is asked for. Triple Chance and Lucky Card both use 2
-  /// seconds; the 10-second server timer (the cron job
-  /// 'bsg-spin2win-tick-rounds') is only a safety net behind this poll.
+  /// How often the round is asked for while betting is open and the connection
+  /// is healthy. Only to keep the clock calibrated: the countdown itself runs
+  /// from the device's clock, and the round's id does not change within a
+  /// round. The 10-second server timer (the cron job 'bsg-spin2win-tick-rounds')
+  /// is the server's own safety net for the draw.
   final Duration pollInterval;
+
+  /// How often the round is asked for from the draw second until this round's
+  /// result is in hand (when the countdown-at-00 fetch is not already doing it).
+  final Duration resultPollInterval;
+
+  /// How often the round is asked for after a failed poll, until one succeeds:
+  /// the old 2-second rhythm, so an outage is reported and recovered from at
+  /// the same pace once it has been noticed.
+  final Duration failingPollInterval;
+
+  /// How often the schedule checks whether a poll is due. No request by itself.
+  final Duration scheduleInterval;
 
   /// How often the countdown is re-read.
   final Duration tickInterval;
@@ -89,8 +114,16 @@ class Spin2WinRoundSync extends ChangeNotifier {
   bool _pollInFlight = false;
   bool _resultFetchRunning = false;
 
+  /// When the server was last asked for the round (any request), by the
+  /// device's clock; the schedule measures its intervals from here.
+  DateTime? _lastAskedAt;
+
   /// The round number whose result has already been delivered: the one-time lock.
   int? _deliveredRoundNumber;
+
+  /// The round whose result fetch gave up ([onResultUnavailable] was called).
+  /// The 1-second result polling stops for it; the normal schedule continues.
+  int? _gaveUpRoundNumber;
 
   /// A drawn round seen before the countdown reached 00, held back.
   Spin2WinRoundState? _heldResult;
@@ -132,12 +165,14 @@ class Spin2WinRoundSync extends ChangeNotifier {
   /// The countdown starts at once from the device's clock and is corrected as
   /// soon as the server answers. The round is asked for up to three times, half
   /// a second apart, so one bad instant at screen-open does not read as an
-  /// outage; polling starts even if all three fail, so the connection can
-  /// recover on its own.
+  /// outage; the poll schedule starts even if all three fail, so the connection
+  /// can recover on its own.
   Future<void> attach() async {
     final generation = ++_generation;
     _cancelTimers();
     _failedPolls = 0;
+    _lastAskedAt = null;
+    _gaveUpRoundNumber = null;
     _connectionError = null;
     _deliveredRoundNumber = null;
     _heldResult = null;
@@ -151,7 +186,7 @@ class Spin2WinRoundSync extends ChangeNotifier {
 
     await _fetchInitialRound(generation);
     if (generation != _generation) return;
-    _pollTimer = Timer.periodic(pollInterval, (_) => _poll(generation));
+    _pollTimer = Timer.periodic(scheduleInterval, (_) => _pollIfDue(generation));
   }
 
   /// Stops watching. Call when the game screen closes. Any call still in flight
@@ -191,7 +226,7 @@ class Spin2WinRoundSync extends ChangeNotifier {
   /// came; [lastRoundError] says why.
   ///
   /// The live clock is used, not the second recorded when the round was last
-  /// read (which can be up to 2 seconds old): a round read at second 88 could
+  /// read (which can be up to 10 seconds old): a round read at second 88 could
   /// still say "open" at second 90 by its own stale field. Checking the round number
   /// also stops a bet being aimed at an earlier round's id after a stretch
   /// without answers. The server still has the last word; this only avoids
@@ -205,6 +240,7 @@ class Spin2WinRoundSync extends ChangeNotifier {
       return known;
     }
     final generation = _generation;
+    _lastAskedAt = _now();
     final fresh = await _api.getCurrentRound();
     if (generation != _generation || fresh == null) return null;
     _observe(fresh, generation);
@@ -255,20 +291,70 @@ class Spin2WinRoundSync extends ChangeNotifier {
     _fetchAndDeliver(generation, roundNumber: number, isCatchUpReplay: false);
   }
 
-  // ── The 2-second poll ───────────────────────────────────────────────────
+  // ── The poll schedule ───────────────────────────────────────────────────
+
+  /// Called every [scheduleInterval]; asks for the round only when it is due:
+  ///   * while the last poll failed (or the connection is down): every
+  ///     [failingPollInterval], as before, so recovery is just as quick;
+  ///   * when the round known is not this cycle's round (a new round has just
+  ///     begun, or nothing is known yet): at once, so its id is fresh before
+  ///     the player bets;
+  ///   * from the draw second until this round's result is in hand: every
+  ///     [resultPollInterval];
+  ///   * otherwise, while betting: every [pollInterval].
+  /// Never while another poll or the countdown-at-00 result fetch is running.
+  void _pollIfDue(int generation) {
+    if (generation != _generation) return;
+    if (_pollInFlight || _resultFetchRunning) return;
+    final Duration due;
+    if (!_isConnected || _failedPolls > 0) {
+      due = failingPollInterval;
+    } else if (_knownRoundIsStale) {
+      due = Duration.zero;
+    } else if (_awaitingResult) {
+      due = resultPollInterval;
+    } else {
+      due = pollInterval;
+    }
+    final last = _lastAskedAt;
+    if (last != null && _now().difference(last) < due) return;
+    _poll(generation);
+  }
+
+  /// True when no round is known, or the one known is not the round the
+  /// clock says is running now.
+  bool get _knownRoundIsStale {
+    final known = _currentRound;
+    return known == null || known.roundNumber != clock.roundNumber;
+  }
+
+  /// True from the draw second until this round's result has been delivered,
+  /// is held for delivery at 00, or has been given up on.
+  bool get _awaitingResult {
+    final known = _currentRound;
+    if (known == null || clock.secondsInto < known.drawAtSecond) return false;
+    final number = clock.roundNumber;
+    if (_deliveredRoundNumber == number) return false;
+    if (_gaveUpRoundNumber == number) return false;
+    if (_heldResult?.roundNumber == number) return false;
+    return true;
+  }
 
   Future<void> _poll(int generation) async {
     if (generation != _generation) return;
     if (_pollInFlight) return; // never overlap requests on a slow network
     _pollInFlight = true;
+    _lastAskedAt = _now();
     try {
       final round = await _api.getCurrentRound();
       if (generation != _generation) return;
 
       if (round == null) {
         _failedPolls++;
-        // Three failed polls in a row (about 6 seconds) before the connection is
-        // called dead, so a tunnel or a dropped packet never interrupts the player.
+        // Three failed polls in a row before the connection is called dead, so a
+        // tunnel or a dropped packet never interrupts the player. The first
+        // failure switches the schedule to [failingPollInterval], so the second
+        // and third follow 2 seconds apart (about 4 seconds after the first).
         if (_failedPolls >= 3) {
           final reason = _api.lastRoundError ?? Spin2WinError.offline;
           if (_isConnected || _connectionError != reason) {
@@ -317,6 +403,7 @@ class Spin2WinRoundSync extends ChangeNotifier {
   Future<void> _fetchInitialRound(int generation) async {
     Spin2WinRoundState? round;
     for (var attempt = 1;; attempt++) {
+      _lastAskedAt = _now();
       round = await _api.getCurrentRound();
       if (generation != _generation) return;
       if (round != null || attempt >= 3) break;
@@ -367,6 +454,7 @@ class Spin2WinRoundSync extends ChangeNotifier {
     try {
       for (var attempt = 1; attempt <= 8; attempt++) {
         if (generation != _generation) return;
+        _lastAskedAt = _now();
         final round = await _api.getCurrentRound();
         if (generation != _generation) return;
         if (round != null) {
@@ -384,6 +472,7 @@ class Spin2WinRoundSync extends ChangeNotifier {
         }
       }
       if (generation == _generation && _deliveredRoundNumber != roundNumber) {
+        _gaveUpRoundNumber = roundNumber;
         onResultUnavailable?.call();
       }
     } finally {
