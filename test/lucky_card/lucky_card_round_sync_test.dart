@@ -3,9 +3,13 @@
 // Whole rounds are played on a fake clock against a simulated server that
 // follows the real server's measured rules (see sim_server.dart), so each test
 // takes a fraction of a second and nothing depends on the network.
+//
+// The smart-schedule and clock-move tests (2026-11-09) are ported from
+// test/lucky16/lucky16_round_sync_test.dart (103-second round, draw at 89).
 
 import 'package:best_smart_game/models/lucky_card_models.dart';
 import 'package:best_smart_game/services/lucky_card_round_sync.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'sim_server.dart';
@@ -22,13 +26,21 @@ class Rig {
     double skew = 0,
     Duration latency = const Duration(milliseconds: 100),
     int resultFromSecond = 89,
+    Duration? pollInterval,
   })  : world = SimWorld(tester, cycleNumber: cycleNumber, startInto: startInto, skewSeconds: skew) {
     server = SimulatedLuckyCardServer(
       now: () => world.serverNow,
       latency: latency,
       resultFromSecond: resultFromSecond,
     );
-    sync = LuckyCardRoundSync(api: server, now: () => world.deviceNow);
+    sync = pollInterval == null
+        ? LuckyCardRoundSync(api: server, now: () => world.deviceNow, elapsed: () => world.elapsed)
+        : LuckyCardRoundSync(
+            api: server,
+            now: () => world.deviceNow,
+            elapsed: () => world.elapsed,
+            pollInterval: pollInterval,
+          );
     sync.onLockMark = () {
       lockMarks.add(world.cyclePosition);
       countdownAtLock.add(sync.countdown);
@@ -73,7 +85,7 @@ class Rig {
 
 void main() {
   group('opening the screen', () {
-    testWidgets('connects, corrects its clock, and then polls every 2 seconds', (tester) async {
+    testWidgets('connects, corrects its clock, and then asks every 10 seconds while betting', (tester) async {
       final rig = Rig(tester, startInto: 10);
       await rig.open();
       expect(rig.sync.isConnected, isTrue);
@@ -83,7 +95,7 @@ void main() {
 
       final before = rig.server.polls;
       await rig.world.run(const Duration(seconds: 20));
-      expect(rig.server.polls - before, inInclusiveRange(9, 11));
+      expect(rig.server.polls - before, inInclusiveRange(1, 3));
       await rig.finish();
     });
 
@@ -258,9 +270,10 @@ void main() {
       await rig.open();
       expect(rig.sync.isConnected, isTrue);
       rig.server.offline = true;
-      await rig.world.run(const Duration(seconds: 3)); // about one failed poll
+      await rig.world.run(const Duration(seconds: 3)); // at most one failed poll
       expect(rig.sync.isConnected, isTrue, reason: 'one or two failures are tolerated');
-      await rig.world.run(const Duration(seconds: 6)); // three or more
+      // The next 10-second poll fails (by second ~21), then two more 2 s apart.
+      await rig.world.run(const Duration(seconds: 13));
       expect(rig.sync.isConnected, isFalse);
       expect(rig.sync.connectionError, LuckyCardError.offline);
       rig.server.offline = false;
@@ -283,7 +296,7 @@ void main() {
       final rig = Rig(tester, startInto: 10);
       await rig.open();
       rig.server.failNext(6, error: LuckyCardError.unauthenticated);
-      await rig.world.run(const Duration(seconds: 12));
+      await rig.world.run(const Duration(seconds: 18));
       expect(rig.sync.isConnected, isFalse);
       expect(rig.sync.connectionError, LuckyCardError.unauthenticated);
       await rig.finish();
@@ -395,6 +408,271 @@ void main() {
       expect(await future, isNull);
       expect(rig.sync.lastRoundError, LuckyCardError.offline);
       await rig.finish();
+    });
+  });
+
+  group('how often the server is asked (2026-11-09 load reduction)', () {
+    /// Plays three whole 103-second rounds from second 0.5 and returns the
+    /// requests per round, checking every round still delivered once, at 00, as
+    /// a live result.
+    Future<double> requestsPerRound(WidgetTester tester, {Duration? pollInterval, required int cycleNumber}) async {
+      final rig = Rig(tester, cycleNumber: cycleNumber, startInto: 0.5, pollInterval: pollInterval);
+      await rig.open();
+      final before = rig.server.polls;
+      await rig.world.run(const Duration(seconds: 309));
+      final perRound = (rig.server.polls - before) / 3;
+      expect(rig.results.map((r) => r.roundNumber), [cycleNumber, cycleNumber + 1, cycleNumber + 2]);
+      expect(rig.countdownAtResult, [0, 0, 0]);
+      expect(rig.results.every((r) => !r.isCatchUpReplay), isTrue);
+      expect(rig.lockMarks.length, 3);
+      expect(rig.unavailableAt, isEmpty);
+      await rig.finish();
+      return perRound;
+    }
+
+    testWidgets('a healthy 103-second round takes about 11 requests instead of about 52', (tester) async {
+      final now = await requestsPerRound(tester, cycleNumber: cycle + 40);
+      final before = await requestsPerRound(tester, cycleNumber: cycle + 50, pollInterval: const Duration(seconds: 2));
+      debugPrint('Lucky Card get_current_round requests per round: before (2 s rhythm) $before, now $now');
+      expect(before, inInclusiveRange(50.0, 53.0), reason: 'the old 2-second rhythm, for comparison');
+      expect(now, inInclusiveRange(10.0, 14.0));
+    });
+
+    testWidgets('a new round is asked for at once, so its id is fresh before the player bets', (tester) async {
+      final rig = Rig(tester, startInto: 98);
+      await rig.open();
+      await rig.world.run(const Duration(milliseconds: 5700)); // to about second 1.7 of the next round
+      expect(rig.world.cyclePosition, lessThan(2.5));
+      expect(rig.sync.currentRound!.roundNumber, cycle + 1);
+      await rig.finish();
+    });
+
+    testWidgets('once a poll fails it asks every 2 seconds, and goes back to 10 when it recovers', (tester) async {
+      final rig = Rig(tester, startInto: 10);
+      await rig.open();
+      await rig.world.runUntil(22.0); // the 10-second poll at ~20 has happened
+      rig.server.offline = true;
+      await rig.world.runUntil(31.0); // the poll at ~30 fails
+      final failing = rig.server.polls;
+      await rig.world.run(const Duration(seconds: 6));
+      expect(rig.server.polls - failing, inInclusiveRange(2, 4), reason: 'every 2 seconds while failing');
+      rig.server.offline = false;
+      await rig.world.run(const Duration(seconds: 3));
+      expect(rig.sync.isConnected, isTrue);
+      final healthy = rig.server.polls;
+      await rig.world.run(const Duration(seconds: 8));
+      expect(rig.server.polls - healthy, lessThanOrEqualTo(1), reason: 'back to every 10 seconds');
+      await rig.finish();
+    });
+
+    testWidgets('the draw at second 89: the request at the draw second sees the card, it is held, and shown at 00',
+        (tester) async {
+      final rig = Rig(tester, startInto: 60);
+      await rig.open();
+      await rig.world.runUntil(95.0);
+      double pos(DateTime t) => (t.millisecondsSinceEpoch / 1000 + 0.5) % 103;
+      final firstDrawn = rig.server.pollLog.firstWhere((p) => p.drawn);
+      expect(pos(firstDrawn.at), inInclusiveRange(88.5, 90.0), reason: 'asked from the draw second (89), from the reply');
+      expect(rig.results.length, 1);
+      expect(rig.results.single.isCatchUpReplay, isFalse);
+      expect(rig.countdownAtResult, [0], reason: 'held until the countdown reads 00');
+      expect(rig.resultAt.single, inInclusiveRange(89.5, 91.6));
+      final nearDraw = rig.server.pollLog.where((p) => pos(p.at) >= 85.0 && pos(p.at) < 95.0).length;
+      expect(nearDraw, lessThanOrEqualTo(2), reason: 'no 00 fetch is needed: the card is already in hand');
+      await rig.finish();
+    });
+  });
+
+  group("the device's clock is moved (2026-11-09 stopwatch schedule)", () {
+    /// The countdown the server itself would show right now.
+    int serverCountdown(Rig rig) {
+      final c = 90 - rig.world.cyclePosition.floor();
+      return c < 0 ? 0 : c;
+    }
+
+    /// Checks the round played out normally after a clock move: one lock mark at
+    /// countdown 5, one live result at 00, nothing given up.
+    void expectNormalRoundEnd(Rig rig) {
+      expect(rig.lockMarks.length, 1, reason: 'the lock fires once');
+      expect(rig.countdownAtLock, [5]);
+      expect(rig.lockMarks.single, inInclusiveRange(84.5, 86.0), reason: 'lock at the real countdown 5');
+      expect(rig.results.length, 1, reason: 'the result is delivered once');
+      expect(rig.results.single.roundNumber, cycle);
+      expect(rig.results.single.isCatchUpReplay, isFalse);
+      expect(rig.countdownAtResult, [0]);
+      expect(rig.unavailableAt, isEmpty);
+    }
+
+    testWidgets('moved back 30 seconds while betting: asked at once, countdown right again, lock and result as normal',
+        (tester) async {
+      final rig = Rig(tester, startInto: 10);
+      await rig.open();
+      await rig.world.runUntil(40.0);
+      final before = rig.server.polls;
+      rig.world.skewSeconds = -30;
+      await rig.world.run(const Duration(milliseconds: 1500));
+      expect(rig.server.polls, greaterThan(before), reason: 'the move is noticed within 1.5 s, not paused');
+      await rig.world.run(const Duration(milliseconds: 500));
+      expect((rig.sync.countdown - serverCountdown(rig)).abs(), lessThanOrEqualTo(1));
+      await rig.world.runUntil(95.0);
+      expectNormalRoundEnd(rig);
+      await rig.finish();
+    });
+
+    testWidgets('moved forward 30 seconds while betting: asked at once, no early lock', (tester) async {
+      final rig = Rig(tester, startInto: 10);
+      await rig.open();
+      await rig.world.runUntil(40.0);
+      final before = rig.server.polls;
+      rig.world.skewSeconds = 30;
+      await rig.world.run(const Duration(milliseconds: 1500));
+      expect(rig.server.polls, greaterThan(before), reason: 'the move is noticed within 1.5 s');
+      await rig.world.run(const Duration(milliseconds: 500));
+      expect((rig.sync.countdown - serverCountdown(rig)).abs(), lessThanOrEqualTo(1));
+      await rig.world.runUntil(95.0);
+      expectNormalRoundEnd(rig);
+      await rig.finish();
+    });
+
+    testWidgets('moved back 30 seconds while the result is awaited: still delivered once, live', (tester) async {
+      final rig = Rig(tester, startInto: 80, resultFromSecond: 95);
+      await rig.open();
+      await rig.world.runUntil(92.0);
+      expect(rig.results, isEmpty, reason: 'the draw is slow: nothing yet at second 92');
+      rig.world.skewSeconds = -30;
+      await rig.world.runUntil(99.0);
+      expect(rig.results.length, 1);
+      expect(rig.results.single.roundNumber, cycle);
+      expect(rig.results.single.isCatchUpReplay, isFalse);
+      expect(rig.resultAt.single, inInclusiveRange(95.0, 97.0), reason: 'as soon as the draw exists');
+      expect(rig.countdownAtResult, [0]);
+      expect(rig.unavailableAt, isEmpty);
+      await rig.finish();
+    });
+
+    testWidgets('a small move (0.8 s, like a network time correction) adds no request', (tester) async {
+      final rig = Rig(tester, startInto: 10);
+      await rig.open();
+      final before = rig.server.polls;
+      rig.world.skewSeconds = 0.8;
+      await rig.world.run(const Duration(seconds: 20));
+      expect(rig.server.polls - before, inInclusiveRange(1, 3), reason: 'still the 10-second rhythm');
+      await rig.finish();
+    });
+
+    testWidgets('the phone slept 8 seconds (stopwatch stood still): asked at the next check after waking',
+        (tester) async {
+      final rig = Rig(tester, startInto: 20);
+      await rig.open();
+      await rig.world.runUntil(30.0);
+      final before = rig.server.polls;
+      rig.world.sleepPhone(const Duration(seconds: 8));
+      await rig.world.run(const Duration(milliseconds: 600));
+      expect(rig.server.polls, greaterThan(before), reason: 'the wake-up is noticed at the next 0.5 s check');
+      expect((rig.sync.countdown - serverCountdown(rig)).abs(), lessThanOrEqualTo(1));
+      final afterWake = rig.server.polls;
+      await rig.world.run(const Duration(seconds: 9));
+      expect(rig.server.polls - afterWake, lessThanOrEqualTo(1), reason: 'back to the 10-second rhythm');
+      expect(rig.lockMarks, isEmpty);
+      await rig.finish();
+    });
+
+    testWidgets('one move back does not cause a request storm: still about 11 requests per round', (tester) async {
+      const n = cycle + 60;
+      final rig = Rig(tester, cycleNumber: n, startInto: 0.5);
+      await rig.open();
+      final before = rig.server.polls;
+      await rig.world.run(const Duration(seconds: 40));
+      rig.world.skewSeconds = -30;
+      await rig.world.run(const Duration(seconds: 269));
+      final perRound = (rig.server.polls - before) / 3;
+      debugPrint('Lucky Card requests per round with one 30 s clock move back: $perRound');
+      expect(perRound, inInclusiveRange(10.0, 14.0));
+      expect(rig.results.map((r) => r.roundNumber), [n, n + 1, n + 2]);
+      expect(rig.countdownAtResult, [0, 0, 0]);
+      expect(rig.unavailableAt, isEmpty);
+      await rig.finish();
+    });
+
+    for (final dropAfter in [0.0, 2.0, 4.0, 6.0, 8.0, 9.5]) {
+      testWidgets('network lost ${dropAfter}s after a request: "disconnected" within 4-14.5 s, recovers within 2.5 s',
+          (tester) async {
+        final rig = Rig(tester, startInto: 10);
+        await rig.open();
+        await rig.world.runUntil(15.0);
+        final n = rig.server.polls;
+        var guard = 0;
+        while (rig.server.polls == n && ++guard < 400) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        await rig.world.run(const Duration(milliseconds: 150)); // its answer is in
+        final dropAt = rig.server.pollLog.last.at.add(Duration(milliseconds: 150 + (dropAfter * 1000).round()));
+        while (rig.world.serverNow.isBefore(dropAt)) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(rig.sync.isConnected, isTrue);
+        rig.server.offline = true;
+        final droppedAt = rig.world.serverNow;
+        guard = 0;
+        while (rig.sync.isConnected && ++guard < 400) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        final lag = rig.world.serverNow.difference(droppedAt).inMilliseconds / 1000;
+        expect(rig.sync.isConnected, isFalse);
+        expect(lag, inInclusiveRange(4.0, 14.5), reason: 'popup delay after the drop');
+        rig.server.offline = false;
+        final backAt = rig.world.serverNow;
+        guard = 0;
+        while (!rig.sync.isConnected && ++guard < 200) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(rig.sync.isConnected, isTrue);
+        expect(rig.world.serverNow.difference(backAt).inMilliseconds / 1000, lessThanOrEqualTo(2.5));
+        await rig.finish();
+      });
+    }
+
+    testWidgets('network lost right after a clock move: the 2-second failing rhythm holds, one popup',
+        (tester) async {
+      final rig = Rig(tester, startInto: 10);
+      await rig.open();
+      await rig.world.runUntil(40.0);
+      var popups = 0;
+      var wasConnected = rig.sync.isConnected;
+      rig.sync.addListener(() {
+        if (wasConnected && !rig.sync.isConnected) popups++;
+        wasConnected = rig.sync.isConnected;
+      });
+      final movedAt = rig.world.serverNow;
+      final before = rig.server.polls;
+      rig.world.skewSeconds = -30;
+      rig.server.offline = true;
+      await rig.world.run(const Duration(seconds: 12));
+      expect(rig.sync.isConnected, isFalse);
+      expect(popups, 1);
+      final times = rig.server.pollLog.skip(before).map((p) => p.at).toList();
+      expect(times.first.difference(movedAt).inMilliseconds, lessThanOrEqualTo(600),
+          reason: 'the move is noticed at once');
+      for (var i = 1; i < times.length; i++) {
+        final gap = times[i].difference(times[i - 1]).inMilliseconds / 1000;
+        expect(gap, inInclusiveRange(1.5, 2.5), reason: 'request ${i + 1} after the move');
+      }
+      await rig.finish();
+    });
+
+    testWidgets('the default stopwatch (no elapsed passed) builds, attaches and detaches', (tester) async {
+      final world = SimWorld(tester, cycleNumber: cycle, startInto: 10);
+      final server = SimulatedLuckyCardServer(now: () => world.serverNow, latency: const Duration(milliseconds: 100));
+      final sync = LuckyCardRoundSync(api: server, now: () => world.deviceNow);
+      final attached = sync.attach();
+      await world.run(const Duration(seconds: 1));
+      await attached;
+      expect(sync.isConnected, isTrue);
+      expect(sync.isWatching, isTrue);
+      sync.detach();
+      expect(sync.isWatching, isFalse);
+      sync.dispose();
+      await world.run(const Duration(seconds: 12));
     });
   });
 }

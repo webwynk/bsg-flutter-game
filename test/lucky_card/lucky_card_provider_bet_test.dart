@@ -128,6 +128,24 @@ void main() {
       await rig.finish();
     });
 
+    testWidgets('the bet at countdown 5 goes to the round already known: no extra round request (2026-11-09)',
+        (tester) async {
+      final rig = BetRig(tester);
+      await rig.open();
+      rig.betTenOnEveryCard();
+      await rig.world.runUntil(83.0);
+      final before = rig.server.polls;
+      await rig.world.runUntil(87.5);
+      expect(rig.server.betsReceived, 1);
+      final sent = rig.server.betLog.single;
+      expect(sent.roundId, 'round-$cycle');
+      final arrivedAt = (sent.arrived.millisecondsSinceEpoch / 1000 + 0.5) % 103;
+      expect(arrivedAt, lessThan(88.0), reason: 'before the cutoff second (88)');
+      expect(rig.server.polls, before, reason: 'the lock and bet at 5 ask the server for no round');
+      expect(rig.problems, isEmpty);
+      await rig.finish();
+    });
+
     testWidgets('a spectator sends nothing, is locked at the mark and can bet again in the next round', (tester) async {
       final rig = BetRig(tester);
       await rig.open();

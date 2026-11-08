@@ -292,8 +292,22 @@ class SimWorld {
   final DateTime _base;
   int _skewMillis;
 
+  /// Time that passed while the phone slept (see [sleepPhone]): it moved the
+  /// server's and the device's clocks on, but not [elapsed].
+  Duration _slept = Duration.zero;
+
   /// The server's true time.
-  DateTime get serverNow => _base.add(tester.binding.clock.now().difference(_start));
+  DateTime get serverNow => _base.add(tester.binding.clock.now().difference(_start) + _slept);
+
+  /// Monotonic time since the world was created: the fake clock, without the
+  /// device's error and without any time the phone slept, so moving the
+  /// device's clock does not change it. Passed to the sync as its stopwatch.
+  Duration get elapsed => tester.binding.clock.now().difference(_start);
+
+  /// The phone sleeps for [duration] and wakes: the server's and the device's
+  /// clocks jump on by [duration] at once, while no timer runs and the
+  /// stopwatch ([elapsed]) stands still, as in a deep sleep.
+  void sleepPhone(Duration duration) => _slept += duration;
 
   /// The device's clock: the server's time plus its error.
   DateTime get deviceNow => serverNow.add(Duration(milliseconds: _skewMillis));

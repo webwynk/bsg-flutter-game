@@ -372,13 +372,14 @@ void main() {
       final rig = BetRig(tester);
       await openGame(tester, rig);
       rig.server.offline = true;
-      await rig.world.run(const Duration(seconds: 9));
+      // The dialog comes 4-14 s into an outage (the 10-second smart check, 2026-11-09).
+      await rig.world.run(const Duration(seconds: 15));
       await settle(tester);
       expect(dialogTitled('CONNECTION LOST'), findsOneWidget);
       rig.server.offline = false;
       await rig.world.run(const Duration(seconds: 6));
       rig.server.offline = true;
-      await rig.world.run(const Duration(seconds: 9));
+      await rig.world.run(const Duration(seconds: 15));
       await settle(tester);
       expect(dialogTitled('CONNECTION LOST'), findsOneWidget, reason: 'still the one dialog');
       await rig.finish();
@@ -502,7 +503,8 @@ void main() {
       final rig = BetRig(tester);
       await openGame(tester, rig, size: small);
       rig.server.offline = true;
-      await rig.world.run(const Duration(seconds: 9));
+      // The dialog comes 4-14 s into an outage (the 10-second smart check, 2026-11-09).
+      await rig.world.run(const Duration(seconds: 15));
       await settle(tester);
       await shoot(tester, 'message_connection_lost');
       await rig.finish();

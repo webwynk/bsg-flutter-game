@@ -36,7 +36,12 @@ class BetRig {
     server = SimulatedLuckyCardServer(now: () => world.serverNow, latency: latency)
       ..serverBalance = startBalance;
     wallet = FakeWallet(startBalance);
-    sync = LuckyCardRoundSync(api: server, now: () => world.deviceNow, tickInterval: tickInterval);
+    sync = LuckyCardRoundSync(
+      api: server,
+      now: () => world.deviceNow,
+      elapsed: () => world.elapsed,
+      tickInterval: tickInterval,
+    );
     provider = LuckyCardProvider(
       api: server,
       wallet: wallet,
