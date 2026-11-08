@@ -30,6 +30,10 @@
 //     the draw second until the result is in hand, and every 2 seconds while
 //     the connection is failing. About 11 requests per 100-second round instead
 //     of 50; the countdown runs from the device's own clock either way.
+//     The schedule is timed on a monotonic stopwatch, not the device's clock,
+//     so moving the phone's clock cannot pause it (2026-11-09); a move of the
+//     device's clock, or a phone that slept, is noticed and answered with an
+//     immediate request that recalibrates the countdown.
 //
 // Belongs to Spin2Win only.
 
@@ -45,17 +49,31 @@ class Spin2WinRoundSync extends ChangeNotifier {
   Spin2WinRoundSync({
     required Spin2WinApi api,
     DateTime Function()? now,
+    Duration Function()? elapsed,
     this.pollInterval = const Duration(seconds: 10),
     this.resultPollInterval = const Duration(seconds: 1),
     this.failingPollInterval = const Duration(seconds: 2),
     this.scheduleInterval = const Duration(milliseconds: 500),
     this.tickInterval = const Duration(seconds: 1),
+    this.clockJumpTolerance = const Duration(seconds: 2),
   })  : _api = api,
         _now = now ?? DateTime.now,
+        _elapsed = elapsed ?? _startStopwatch(),
         clock = Spin2WinRoundClock(now: now);
 
   final Spin2WinApi _api;
   final DateTime Function() _now;
+
+  /// Monotonic time since this sync was created: it never runs backwards and
+  /// does not follow changes to the device's clock. The poll schedule is
+  /// measured on it. Tests pass the fake world's elapsed time.
+  final Duration Function() _elapsed;
+
+  /// A real stopwatch, started now, as the default [_elapsed].
+  static Duration Function() _startStopwatch() {
+    final watch = Stopwatch()..start();
+    return () => watch.elapsed;
+  }
 
   /// The round clock; the countdown and the second of the cycle come from it.
   final Spin2WinRoundClock clock;
@@ -81,6 +99,12 @@ class Spin2WinRoundSync extends ChangeNotifier {
 
   /// How often the countdown is re-read.
   final Duration tickInterval;
+
+  /// How far the device's clock may drift from the stopwatch, between two
+  /// requests, before it counts as "the clock was moved (or the phone slept)"
+  /// and the round is asked for at once to recalibrate the countdown. Small
+  /// network-time corrections (well under a second) stay below it.
+  final Duration clockJumpTolerance;
 
   // ── What the rest of the app listens for ────────────────────────────────
 
@@ -114,9 +138,21 @@ class Spin2WinRoundSync extends ChangeNotifier {
   bool _pollInFlight = false;
   bool _resultFetchRunning = false;
 
-  /// When the server was last asked for the round (any request), by the
-  /// device's clock; the schedule measures its intervals from here.
-  DateTime? _lastAskedAt;
+  /// When the server was last asked for the round (any request), on the
+  /// monotonic stopwatch; the schedule measures its intervals from here.
+  Duration? _lastAskedElapsed;
+
+  /// The device's clock at that same moment. Compared with the stopwatch to
+  /// notice that the device's clock was moved, or that the phone slept.
+  DateTime? _lastAskedWall;
+
+  /// Records that the server is being asked for the round now. Called just
+  /// before every request for the round, so a slow answer does not stretch
+  /// the schedule.
+  void _markAsked() {
+    _lastAskedElapsed = _elapsed();
+    _lastAskedWall = _now();
+  }
 
   /// The round number whose result has already been delivered: the one-time lock.
   int? _deliveredRoundNumber;
@@ -171,7 +207,8 @@ class Spin2WinRoundSync extends ChangeNotifier {
     final generation = ++_generation;
     _cancelTimers();
     _failedPolls = 0;
-    _lastAskedAt = null;
+    _lastAskedElapsed = null;
+    _lastAskedWall = null;
     _gaveUpRoundNumber = null;
     _connectionError = null;
     _deliveredRoundNumber = null;
@@ -240,7 +277,7 @@ class Spin2WinRoundSync extends ChangeNotifier {
       return known;
     }
     final generation = _generation;
-    _lastAskedAt = _now();
+    _markAsked();
     final fresh = await _api.getCurrentRound();
     if (generation != _generation || fresh == null) return null;
     _observe(fresh, generation);
@@ -301,7 +338,13 @@ class Spin2WinRoundSync extends ChangeNotifier {
   ///     the player bets;
   ///   * from the draw second until this round's result is in hand: every
   ///     [resultPollInterval];
-  ///   * otherwise, while betting: every [pollInterval].
+  ///   * otherwise, while betting: every [pollInterval];
+  ///   * at once, whatever the interval, when the device's clock has moved
+  ///     away from the stopwatch by [clockJumpTolerance] or more since the
+  ///     last request (the clock was changed, or the phone slept), so the
+  ///     countdown is recalibrated straight away.
+  /// Intervals are measured on the monotonic stopwatch, never on the device's
+  /// clock, so moving that clock back cannot pause the schedule.
   /// Never while another poll or the countdown-at-00 result fetch is running.
   void _pollIfDue(int generation) {
     if (generation != _generation) return;
@@ -316,8 +359,14 @@ class Spin2WinRoundSync extends ChangeNotifier {
     } else {
       due = pollInterval;
     }
-    final last = _lastAskedAt;
-    if (last != null && _now().difference(last) < due) return;
+    final lastElapsed = _lastAskedElapsed;
+    final lastWall = _lastAskedWall;
+    if (lastElapsed != null && lastWall != null) {
+      final sinceAsked = _elapsed() - lastElapsed;
+      final clockMoved =
+          (_now().difference(lastWall) - sinceAsked).abs() >= clockJumpTolerance;
+      if (!clockMoved && sinceAsked < due) return;
+    }
     _poll(generation);
   }
 
@@ -344,7 +393,7 @@ class Spin2WinRoundSync extends ChangeNotifier {
     if (generation != _generation) return;
     if (_pollInFlight) return; // never overlap requests on a slow network
     _pollInFlight = true;
-    _lastAskedAt = _now();
+    _markAsked();
     try {
       final round = await _api.getCurrentRound();
       if (generation != _generation) return;
@@ -403,7 +452,7 @@ class Spin2WinRoundSync extends ChangeNotifier {
   Future<void> _fetchInitialRound(int generation) async {
     Spin2WinRoundState? round;
     for (var attempt = 1;; attempt++) {
-      _lastAskedAt = _now();
+      _markAsked();
       round = await _api.getCurrentRound();
       if (generation != _generation) return;
       if (round != null || attempt >= 3) break;
@@ -454,7 +503,7 @@ class Spin2WinRoundSync extends ChangeNotifier {
     try {
       for (var attempt = 1; attempt <= 8; attempt++) {
         if (generation != _generation) return;
-        _lastAskedAt = _now();
+        _markAsked();
         final round = await _api.getCurrentRound();
         if (generation != _generation) return;
         if (round != null) {

@@ -36,7 +36,12 @@ class BetRig {
     server = SimulatedSpin2WinServer(now: () => world.serverNow, latency: latency)
       ..serverBalance = startBalance;
     wallet = FakeWallet(startBalance);
-    sync = Spin2WinRoundSync(api: server, now: () => world.deviceNow, tickInterval: tickInterval);
+    sync = Spin2WinRoundSync(
+      api: server,
+      now: () => world.deviceNow,
+      elapsed: () => world.elapsed,
+      tickInterval: tickInterval,
+    );
     provider = Spin2WinProvider(
       api: server,
       wallet: wallet,
