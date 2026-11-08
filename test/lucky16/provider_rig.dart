@@ -39,7 +39,12 @@ class BetRig {
     server = SimulatedLucky16Server(now: () => world.serverNow, latency: latency)
       ..serverBalance = startBalance;
     wallet = FakeWallet(startBalance);
-    sync = Lucky16RoundSync(api: server, now: () => world.deviceNow, tickInterval: tickInterval);
+    sync = Lucky16RoundSync(
+      api: server,
+      now: () => world.deviceNow,
+      elapsed: () => world.elapsed,
+      tickInterval: tickInterval,
+    );
     provider = Lucky16Provider(
       api: server,
       wallet: wallet,

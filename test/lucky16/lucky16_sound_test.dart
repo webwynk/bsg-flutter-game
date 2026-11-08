@@ -226,7 +226,7 @@ void main() {
       final probe = Lucky16Provider(
         api: rig.server,
         wallet: FakeWallet(1000),
-        sync: Lucky16RoundSync(api: rig.server, now: () => rig.world.deviceNow),
+        sync: Lucky16RoundSync(api: rig.server, now: () => rig.world.deviceNow, elapsed: () => rig.world.elapsed),
         now: () => rig.world.deviceNow,
       );
       final out = FakeOutput();

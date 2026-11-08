@@ -248,6 +248,26 @@ void main() {
     await rig.world.run(const Duration(seconds: 1));
   });
 
+  testWidgets('Print late in betting (countdown 7) uses the round already known: no extra round request (2026-11-09)',
+      (tester) async {
+    final rig = BetRig(tester);
+    await rig.open();
+    final print = Print(rig);
+    await rig.world.runUntil(83.2);
+    final p = rig.provider;
+    p.selectChip(Lucky16Chip.ten);
+    p.tapCard(winner);
+    final before = rig.server.polls;
+    await print.press(tester);
+    expect(print.api.requests, hasLength(1), reason: 'the ticket was bought');
+    expect(rig.server.betLog.single.roundId, 'round-$cycle');
+    expect(print.renderer.printed, hasLength(1));
+    expect(rig.server.polls, before, reason: 'Print asked the server for no round');
+    print.controller.dispose();
+    rig.provider.leave();
+    await rig.world.run(const Duration(seconds: 1));
+  });
+
   testWidgets('printer not ready: no server call, no charge, chips stay', (tester) async {
     final rig = BetRig(tester);
     await rig.open();
