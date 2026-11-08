@@ -150,8 +150,10 @@ class TcPrintController extends ChangeNotifier {
         _say(printerProblem(ready, printer.name));
         return;
       }
-      final round = RoundSyncService().currentRound;
-      if (round == null || !round.acceptsBets) {
+      // The known round, if this ticket can still go to it (this cycle's round,
+      // not drawn, before the draw second by the live clock); no request.
+      final round = RoundSyncService().roundForPrint();
+      if (round == null) {
         _say(TcPrintRefusal.closed.message);
         return;
       }

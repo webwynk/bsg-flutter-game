@@ -44,10 +44,6 @@ class GlobalRoundState {
     this.bonusMultiplier,
   });
 
-  /// True while the server will still accept a bet for this round.
-  bool get acceptsBets =>
-      !(red != null && green != null && black != null) && secondsInto < drawAtSecond;
-
   factory GlobalRoundState.fromJson(Map<String, dynamic> j) => GlobalRoundState(
         roundId: j[Field.roundId] as String,
         roundNumber: (j[Field.roundNumber] as num).toInt(),
@@ -162,7 +158,24 @@ class RecentRound {
 /// the winning digits — was retrievable without a session. v2 removes that
 /// path entirely: `rounds` is hidden by RLS until settled, and the RPCs are
 /// granted to `authenticated` only.
-class RoundApiService {
+/// The three round calls Triple Chance's [RoundSyncService] makes. Exists so
+/// tests can stand in a simulated server (2026-11-09); the app always uses
+/// [RoundApiService], which implements it unchanged.
+abstract class TcRoundApi {
+  Future<GlobalRoundState?> getCurrentRound();
+
+  Future<PlaceBetResult> placeBet({
+    required String roundId,
+    required Map<String, int> singleBets,
+    required Map<String, int> doubleBets,
+    required Map<String, int> tripleBets,
+  });
+
+  /// Why the last [getCurrentRound] failed; null after a success.
+  String? get lastRoundError;
+}
+
+class RoundApiService implements TcRoundApi {
   static final RoundApiService _instance = RoundApiService._internal();
   factory RoundApiService() => _instance;
   RoundApiService._internal();
@@ -232,10 +245,12 @@ class RoundApiService {
   /// could only ever say "no internet" — an expired session, an RLS denial and
   /// a genuinely dead network were indistinguishable. That is what made the
   /// emulator report "NO INTERNET CONNECTION" while the network was fine.
+  @override
   String? lastRoundError;
 
   /// The current round. Creates it server-side on demand, and triggers the draw
   /// and settlement once the cycle passes `draw_at_second`.
+  @override
   Future<GlobalRoundState?> getCurrentRound() async {
     try {
       final res = await _db.rpc(Rpc.getCurrentRound);
@@ -258,6 +273,7 @@ class RoundApiService {
   /// single, '00'-'99' for double, '000'-'999' for triple. The database
   /// validates them and rejects anything else, so settlement can do one lookup
   /// instead of v1's padded/unpadded/int triple fallback.
+  @override
   Future<PlaceBetResult> placeBet({
     required String roundId,
     required Map<String, int> singleBets,

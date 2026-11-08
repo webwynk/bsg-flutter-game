@@ -11,7 +11,13 @@ import 'round_api_service.dart';
 /// Responsibilities:
 /// - Fetches current round from server on game open
 /// - Syncs the local countdown to the server's scheduled time
-/// - Polls every 2 seconds to detect round completion
+/// - Asks for the round on a smart schedule (2026-11-09, load reduction; see
+///   [_pollIfDue]): once at the start of each round, every 10 seconds while
+///   betting, every 2 seconds from the draw second until the result is in hand
+///   (the same rhythm as before, so the wheel starts at the same moment), every
+///   2 seconds while the connection is failing, and at once when the device's
+///   clock moved or the phone slept. About 12 requests per 103-second round
+///   instead of about 52. Intervals are timed on a monotonic stopwatch.
 /// - When a round completes, calls [GameProvider.onGlobalResult] with the result
 /// - Shows "No Connection" when offline
 class RoundSyncService extends ChangeNotifier {
@@ -19,7 +25,50 @@ class RoundSyncService extends ChangeNotifier {
   factory RoundSyncService() => _instance;
   RoundSyncService._internal();
 
-  final RoundApiService _api = RoundApiService();
+  // The server and the clock. Always the real ones in the app; only tests swap
+  // them, through [configureForTest] (2026-11-09).
+  TcRoundApi _api = RoundApiService();
+  DateTime Function() _now = DateTime.now;
+
+  /// Monotonic time since the app started: never runs backwards and does not
+  /// follow changes to the device's clock. The poll schedule is measured on it.
+  Duration Function() _elapsed = _startStopwatch();
+
+  /// A real stopwatch, started now, as the default [_elapsed].
+  static Duration Function() _startStopwatch() {
+    final watch = Stopwatch()..start();
+    return () => watch.elapsed;
+  }
+
+  /// Tests only: puts in a simulated server, a fake clock and (optionally) a
+  /// fake stopwatch, and clears the state this app-wide object kept from an
+  /// earlier test. Never called by the app.
+  @visibleForTesting
+  void configureForTest({
+    required TcRoundApi api,
+    required DateTime Function() now,
+    Duration Function()? elapsed,
+  }) {
+    _api = api;
+    _now = now;
+    _elapsed = elapsed ?? _startStopwatch();
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _pollInFlight = false;
+    _resultFetchRunning = false;
+    _lastAskedElapsed = null;
+    _lastAskedWall = null;
+    _gaveUpRoundNumber = null;
+    _zeroFetchRoundNumber = null;
+    _currentRound = null;
+    _betRoundId = null;
+    _isConnected = false;
+    _connectionError = null;
+    _failedPollCount = 0;
+    _lastSubmitError = null;
+    _deliveredRoundNumber = null;
+    _serverTimeOffset = 0;
+  }
 
   // ── State ─────────────────────────────────────────────────────────
   GlobalRoundState? _currentRound;
@@ -52,11 +101,18 @@ class RoundSyncService extends ChangeNotifier {
   int? _deliveredRoundNumber;      // single-delivery lock per round number
   int _serverTimeOffset = 0;       // dynamic clock offset between server and device
 
-  int get syncedNowSecs => (DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000) + _serverTimeOffset;
+  int get syncedNowSecs => (_now().toUtc().millisecondsSinceEpoch ~/ 1000) + _serverTimeOffset;
+
+  /// The round number the synced clock is in now (103-second cycle, as the
+  /// server's get_current_round counts it).
+  int get _clockRoundNumber => syncedNowSecs ~/ 103;
+
+  /// The second of the round the synced clock is in now (0-102).
+  int get _clockSecondsInto => syncedNowSecs % 103;
 
   void _calibrateServerTimeOffset(GlobalRoundState round) {
     try {
-      final localNowSecs = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+      final localNowSecs = _now().toUtc().millisecondsSinceEpoch ~/ 1000;
       final serverNowSecs = (round.scheduledAt.millisecondsSinceEpoch ~/ 1000) - round.secondsRemaining;
       _serverTimeOffset = serverNowSecs - localNowSecs;
     } catch (_) {}
@@ -72,6 +128,11 @@ class RoundSyncService extends ChangeNotifier {
     // player left. A single fresh failure after re-entry could then be
     // enough to trip the 3-strike threshold below, not the intended 3.
     _failedPollCount = 0;
+    _lastAskedElapsed = null;
+    _lastAskedWall = null;
+    _gaveUpRoundNumber = null;
+    _zeroFetchRoundNumber = null;
+    _resultFetchRunning = false;
     notifyListeners();
 
     game.startCountdown();
@@ -84,7 +145,7 @@ class RoundSyncService extends ChangeNotifier {
     // ever cancel a timer created after the screen that owns it already
     // called detach().
     if (myGeneration != _attachGeneration) return;
-    _startPolling(game, auth);
+    _startPolling(game, auth, myGeneration);
   }
 
   /// Called from GameScreen.dispose — cleans up.
@@ -96,13 +157,64 @@ class RoundSyncService extends ChangeNotifier {
     _pollTimer = null;
     _deliveredRoundNumber = null;
     _betRoundId = null;
+    // B-4 fix: a result fetch still running sees the new generation and stops;
+    // this flag must not stay set for the next attach().
+    _resultFetchRunning = false;
   }
 
   // ── Continuous polling ─────────────────────────────────────────────
   Timer? _pollTimer;
   bool _pollInFlight = false;
 
-  /// Polls the round every 2s for as long as the game screen is open.
+  /// True while [fetchAndDeliverResult] is asking for the result. The schedule
+  /// does not add its own requests meanwhile.
+  bool _resultFetchRunning = false;
+
+  /// The round whose result fetch gave up. The 2-second draw checks stop for it.
+  int? _gaveUpRoundNumber;
+
+  /// The round for which the result fetch at countdown 00 has started. Until
+  /// it has, the schedule does not ask in the draw window (see [_pollIfDue]),
+  /// so the result is never shown before the screen reads 00.
+  int? _zeroFetchRoundNumber;
+
+  /// When the server was last asked for the round (any request), on the
+  /// monotonic stopwatch; the schedule measures its intervals from here.
+  Duration? _lastAskedElapsed;
+
+  /// The device's clock at that same moment. Compared with the stopwatch to
+  /// notice that the device's clock was moved, or that the phone slept.
+  DateTime? _lastAskedWall;
+
+  /// How often the round is asked for while betting is open and the connection
+  /// is healthy: only to keep the clock offset right. The 10-second server
+  /// timer (cron job bsg-tick-rounds) is the server's own safety net.
+  static const Duration _bettingPollInterval = Duration(seconds: 10);
+
+  /// How often the round is asked for from the draw second until the result
+  /// is in hand, and after a failed request: the old 2-second rhythm.
+  static const Duration _drawPollInterval = Duration(seconds: 2);
+  static const Duration _failingPollInterval = Duration(seconds: 2);
+
+  /// How often the schedule checks whether a request is due. No request by itself.
+  static const Duration _scheduleInterval = Duration(milliseconds: 500);
+
+  /// How far the device's clock may drift from the stopwatch, between two
+  /// requests, before it counts as "the clock was moved (or the phone slept)".
+  static const Duration _clockJumpTolerance = Duration(seconds: 2);
+
+  /// Records that the server is being asked for the round now. Called just
+  /// before every request for the round, so a slow answer does not stretch
+  /// the schedule.
+  void _markAsked() {
+    _lastAskedElapsed = _elapsed();
+    _lastAskedWall = _now();
+  }
+
+  /// Asks for the round on the smart schedule ([_pollIfDue], checked every
+  /// 0.5 s) for as long as the game screen is open. (Until 2026-11-09 this was
+  /// a fixed 2-second poll; the reasons below for having a poll at all still
+  /// hold.)
   ///
   /// The class docs claimed this existed from the start; it did not. Without
   /// it the round was read exactly twice per cycle — once on attach, once in
@@ -117,23 +229,115 @@ class RoundSyncService extends ChangeNotifier {
   /// Polling makes delivery level-triggered rather than edge-triggered: the
   /// wheel spins whenever a result exists that this client has not shown yet,
   /// regardless of how the client got there.
-  void _startPolling(GameProvider game, AuthProvider auth) {
+  void _startPolling(GameProvider game, AuthProvider auth, int generation) {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _poll(game, auth));
+    _pollTimer = Timer.periodic(_scheduleInterval, (_) => _pollIfDue(game, auth, generation));
   }
+
+  /// Called every [_scheduleInterval]; asks for the round only when it is due:
+  ///   * while the last request failed (or the connection is down): every
+  ///     [_failingPollInterval], so an outage is noticed and recovered from at
+  ///     the old pace;
+  ///   * when the round known is not the round the clock is in (a new round
+  ///     has just begun, or nothing is known yet): at once, so its id is fresh
+  ///     before the player bets;
+  ///   * from the draw second: nothing until the result fetch at countdown 00
+  ///     has started (it is the request that draws and shows the result, at
+  ///     the moment the screen reads 00), or, if the countdown missed that
+  ///     tick, until 2 seconds after the draw second; then every
+  ///     [_drawPollInterval] until this round's result is in hand (or the
+  ///     fetch gave up);
+  ///   * otherwise, while betting: every [_bettingPollInterval];
+  ///   * at once, whatever the interval, when the device's clock has moved
+  ///     away from the stopwatch by [_clockJumpTolerance] or more since the
+  ///     last request (the clock was changed, or the phone slept).
+  /// Never while another request or the result fetch at 00 is running.
+  void _pollIfDue(GameProvider game, AuthProvider auth, int generation) {
+    if (generation != _attachGeneration) return;
+    if (_pollInFlight || _resultFetchRunning) return;
+    final Duration due;
+    if (!_isConnected || _failedPollCount > 0) {
+      due = _failingPollInterval;
+    } else if (_waitingForZeroFetch) {
+      return;
+    } else if (_knownRoundIsStale) {
+      due = Duration.zero;
+    } else if (_awaitingResult) {
+      due = _drawPollInterval;
+    } else {
+      due = _bettingPollInterval;
+    }
+    final lastElapsed = _lastAskedElapsed;
+    final lastWall = _lastAskedWall;
+    if (lastElapsed != null && lastWall != null) {
+      final sinceAsked = _elapsed() - lastElapsed;
+      final clockMoved = (_now().difference(lastWall) - sinceAsked).abs() >= _clockJumpTolerance;
+      if (!clockMoved && sinceAsked < due) return;
+    }
+    _poll(game, auth);
+  }
+
+  /// True when no round is known, or the one known is not the round the clock
+  /// is in now.
+  bool get _knownRoundIsStale {
+    final known = _currentRound;
+    return known == null || known.roundNumber != _clockRoundNumber;
+  }
+
+  /// True from the draw second until this round's result has been delivered
+  /// or its fetch gave up.
+  bool get _awaitingResult {
+    final known = _currentRound;
+    if (known == null || _clockSecondsInto < known.drawAtSecond) return false;
+    final number = _clockRoundNumber;
+    return _deliveredRoundNumber != number && _gaveUpRoundNumber != number;
+  }
+
+  /// True in the first 2 seconds of the draw window while the result fetch at
+  /// countdown 00 has not started yet: the schedule leaves the first request
+  /// of the draw to that fetch, so a result is never shown before 00.
+  bool get _waitingForZeroFetch {
+    final known = _currentRound;
+    if (known == null || known.roundNumber != _clockRoundNumber) return false;
+    final into = _clockSecondsInto;
+    if (into < known.drawAtSecond || into >= known.drawAtSecond + 2) return false;
+    final number = _clockRoundNumber;
+    return _zeroFetchRoundNumber != number && _deliveredRoundNumber != number;
+  }
+
+  /// The known round, if a bet or a printed ticket can still go to it: it is
+  /// the round the clock is in, it is not drawn, and by the live clock the
+  /// draw second has not been reached. The live clock is used, not the
+  /// round's own seconds_into, which can be up to 10 seconds old.
+  GlobalRoundState? get _roundStillOpen {
+    final known = _currentRound;
+    if (known == null) return null;
+    if (known.red != null && known.green != null && known.black != null) return null;
+    if (known.roundNumber != _clockRoundNumber) return null;
+    if (_clockSecondsInto >= known.drawAtSecond) return null;
+    return known;
+  }
+
+  /// The round a printed ticket goes to (Windows Print): [_roundStillOpen],
+  /// with no request. Null means betting is closed for this ticket.
+  GlobalRoundState? roundForPrint() => _roundStillOpen;
 
   Future<void> _poll(GameProvider game, AuthProvider auth) async {
     if (_pollInFlight) return;   // never overlap requests on a slow network
     _pollInFlight = true;
+    _markAsked();
     try {
       final round = await _api.getCurrentRound();
 
       if (round == null) {
         _failedPollCount++;
-        // Require 3 consecutive failed polls (~6s) before marking connection as
+        // Require 3 consecutive failed polls before marking connection as
         // dead, so a brief blip -- a tunnel, one dropped packet, a momentary
         // server stutter -- never interrupts the player. Only a real, sustained
-        // outage reaches the popup.
+        // outage reaches the popup. The first failure switches the schedule to
+        // every 2 seconds, so "disconnected" follows about 4 seconds after it
+        // (4-14 seconds after the network actually went, depending on when the
+        // next check was due).
         if (_failedPollCount >= 3) {
           final err = _api.lastRoundError ?? BetError.offline;
           if (_isConnected || _connectionError != err) {
@@ -179,6 +383,7 @@ class RoundSyncService extends ChangeNotifier {
     GlobalRoundState? round;
     var attempt = 1;
     while (true) {
+      _markAsked();
       round = await _api.getCurrentRound();
       if (round != null || attempt >= 3) break;
       attempt++;
@@ -235,29 +440,47 @@ class RoundSyncService extends ChangeNotifier {
   /// returned void and gave up completely silently: no wheel animation, no
   /// message, the player's stake just never resolved. The caller uses the
   /// false return to refund the player and tell them honestly instead.
+  ///
+  /// B-4 fix (2026-11-09): the fetch belongs to the screen that started it. If
+  /// that screen is left (detach) or replaced (a new attach), it stops at its
+  /// next step, sends no further request and hands nothing to the game; it
+  /// then returns false, which no caller acts on once its screen is gone.
+  /// While it runs, the poll schedule adds no requests of its own.
   Future<bool> fetchAndDeliverResult(GameProvider game, AuthProvider auth) async {
-    for (int attempt = 1; attempt <= 8; attempt++) {
-      final round = await _api.getCurrentRound();
-      if (round != null) {
-        _currentRound = round;
-        _calibrateServerTimeOffset(round);
-        if (round.red != null && round.green != null && round.black != null) {
-          if (_deliveredRoundNumber != round.roundNumber) {
-            _deliveredRoundNumber = round.roundNumber;
-            debugPrint('RoundSyncService: exactly-once delivery for round #${round.roundNumber} on attempt $attempt');
-            _deliverResult(round, game, auth);
-            return true;
-          } else {
-            return true; // Already delivered for this round
+    final generation = _attachGeneration;
+    final roundNumber = _clockRoundNumber;
+    _zeroFetchRoundNumber = roundNumber;
+    _resultFetchRunning = true;
+    try {
+      for (int attempt = 1; attempt <= 8; attempt++) {
+        if (generation != _attachGeneration) return false;
+        _markAsked();
+        final round = await _api.getCurrentRound();
+        if (generation != _attachGeneration) return false;
+        if (round != null) {
+          _currentRound = round;
+          _calibrateServerTimeOffset(round);
+          if (round.red != null && round.green != null && round.black != null) {
+            if (_deliveredRoundNumber != round.roundNumber) {
+              _deliveredRoundNumber = round.roundNumber;
+              debugPrint('RoundSyncService: exactly-once delivery for round #${round.roundNumber} on attempt $attempt');
+              _deliverResult(round, game, auth);
+              return true;
+            } else {
+              return true; // Already delivered for this round
+            }
           }
         }
+        if (attempt < 8) {
+          await Future.delayed(const Duration(milliseconds: 1000));
+        }
       }
-      if (attempt < 8) {
-        await Future.delayed(const Duration(milliseconds: 1000));
-      }
+      debugPrint('RoundSyncService: gave up waiting for round result after 8 attempts');
+      if (generation == _attachGeneration) _gaveUpRoundNumber = roundNumber;
+      return false;
+    } finally {
+      if (generation == _attachGeneration) _resultFetchRunning = false;
     }
-    debugPrint('RoundSyncService: gave up waiting for round result after 8 attempts');
-    return false;
   }
 
   /// Submits the player's bets to the server for the current active round.
@@ -296,10 +519,14 @@ class RoundSyncService extends ChangeNotifier {
 
     game.setBetStatus(BetSubmissionStatus.submitting);
 
-    // Use the active _currentRound if valid (updated every 2s by background poll).
-    // Only fetch fresh if absent or no longer accepting bets.
-    var targetRound = _currentRound;
-    if (targetRound == null || !targetRound.acceptsBets) {
+    // Use the known round if a bet can still go to it ([_roundStillOpen]: the
+    // round the clock is in, not drawn, before the draw second by the live
+    // clock). It is read at the start of each round and refreshed every 10
+    // seconds, so at the 5-second mark no request is needed. Otherwise fetch
+    // a fresh one.
+    var targetRound = _roundStillOpen;
+    if (targetRound == null) {
+      _markAsked();
       targetRound = await _api.getCurrentRound();
       if (targetRound == null) {
         debugPrint('RoundSyncService.submitBets: could not read the current round');
