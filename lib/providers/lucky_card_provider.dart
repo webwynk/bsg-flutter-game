@@ -862,6 +862,9 @@ class LuckyCardProvider extends ChangeNotifier {
     final bets = _board.toBetMap();
     var result = await _api.placeBet(roundId: round.roundId, bets: bets);
     if (stale()) return;
+    // A first try that failed this way may still have reached the server and
+    // been accepted, with only its reply lost (see the check after the retries).
+    final mayHaveReachedServer = !result.success && (result.error?.isRetryable ?? false);
 
     // Retry only what may be a passing glitch (offline, a sign-in that briefly
     // failed to attach, an unrecognised error), at most 3 attempts a second
@@ -874,6 +877,37 @@ class LuckyCardProvider extends ChangeNotifier {
       if (stale()) return;
       result = await _api.placeBet(roundId: round.roundId, bets: bets);
       if (stale()) return;
+    }
+
+    // Lost-reply check (2026-11-09): a later try can be refused ("round
+    // closed" once it arrives at second 88) although an earlier try was
+    // accepted and only its reply was lost. Before telling the player the bet
+    // failed, ask the server once whether this round holds it.
+    if (!result.success && mayHaveReachedServer) {
+      final sent = bets.values.fold<int>(0, (a, b) => a + b);
+      final mine = await _api.getMyRoundResult(round.roundId);
+      if (stale()) return;
+      if (mine != null && mine.placedBet && mine.totalStake == sent) {
+        // It counted: treated as an accepted bet. The balance is not taken
+        // from this answer: by now the round may already be settled, and its
+        // balance would show a win before the reveal. The screen already shows
+        // the stake taken; the result check sets the real balance at the reveal.
+        _betStatus = LuckyCardBetStatus.submitted;
+        _submittedRoundId = round.roundId;
+        notifyListeners();
+        return;
+      }
+      if (mine == null || mine.placedBet) {
+        // Could not tell (the check failed, or a different total is on
+        // record): no refund and no message. The board is kept as sent, so
+        // the result check at the end of the round asks the server and shows
+        // what really happened.
+        _betStatus = LuckyCardBetStatus.submitted;
+        _submittedRoundId = round.roundId;
+        notifyListeners();
+        return;
+      }
+      // The server holds no bet for this round: a real refusal, below.
     }
 
     if (result.success) {

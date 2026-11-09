@@ -45,6 +45,10 @@ devtools_options.yaml
 build/
 /build/
 /coverage/
+release/
+/release/
+*.exe
+*.zip
 
 # Android Build Outputs & Local Properties
 /android/app/debug

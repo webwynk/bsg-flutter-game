@@ -158,8 +158,8 @@ class RecentRound {
 /// the winning digits — was retrievable without a session. v2 removes that
 /// path entirely: `rounds` is hidden by RLS until settled, and the RPCs are
 /// granted to `authenticated` only.
-/// The three round calls Triple Chance's [RoundSyncService] makes. Exists so
-/// tests can stand in a simulated server (2026-11-09); the app always uses
+/// The round calls Triple Chance's [RoundSyncService] makes. Exists so tests
+/// can stand in a simulated server (2026-11-09); the app always uses
 /// [RoundApiService], which implements it unchanged.
 abstract class TcRoundApi {
   Future<GlobalRoundState?> getCurrentRound();
@@ -173,6 +173,10 @@ abstract class TcRoundApi {
 
   /// Why the last [getCurrentRound] failed; null after a success.
   String? get lastRoundError;
+
+  /// This player's bet in [roundId] (placed or not, stake, balance); null if
+  /// the question failed. Used by the lost-reply check in submitBets.
+  Future<PlayerRoundResult?> getMyRoundResult(String roundId);
 }
 
 class RoundApiService implements TcRoundApi {
@@ -300,6 +304,7 @@ class RoundApiService implements TcRoundApi {
 
   /// This player's result for a round. Returns null only on a transport error,
   /// so the caller can distinguish "no answer" from "no bet".
+  @override
   Future<PlayerRoundResult?> getMyRoundResult(String roundId) async {
     try {
       final res = await _db.rpc(Rpc.getMyRoundResult, params: {

@@ -606,4 +606,66 @@ void main() {
       await rig.finish();
     });
   });
+
+  group('the lost-reply "bet not placed" problem (2026-11-09; before the fix: reported as failed)', () {
+    testWidgets('the first send is accepted but its reply is lost, the late retry gets "round closed": '
+        'submitBets asks the server, finds the bet, and reports it as placed', (tester) async {
+      final rig = Rig(tester, startInto: 40);
+      rig.server.latency = const Duration(milliseconds: 600); // a weak network: 0.3 s up, 0.3 s back
+      await rig.open();
+      rig.server.loseBetRepliesNext(2);
+      await rig.world.runUntil(90.0);
+      debugPrint('Triple Chance bet tries reached the server at: '
+          '${rig.server.betLog.map((b) => SimulatedTcServer.positionOf(b.arrived).toStringAsFixed(2)).toList()}');
+      expect(rig.server.stakeOn['round-$cycle'], 20);
+      expect(rig.server.balance, 980);
+      expect(SimulatedTcServer.positionOf(rig.server.betLog.last.arrived), greaterThanOrEqualTo(88.0));
+      // Before the fix: [false], ROUND_CLOSED, failed (the screen then refunded and said
+      // "ROUND CLOSED", and onGlobalResult never asked for this bet's result).
+      expect(rig.betAccepted, [true]);
+      expect(rig.game.betStatus, BetSubmissionStatus.submitted);
+      expect(rig.game.submittedRoundId, 'round-$cycle');
+      expect(rig.sync.betRoundId, 'round-$cycle');
+      expect(rig.server.myResultCalls.length, 1);
+      await rig.finish();
+    });
+
+    testWidgets('when no try reached the server, the late "round closed" is still a real refusal', (tester) async {
+      final rig = Rig(tester, startInto: 40);
+      rig.server.latency = const Duration(milliseconds: 600);
+      await rig.open();
+      rig.server.failBetsNext(2);
+      await rig.world.runUntil(90.0);
+      expect(rig.server.stakeOn['round-$cycle'], isNull);
+      expect(rig.betAccepted, [false]);
+      expect(rig.sync.lastSubmitError, BetError.roundClosed);
+      expect(rig.game.betStatus, BetSubmissionStatus.failed);
+      await rig.finish();
+    });
+
+    testWidgets('when the question itself fails: reported as sent (no refund, no dialog); '
+        'the result check decides', (tester) async {
+      final rig = Rig(tester, startInto: 40);
+      rig.server.latency = const Duration(milliseconds: 600);
+      rig.server.myResultOffline = true;
+      await rig.open();
+      rig.server.loseBetRepliesNext(2);
+      await rig.world.runUntil(90.0);
+      expect(rig.betAccepted, [true]);
+      expect(rig.game.betStatus, BetSubmissionStatus.submitted);
+      expect(rig.sync.betRoundId, 'round-$cycle', reason: 'onGlobalResult asks about this round');
+      await rig.finish();
+    });
+
+    testWidgets('one lost reply and an in-time retry: fine, with no extra question', (tester) async {
+      final rig = Rig(tester, startInto: 40);
+      await rig.open();
+      rig.server.loseBetRepliesNext(1);
+      await rig.world.runUntil(89.0);
+      expect(rig.betAccepted, [true]);
+      expect(rig.server.balance, 980, reason: 'the retry of the same board charges nothing more');
+      expect(rig.server.myResultCalls, isEmpty);
+      await rig.finish();
+    });
+  });
 }

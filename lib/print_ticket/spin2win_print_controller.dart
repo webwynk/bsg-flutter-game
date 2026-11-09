@@ -50,7 +50,7 @@ class Spin2WinPrintController extends ChangeNotifier {
   List<Spin2WinTicket> _tickets = const [];
   int _lastCountdown = 0;
   String? _sentRequest;
-  String? _sentBoard;
+  String? _sentRound;
 
   Spin2WinPrintState get state => _state;
   bool get printing => _printing;
@@ -152,11 +152,10 @@ class Spin2WinPrintController extends ChangeNotifier {
       final bets = game.boardForPrint();
       if (bets.isEmpty) return;
 
-      // The same board pressed again after a lost reply is the same press, so
-      // the server can not charge it twice.
-      final board = bets.entries.map((e) => '${e.key}=${e.value}').join(',');
-      if (_sentBoard != board) {
-        _sentBoard = board;
+      // The same press on the same round reuses the same request ID, so the
+      // server can not charge twice even if the board is edited after a lost reply.
+      if (_sentRound != round.roundId) {
+        _sentRound = round.roundId;
         _sentRequest = newSpin2WinRequestId();
       }
       final Spin2WinTicketSold sold;
@@ -164,13 +163,13 @@ class Spin2WinPrintController extends ChangeNotifier {
         sold = await api.printTicket(roundId: round.roundId, bets: bets, requestId: _sentRequest!);
       } on Spin2WinPrintException catch (e) {
         if (!e.reason.mayHaveReachedServer) {
-          _sentBoard = null;
+          _sentRound = null;
           _sentRequest = null;
         }
         _say(e.reason.message);
         return;
       }
-      _sentBoard = null;
+      _sentRound = null;
       _sentRequest = null;
       game.ticketSold(
         roundId: sold.ticket.roundId,

@@ -304,6 +304,31 @@ void main() {
     await rig.world.run(const Duration(seconds: 1));
   });
 
+  testWidgets('a lost reply then board edit: same round means same UUID, no double charge (2026-11-09)', (tester) async {
+    // Bug fix: request ID was keyed by board snapshot; editing bets after an
+    // offline error generated a new UUID, bypassing server idempotency and
+    // charging twice. The fix keys by round ID instead.
+    final rig = BetRig(tester);
+    await rig.open();
+    final print = Print(rig);
+    await rig.world.run(const Duration(milliseconds: 100));
+    final other = Lucky16Card.all.firstWhere((c) => c != winner);
+    rig.provider.selectChip(Lucky16Chip.ten);
+    rig.provider.tapCard(winner);              // board: winner=10
+    print.api.refuseNext = Lucky16PrintRefusal.offline;
+    await print.press(tester);                 // press 1 → offline error, UUID-A locked
+    expect(print.api.requests, hasLength(1));
+    final uuidA = print.api.requests[0];
+
+    rig.provider.tapCard(other);               // board edit: winner=10, other=10
+    await print.press(tester);                 // press 2 → same round → same UUID
+    expect(print.api.requests, hasLength(2));
+    expect(print.api.requests[1], uuidA, reason: 'board edit must not regenerate the UUID for the same round');
+    print.controller.dispose();
+    rig.provider.leave();
+    await rig.world.run(const Duration(seconds: 1));
+  });
+
   testWidgets('a final refusal leaves the chips and the next press is a new one', (tester) async {
     final rig = BetRig(tester);
     await rig.open();

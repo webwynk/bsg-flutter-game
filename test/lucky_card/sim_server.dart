@@ -49,6 +49,13 @@ class SimulatedLuckyCardServer implements LuckyCardApi {
   /// cutoff is judged).
   Duration uplink = Duration.zero;
 
+  /// The next [loseBetRepliesNext] bets that the server ACCEPTS lose their reply
+  /// on the way back: the bet is on the account, but the app hears "offline"
+  /// (2026-11-09, the lost-reply "bet not placed" tests).
+  int _betRepliesToLose = 0;
+
+  void loseBetRepliesNext(int count) => _betRepliesToLose = count;
+
   /// The server stops taking bets from this second of the cycle (the live
   /// `bet_cutoff_second`).
   final int cutoffSecond = 88;
@@ -162,6 +169,10 @@ class SimulatedLuckyCardServer implements LuckyCardApi {
     ledgerVersion++;
     _stakeOn[roundId] = stake;
     _betsByRound[roundId] = Map.of(bets);
+    if (_betRepliesToLose > 0) {
+      _betRepliesToLose--;
+      return const LuckyCardPlaceBetResult.failure(LuckyCardError.offline);
+    }
     return LuckyCardPlaceBetResult(
       success: true,
       totalStake: stake,

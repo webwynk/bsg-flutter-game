@@ -66,6 +66,7 @@ import '../services/lucky16_round_sync.dart';
 import '../services/lucky16_sound.dart';
 import '../services/lucky16_sound_director.dart';
 import '../utils/app_exit.dart';
+import '../utils/away_clock.dart';
 import '../utils/desktop_window.dart';
 import '../widgets/dialogs/action_dialog.dart';
 import '../widgets/lucky16/lucky16_art.dart';
@@ -184,6 +185,11 @@ class _Lucky16ScreenState extends State<Lucky16Screen> with WidgetsBindingObserv
   Timer? _awayTimer;
   bool _awayPastThreshold = false;
 
+  /// The real time away (2026-11-09): [_awayTimer] can be frozen while the
+  /// phone sleeps and is cancelled on return, so the return also checks how
+  /// long the app was really gone. Phones only, as main.dart's away rule.
+  final AwayClock _awayClock = AwayClock();
+
   /// True once the screen has stopped itself after a long absence.
   bool _stopped = false;
 
@@ -278,13 +284,16 @@ class _Lucky16ScreenState extends State<Lucky16Screen> with WidgetsBindingObserv
       case AppLifecycleState.paused:
         _awayTimer?.cancel();
         _awayTimer = Timer(Lucky16Screen.awayThreshold, () => _awayPastThreshold = true);
+        if (countsAsAway(state)) _awayClock.markLeft();
       case AppLifecycleState.resumed:
         _awayTimer?.cancel();
         _awayTimer = null;
+        final timedOut = _awayClock.awayAtLeast(Lucky16Screen.awayThreshold);
+        _awayClock.clear();
         if (!_ready || _stopped) return;
         // The timer may have been frozen straight through the lock mark: send the bet now.
         _provider.catchUpMissedSubmissionIfNeeded();
-        if (_awayPastThreshold) {
+        if (_awayPastThreshold || timedOut) {
           _awayPastThreshold = false;
           // main.dart is about to log the player out. Stop everything here; a bet that was sent is
           // left to settle, chips that were not are given back.

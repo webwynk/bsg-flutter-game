@@ -3,6 +3,7 @@
 // printer. A ticket is bought by placing the board on the simulated server, which
 // is what the database's bet row ends up holding.
 import 'package:best_smart_game/models/spin2win_board.dart';
+import 'package:best_smart_game/models/spin2win_models.dart';
 import 'package:best_smart_game/print_ticket/spin2win_print_controller.dart';
 import 'package:best_smart_game/print_ticket/print_settings_store.dart';
 import 'package:best_smart_game/print_ticket/spin2win_tickets.dart';
@@ -278,6 +279,31 @@ void main() {
     await print.press(tester);
     expect(print.api.requests, hasLength(2));
     expect(print.api.requests[0], print.api.requests[1]);
+    print.controller.dispose();
+    rig.provider.leave();
+    await rig.world.run(const Duration(seconds: 1));
+  });
+
+  testWidgets('a lost reply then board edit: same round means same UUID, no double charge (2026-11-09)', (tester) async {
+    // Bug fix: request ID was keyed by board snapshot; editing bets after an
+    // offline error generated a new UUID, bypassing server idempotency and
+    // charging twice. The fix keys by round ID instead.
+    final rig = BetRig(tester);
+    await rig.open();
+    final print = Print(rig);
+    await rig.world.run(const Duration(milliseconds: 100));
+    final other = kSpin2WinNumbers.firstWhere((n) => n != winner);
+    rig.provider.selectChip(Spin2WinChip.ten);
+    rig.provider.tapNumber(winner);              // board: winner=10
+    print.api.refuseNext = Spin2WinPrintRefusal.offline;
+    await print.press(tester);                   // press 1 → offline error, UUID-A locked
+    expect(print.api.requests, hasLength(1));
+    final uuidA = print.api.requests[0];
+
+    rig.provider.tapNumber(other);               // board edit: winner=10, other=10
+    await print.press(tester);                   // press 2 → same round → same UUID
+    expect(print.api.requests, hasLength(2));
+    expect(print.api.requests[1], uuidA, reason: 'board edit must not regenerate the UUID for the same round');
     print.controller.dispose();
     rig.provider.leave();
     await rig.world.run(const Duration(seconds: 1));

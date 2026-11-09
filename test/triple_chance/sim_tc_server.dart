@@ -62,6 +62,20 @@ class SimulatedTcServer implements TcRoundApi {
   final List<({DateTime arrived, String roundId, bool accepted})> betLog = [];
 
   int balance = 1000;
+
+  /// The next [loseBetRepliesNext] bets that the server ACCEPTS lose their reply
+  /// on the way back: the bet is on the account, but the app hears "offline".
+  int _betRepliesToLose = 0;
+
+  void loseBetRepliesNext(int count) => _betRepliesToLose = count;
+
+  /// The next [failBetsNext] bets fail as offline BEFORE reaching the account.
+  int _betFailuresLeft = 0;
+
+  void failBetsNext(int count) => _betFailuresLeft = count;
+
+  /// The stake on record per round (a repeat of the same board charges 0).
+  final Map<String, int> stakeOn = {};
   int ledgerVersion = 100;
 
   String? _lastRoundError;
@@ -112,6 +126,31 @@ class SimulatedTcServer implements TcRoundApi {
     );
   }
 
+  /// While true every "my bet" question fails, as if offline.
+  bool myResultOffline = false;
+
+  /// Every "my bet" question: when it arrived and for which round.
+  final List<({DateTime at, String roundId})> myResultCalls = [];
+
+  @override
+  Future<PlayerRoundResult?> getMyRoundResult(String roundId) async {
+    myResultCalls.add((at: now(), roundId: roundId));
+    if (latency > Duration.zero) await Future<void>.delayed(latency);
+    if (myResultOffline) return null;
+    final stake = stakeOn[roundId];
+    return PlayerRoundResult(
+      placedBet: stake != null,
+      totalStake: stake ?? 0,
+      singlePayout: 0,
+      doublePayout: 0,
+      triplePayout: 0,
+      totalPayout: 0,
+      isSettled: false,
+      coinBalance: balance,
+      ledgerVersion: ledgerVersion,
+    );
+  }
+
   @override
   Future<PlaceBetResult> placeBet({
     required String roundId,
@@ -124,13 +163,24 @@ class SimulatedTcServer implements TcRoundApi {
     final epoch = roundedSeconds(arrival);
     final number = epoch ~/ 103;
     final into = epoch % 103;
+    if (_betFailuresLeft > 0) {
+      _betFailuresLeft--;
+      if (latency > Duration.zero) await Future<void>.delayed(latency ~/ 2);
+      return const PlaceBetResult(success: false, error: BetError.offline);
+    }
     final accepted = roundId == 'round-$number' && into < cutoffSecond;
     betLog.add((arrived: arrival, roundId: roundId, accepted: accepted));
     if (latency > Duration.zero) await Future<void>.delayed(latency ~/ 2);
     if (!accepted) return const PlaceBetResult(success: false, error: BetError.roundClosed);
     final stake = [singleBets, doubleBets, tripleBets].expand((m) => m.values).fold<int>(0, (a, b) => a + b);
-    balance -= stake;
+    final delta = stake - (stakeOn[roundId] ?? 0);
+    balance -= delta;
     ledgerVersion++;
+    stakeOn[roundId] = stake;
+    if (_betRepliesToLose > 0) {
+      _betRepliesToLose--;
+      return const PlaceBetResult(success: false, error: BetError.offline);
+    }
     return PlaceBetResult(success: true, totalStake: stake, coinBalance: balance, ledgerVersion: ledgerVersion);
   }
 }

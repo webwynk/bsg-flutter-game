@@ -54,7 +54,7 @@ class TcPrintController extends ChangeNotifier {
   List<TcTicket> _tickets = const [];
   int _lastCountdown = 0;
   String? _sentRequest;
-  String? _sentBoard;
+  String? _sentRound;
 
   TcPrintState get state => _state;
   bool get printing => _printing;
@@ -159,11 +159,10 @@ class TcPrintController extends ChangeNotifier {
       }
       final bets = game.boardForPrint();
 
-      // The same board pressed again after a lost reply is the same press, so
-      // the server can not charge it twice.
-      final board = bets.toString();
-      if (_sentBoard != board) {
-        _sentBoard = board;
+      // The same press on the same round reuses the same request ID, so the
+      // server can not charge twice even if the board is edited after a lost reply.
+      if (_sentRound != round.roundId) {
+        _sentRound = round.roundId;
         _sentRequest = newTcRequestId();
       }
       final TcTicketSold sold;
@@ -171,13 +170,13 @@ class TcPrintController extends ChangeNotifier {
         sold = await api.printTicket(roundId: round.roundId, bets: bets, requestId: _sentRequest!);
       } on TcPrintException catch (e) {
         if (!e.reason.mayHaveReachedServer) {
-          _sentBoard = null;
+          _sentRound = null;
           _sentRequest = null;
         }
         _say(e.reason.message);
         return;
       }
-      _sentBoard = null;
+      _sentRound = null;
       _sentRequest = null;
       game.ticketSold(
         auth,

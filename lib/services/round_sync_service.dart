@@ -573,6 +573,9 @@ class RoundSyncService extends ChangeNotifier {
     // player), so retrying it would only waste the 5-second submission
     // window on a call that will never succeed.
     const retryableErrors = {BetError.offline, BetError.unauthenticated, BetError.unknown};
+    // A first try that failed this way may still have reached the server and
+    // been accepted, with only its reply lost (see the check after the retries).
+    final mayHaveReachedServer = !result.success && retryableErrors.contains(result.error);
     var attempt = 1;
     while (!result.success && retryableErrors.contains(result.error) && attempt < 3) {
       attempt++;
@@ -583,6 +586,37 @@ class RoundSyncService extends ChangeNotifier {
         doubleBets: doubleBets,
         tripleBets: tripleBets,
       );
+    }
+
+    // Lost-reply check (2026-11-09): a later try can be refused (ROUND_CLOSED
+    // once it arrives at second 88) although an earlier try was accepted and
+    // only its reply was lost. Before reporting a failure -- which makes the
+    // screen refund the chips and say the bet was not placed -- ask the server
+    // once whether this round holds the bet.
+    if (!result.success && mayHaveReachedServer) {
+      final sent = [singleBets, doubleBets, tripleBets]
+          .expand((m) => m.values)
+          .fold<int>(0, (a, b) => a + b);
+      final mine = await _api.getMyRoundResult(roundId);
+      if (mine != null && mine.placedBet && mine.totalStake == sent) {
+        // It counted: treated as an accepted bet. The balance is not taken
+        // from this answer: the round may already be settled, and its balance
+        // would show a win before the wheel. The screen already shows the stake
+        // taken; onGlobalResult sets the real balance after the wheel.
+        game.setBetStatus(BetSubmissionStatus.submitted, roundId: roundId);
+        return true;
+      }
+      if (mine == null || mine.placedBet) {
+        // Could not tell (the check failed, or a different total is on
+        // record): reported as sent, so the screen neither refunds nor shows a
+        // dialog. The board stays, and onGlobalResult asks the server for this
+        // round's result (get_my_round_result), which shows what really
+        // happened and sets the true balance.
+        debugPrint('RoundSyncService.submitBets: bet outcome unknown after a lost reply; left to the result check');
+        game.setBetStatus(BetSubmissionStatus.submitted, roundId: roundId);
+        return true;
+      }
+      // The server holds no bet for this round: a real refusal, below.
     }
 
     if (result.success) {

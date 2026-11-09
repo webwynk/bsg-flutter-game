@@ -51,6 +51,34 @@ class AuthProvider extends ChangeNotifier {
     });
   }
 
+  // The session calls the heartbeat path makes. Always the real ApiService in
+  // the app; only tests swap them, through [configureForTest] (2026-11-09).
+  Future<Map<String, dynamic>?> Function(String token) _heartbeatCall =
+      (token) => ApiService().heartbeat(token);
+  Future<void> Function() _releaseSeatCall = () => ApiService().releaseSessionSlot();
+  Future<void> Function() _logoutCall = () => ApiService().logout();
+
+  /// Tests only: puts in stand-ins for the heartbeat, seat-release and logout
+  /// calls, and (optionally) a signed-in player with the heartbeat running.
+  /// Never called by the app.
+  @visibleForTesting
+  void configureForTest({
+    required Future<Map<String, dynamic>?> Function(String token) heartbeat,
+    required Future<void> Function() releaseSeat,
+    required Future<void> Function() logout,
+    UserModel? signedIn,
+  }) {
+    _heartbeatCall = heartbeat;
+    _releaseSeatCall = releaseSeat;
+    _logoutCall = logout;
+    if (signedIn != null) {
+      _user = signedIn;
+      _sessionStartAt = DateTime.now();
+      _startHeartbeat();
+      notifyListeners();
+    }
+  }
+
   /// Stake sitting on the board that has not reached the database yet.
   /// Chips are deducted locally the moment they are placed, but nothing is
   /// written until place_bet runs at the close of betting, so the server's
@@ -153,16 +181,30 @@ class AuthProvider extends ChangeNotifier {
     return outcome;
   }
 
+  /// True once this device has given its seat up for being away
+  /// ([releaseSessionSlot]). From then on the heartbeat neither asks the
+  /// server nor acts on a reply already on its way: with the seat gone the
+  /// server can only answer "session_displaced", which would end the session
+  /// with "opened on another device" before the "YOU WERE AWAY" popup gets its
+  /// turn (B-5, 2026-11-09). The away popup always ends in a full logout, so
+  /// the heartbeat never needs to resume. Cleared when a session starts or ends.
+  bool _seatGivenUp = false;
+
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
+    _seatGivenUp = false;
     if (_user == null) return;
 
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
       final current = _user;
       if (current == null || current.token == null) return;
+      if (_seatGivenUp) return; // away: see _seatGivenUp
 
-      final res = await ApiService().heartbeat(current.token!);
+      final res = await _heartbeatCall(current.token!);
       if (res == null) return; // transport hiccup — keep the session
+      // The seat was given up while this reply was on its way: whatever it
+      // says (most likely "displaced"), the away popup decides now.
+      if (_seatGivenUp) return;
 
       if (res[Field.allowed] != true) {
         final reason = res[Field.reason]?.toString();
@@ -200,9 +242,10 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _endSession({required bool forced, String? reason}) async {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
+    _seatGivenUp = false;
 
     if (_user != null) {
-      await ApiService().logout();
+      await _logoutCall();
     }
 
     _user = null;
@@ -224,15 +267,17 @@ class AuthProvider extends ChangeNotifier {
 
   /// Releases the single-device session slot without a full logout --
   /// called once the app has been backgrounded past the away-threshold (see
-  /// _AwaySessionGuard in main.dart). Local state (saved credentials,
-  /// heartbeat timer) is left running -- this only frees the seat for
-  /// another device; it does not end this device's own local session. If
+  /// _AwaySessionGuard in main.dart). The player stays signed in locally, but
+  /// the heartbeat stops asking the server (see [_seatGivenUp]) -- this only
+  /// frees the seat for another device; it does not end this device's own
+  /// local session. If
   /// this same device later returns, the "away" popup always leads to a
   /// full, deliberate logout (never a silent reclaim) -- see
   /// _AwaySessionGuard for why that's a deliberate choice, not an omission.
   Future<void> releaseSessionSlot() async {
     if (_user == null) return;
-    await ApiService().releaseSessionSlot();
+    _seatGivenUp = true;
+    await _releaseSeatCall();
   }
 
   // ── Misc ───────────────────────────────────────────────────────────────────

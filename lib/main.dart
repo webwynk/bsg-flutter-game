@@ -15,6 +15,7 @@ import 'screens/lobby_screen.dart';
 import 'screens/game_screen.dart';
 import 'theme/app_colors.dart';
 import 'utils/app_exit.dart';
+import 'utils/away_clock.dart';
 import 'utils/desktop_window.dart';
 import 'utils/device_type.dart';
 import 'widgets/desktop_window/desktop_close_guard.dart';
@@ -156,6 +157,11 @@ class _AwaySessionGuardState extends State<_AwaySessionGuard> with WidgetsBindin
   Timer? _releaseTimer;
   bool _wasAwayPastThreshold = false;
 
+  /// The real time away (B-5, 2026-11-09): the 20-second timer above can be
+  /// frozen while the phone sleeps and is cancelled on return, so the return
+  /// also checks how long the app was really gone.
+  final AwayClock _awayClock = AwayClock();
+
   /// True from the moment the "You were away" popup is shown until its OK
   /// button is tapped. Bug fix: without this, backgrounding a second time
   /// (before ever answering the first popup) would start a whole new
@@ -191,6 +197,7 @@ class _AwaySessionGuardState extends State<_AwaySessionGuard> with WidgetsBindin
         // already on screen.
         if (_awayPopupShowing) return;
         _releaseTimer?.cancel();
+        _awayClock.markLeft();
         _releaseTimer = Timer(_awayThreshold, () => _markAwayAndRelease(auth));
         break;
       case AppLifecycleState.detached:
@@ -199,7 +206,15 @@ class _AwaySessionGuardState extends State<_AwaySessionGuard> with WidgetsBindin
         break;
       case AppLifecycleState.resumed:
         _releaseTimer?.cancel();
-        if (_wasAwayPastThreshold) {
+        // Away if the timer fired, OR the real time away reached the threshold
+        // even though the timer never fired (frozen while the phone slept). In
+        // that second case the seat was never freed: free it now, so the
+        // heartbeat stops and the seat is open for another device, as after a
+        // timer that did fire.
+        final timedOut = _awayClock.awayAtLeast(_awayThreshold);
+        _awayClock.clear();
+        if (_wasAwayPastThreshold || timedOut) {
+          if (!_wasAwayPastThreshold) auth.releaseSessionSlot();
           _wasAwayPastThreshold = false;
           _resolveAwayReturn();
         }
