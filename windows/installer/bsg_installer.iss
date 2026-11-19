@@ -1,6 +1,6 @@
 ; Inno Setup Script for BSG Windows Desktop App
 #define MyAppName "BSG"
-#define MyAppVersion "2.0.8.146"
+#define MyAppVersion "2.0.8.147"
 #define MyAppPublisher "BSG"
 #define MyAppExeName "BSG.exe"
 
@@ -13,7 +13,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=d:\Download\Game\bsg_app\release\windows
-OutputBaseFilename=BSG-Setup-2.0.8-146
+OutputBaseFilename=BSG-Setup-2.0.8-147
 SetupIconFile=d:\Download\Game\bsg_app\windows\runner\resources\app_icon.ico
 Compression=lzma2/max
 SolidCompression=yes
