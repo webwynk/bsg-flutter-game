@@ -16,6 +16,8 @@
 //     name when the player cannot afford it, and is then dimmed.
 //   * CLEAR gives every chip back.
 //   * REMOVE puts the chip in hand down; taps on the board then take chips back. It is not an undo.
+//     On the Windows desktop app (`isWindowsApp`), REMOVE is hidden and mouse right-click removes
+//     chips directly while keeping the held chip selected.
 //
 // Belongs to Lucky 16 Card only.
 
@@ -23,6 +25,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../models/lucky16_board.dart';
 import '../../providers/lucky16_provider.dart';
+import '../../utils/desktop_window.dart';
 import 'lucky16_action_buttons.dart';
 import 'lucky16_art.dart';
 import 'lucky16_bet_panel.dart';
@@ -153,12 +156,14 @@ class Lucky16ActionButtonsBinding extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final side = zone ?? layout.side;
+    final hideRemove = isWindowsApp;
+    final buttonCount = hideRemove ? 2 : Lucky16Layout.actionButtonCount;
     return Lucky16Selector<Lucky16ButtonsSnapshot>(
       provider: provider,
       select: Lucky16ButtonsSnapshot.of,
       builder: (context, s) {
         Widget button(int slot, Lucky16Control control, bool enabled, Lucky16BoardResult Function() action) {
-          final rect = layout.actionButton(slot);
+          final rect = layout.actionButton(slot, count: buttonCount);
           return Positioned.fromRect(
             rect: layout.within(side, rect),
             child: Lucky16ActionButton(
@@ -182,10 +187,11 @@ class Lucky16ActionButtonsBinding extends StatelessWidget {
                 ? button(0, Lucky16Control.rebet, s.canAffordRebet, provider.rebet)
                 : button(0, Lucky16Control.doubleBet, s.hasBets, provider.doubleBet),
             button(1, Lucky16Control.clear, s.hasBets, provider.clearBoard),
-            button(2, Lucky16Control.remove, s.hasBets, () {
-              provider.deselectChip();
-              return const Lucky16BoardResult();
-            }),
+            if (!hideRemove)
+              button(2, Lucky16Control.remove, s.hasBets, () {
+                provider.deselectChip();
+                return const Lucky16BoardResult();
+              }),
           ],
         );
       },

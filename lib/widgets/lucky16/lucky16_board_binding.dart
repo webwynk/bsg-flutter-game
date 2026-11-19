@@ -22,6 +22,7 @@ import 'package:flutter/widgets.dart';
 import '../../models/lucky16_board.dart';
 import '../../models/lucky16_models.dart';
 import '../../providers/lucky16_provider.dart';
+import '../../utils/desktop_window.dart';
 import 'lucky16_art.dart';
 import 'lucky16_board_snapshot.dart';
 import 'lucky16_board_view.dart';
@@ -109,6 +110,15 @@ class _Lucky16BoardBindingState extends State<Lucky16BoardBinding> {
         onTapCard: (card) => _told(Lucky16CardTarget(card), provider.tapCard(card)),
         onTapSuit: (suit) => _told(Lucky16SuitTarget(suit), provider.tapSuit(suit)),
         onTapRank: (rank) => _told(Lucky16RankTarget(rank), provider.tapRank(rank)),
+        onSecondaryTapCard: isWindowsApp
+            ? (card) => _told(Lucky16CardTarget(card), provider.rightClickCard(card))
+            : null,
+        onSecondaryTapSuit: isWindowsApp
+            ? (suit) => _told(Lucky16SuitTarget(suit), provider.rightClickSuit(suit))
+            : null,
+        onSecondaryTapRank: isWindowsApp
+            ? (rank) => _told(Lucky16RankTarget(rank), provider.rightClickRank(rank))
+            : null,
         onRefused: widget.onRefused,
       ),
     );

@@ -8,7 +8,9 @@
 //   * a chip picks that chip up (tapping the one in hand keeps it in hand);
 //   * DOUBLE doubles every stake; REBET (in DOUBLE's place after a round) puts last round's
 //     bet back; CLEAR gives every chip back; REMOVE puts the chip in hand down, so taps on
-//     the board then take chips back. It is not an undo.
+//     the board then take chips back. In the Windows desktop app (`isWindowsApp`), REMOVE is hidden
+//     and mouse right-click on a number, ODD, or EVEN removes chips directly without dropping the
+//     held chip. It is not an undo.
 // A tap the board could not fully do is handed to [Spin2WinFrameBinding.onRefused] with its
 // reasons; the popups and the min/max banner for them come in Phase 5.
 //
@@ -28,6 +30,7 @@ import '../../models/spin2win_board.dart';
 import '../../models/spin2win_models.dart';
 import '../../providers/spin2win_provider.dart';
 import '../../services/spin2win_round_clock.dart';
+import '../../utils/desktop_window.dart';
 import 'spin2win_bet_panel.dart';
 import 'spin2win_coin_burst.dart';
 import 'spin2win_frame.dart';
@@ -197,9 +200,14 @@ class Spin2WinFrameBinding extends StatelessWidget {
         onRecords: onRecords,
         onSound: onSound,
         onNumber: (n) => _run(Spin2WinTapKind.number, () => provider.tapNumber(n)),
+        onRightNumber: isWindowsApp
+            ? (n) => _run(Spin2WinTapKind.number, () => provider.rightClickNumber(n))
+            : null,
         onChip: (chip) => _run(Spin2WinTapKind.chip, () => provider.selectChip(chip)),
         onOdd: () => _run(Spin2WinTapKind.button, provider.tapOdd),
+        onRightOdd: isWindowsApp ? () => _run(Spin2WinTapKind.button, provider.rightClickOdd) : null,
         onEven: () => _run(Spin2WinTapKind.button, provider.tapEven),
+        onRightEven: isWindowsApp ? () => _run(Spin2WinTapKind.button, provider.rightClickEven) : null,
         onDoubleOrRebet: () => _run(Spin2WinTapKind.button, provider.canRebet ? provider.rebet : provider.doubleBet),
         onRemove: () {
           if (provider.activeChip == null) return;

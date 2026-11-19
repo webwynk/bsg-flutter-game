@@ -286,16 +286,20 @@ class Lucky16Board {
 
   // ── Removing ───────────────────────────────────────────────────────────
 
-  /// Takes back the most recent chip on [card]. Only works when no chip is held
-  /// (the player taps a card with empty hands to remove).
-  Lucky16BoardResult removeFromCard(Lucky16Card card) =>
-      removeFromCards([card]);
+  /// Takes back the most recent chip on [card].
+  ///
+  /// When [requireEmptyHand] is true (phone/tablet tap-after-REMOVE mode), this
+  /// works only when no chip is held. Desktop mouse right-click passes false so
+  /// the held chip stays in hand.
+  Lucky16BoardResult removeFromCard(Lucky16Card card, {bool requireEmptyHand = true}) =>
+      removeFromCards([card], requireEmptyHand: requireEmptyHand);
 
-  /// Takes back the most recent chip from each of [cards] that holds one. Only
-  /// works when no chip is held.
-  Lucky16BoardResult removeFromCards(List<Lucky16Card> cards) {
+  /// Takes back the most recent chip from each of [cards] that holds one.
+  ///
+  /// See [removeFromCard] for [requireEmptyHand].
+  Lucky16BoardResult removeFromCards(List<Lucky16Card> cards, {bool requireEmptyHand = true}) {
     if (_locked) return _refused(Lucky16BoardIssue.locked);
-    if (_activeChip != null) return _refused(Lucky16BoardIssue.chipIsSelected);
+    if (requireEmptyHand && _activeChip != null) return _refused(Lucky16BoardIssue.chipIsSelected);
 
     final changed = <Lucky16Card>[];
     var refunded = 0;

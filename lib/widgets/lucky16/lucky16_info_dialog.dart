@@ -372,42 +372,48 @@ class _RulesBody extends StatelessWidget {
             color: kLucky16GoldBright,
           ),
           SizedBox(height: layout.dp(10)),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (var i = 0; i < kLucky16ButtonLines.length; i++) ...[
-                if (i > 0) SizedBox(width: layout.dp(14)),
-                Expanded(
-                  child: Column(
-                    children: [
-                      Container(
-                        width: double.infinity,
-                        alignment: Alignment.center,
-                        padding: EdgeInsets.symmetric(vertical: layout.dp(5)),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(layout.dp(12)),
-                          gradient: const LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [Color(0xFF6B1620), kLucky16PopupInk],
+          Builder(builder: (context) {
+            final buttonLines = lucky16ButtonLines();
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < buttonLines.length; i++) ...[
+                  if (i > 0) SizedBox(width: layout.dp(14)),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          alignment: Alignment.center,
+                          padding: EdgeInsets.symmetric(horizontal: layout.dp(4), vertical: layout.dp(5)),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(layout.dp(12)),
+                            gradient: const LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Color(0xFF6B1620), kLucky16PopupInk],
+                            ),
+                            border: Border.all(color: kLucky16Gold),
                           ),
-                          border: Border.all(color: kLucky16Gold),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: lucky16PopupText(
+                              buttonLines[i].label,
+                              layout,
+                              weight: FontWeight.w700,
+                              units: 26,
+                            ),
+                          ),
                         ),
-                        child: lucky16PopupText(
-                          kLucky16ButtonLines[i].label,
-                          layout,
-                          weight: FontWeight.w700,
-                          units: 26,
-                        ),
-                      ),
-                      SizedBox(height: layout.dp(6)),
-                      _body(kLucky16ButtonLines[i].body, layout, units: 26, align: TextAlign.center),
-                    ],
+                        SizedBox(height: layout.dp(6)),
+                        _body(buttonLines[i].body, layout, units: 26, align: TextAlign.center),
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ],
-            ],
-          ),
+            );
+          }),
         ],
       ),
     );

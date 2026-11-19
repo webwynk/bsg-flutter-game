@@ -19,6 +19,7 @@ import 'package:flutter/widgets.dart';
 import '../../models/lucky_card_board.dart';
 import '../../models/lucky_card_models.dart';
 import '../../providers/lucky_card_provider.dart';
+import '../../utils/desktop_window.dart';
 import 'lucky_card_art.dart';
 import 'lucky_card_board_snapshot.dart';
 import 'lucky_card_board_view.dart';
@@ -107,6 +108,15 @@ class _LuckyCardBoardBindingState extends State<LuckyCardBoardBinding> {
         onTapCard: (card) => _told(LuckyCardCardTarget(card), provider.tapCard(card)),
         onTapSuit: (suit) => _told(LuckyCardSuitTarget(suit), provider.tapSuit(suit)),
         onTapRank: (rank) => _told(LuckyCardRankTarget(rank), provider.tapRank(rank)),
+        onSecondaryTapCard: isWindowsApp
+            ? (card) => _told(LuckyCardCardTarget(card), provider.rightClickCard(card))
+            : null,
+        onSecondaryTapSuit: isWindowsApp
+            ? (suit) => _told(LuckyCardSuitTarget(suit), provider.rightClickSuit(suit))
+            : null,
+        onSecondaryTapRank: isWindowsApp
+            ? (rank) => _told(LuckyCardRankTarget(rank), provider.rightClickRank(rank))
+            : null,
         onRefused: widget.onRefused,
       ),
     );

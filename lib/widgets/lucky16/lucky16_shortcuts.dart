@@ -143,6 +143,7 @@ class Lucky16SuitHeader extends StatelessWidget {
     required this.total,
     required this.isLocked,
     required this.onTap,
+    this.onSecondaryTap,
     this.onRefused,
   });
 
@@ -154,6 +155,7 @@ class Lucky16SuitHeader extends StatelessWidget {
   final int total;
   final bool isLocked;
   final Lucky16SuitTap onTap;
+  final Lucky16SuitTap? onSecondaryTap;
   final Lucky16SuitRefused? onRefused;
 
   @override
@@ -178,6 +180,7 @@ class Lucky16SuitHeader extends StatelessWidget {
       isLocked: isLocked,
       semanticsLabel: '${suit.label}, 4 cards, ${_coins(total)}',
       onTap: () => onTap(suit),
+      onSecondaryTap: onSecondaryTap == null ? null : () => onSecondaryTap!(suit),
       onRefused: onRefused == null ? null : (issues) => onRefused!(suit, issues),
       content: (context, tinted) => Stack(
         clipBehavior: Clip.none,
@@ -203,6 +206,7 @@ class Lucky16RankSelector extends StatelessWidget {
     required this.total,
     required this.isLocked,
     required this.onTap,
+    this.onSecondaryTap,
     this.onRefused,
   });
 
@@ -214,6 +218,7 @@ class Lucky16RankSelector extends StatelessWidget {
   final int total;
   final bool isLocked;
   final Lucky16RankTap onTap;
+  final Lucky16RankTap? onSecondaryTap;
   final Lucky16RankRefused? onRefused;
 
   @override
@@ -238,6 +243,7 @@ class Lucky16RankSelector extends StatelessWidget {
       isLocked: isLocked,
       semanticsLabel: '${lucky16RankName(rank)}, 4 cards, ${_coins(total)}',
       onTap: () => onTap(rank),
+      onSecondaryTap: onSecondaryTap == null ? null : () => onSecondaryTap!(rank),
       onRefused: onRefused == null ? null : (issues) => onRefused!(rank, issues),
       content: (context, tinted) => Stack(
         clipBehavior: Clip.none,

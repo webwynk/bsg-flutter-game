@@ -15,7 +15,9 @@
 //     keeps its name when the player cannot afford it, and is then dimmed.
 //   * CLEAR gives every chip back.
 //   * REMOVE puts the chip in hand down; taps on the board then take chips back. It
-//     is not an undo (spec §17Y).
+//     is not an undo (spec §17Y). On the Windows desktop app (`isWindowsApp`), REMOVE
+//     is hidden and mouse right-click removes chips directly while keeping the held
+//     chip selected.
 //
 // Belongs to Lucky Card only.
 
@@ -23,6 +25,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../models/lucky_card_board.dart';
 import '../../providers/lucky_card_provider.dart';
+import '../../utils/desktop_window.dart';
 import 'lucky_card_action_buttons.dart';
 import 'lucky_card_art.dart';
 import 'lucky_card_bet_panel.dart';
@@ -153,12 +156,14 @@ class LuckyCardActionButtonsBinding extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final side = zone ?? layout.side;
+    final hideRemove = isWindowsApp;
+    final buttonCount = hideRemove ? 2 : LuckyCardLayout.actionButtonCount;
     return LuckyCardSelector<LuckyCardButtonsSnapshot>(
       provider: provider,
       select: LuckyCardButtonsSnapshot.of,
       builder: (context, s) {
         Widget button(int slot, LuckyCardControl control, bool enabled, LuckyCardBoardResult Function() action) {
-          final rect = layout.actionButton(slot);
+          final rect = layout.actionButton(slot, count: buttonCount);
           return Positioned.fromRect(
             rect: layout.within(side, rect),
             child: LuckyCardActionButton(
@@ -182,10 +187,11 @@ class LuckyCardActionButtonsBinding extends StatelessWidget {
                 ? button(0, LuckyCardControl.rebet, s.canAffordRebet, provider.rebet)
                 : button(0, LuckyCardControl.doubleBet, s.hasBets, provider.doubleBet),
             button(1, LuckyCardControl.clear, s.hasBets, provider.clearBoard),
-            button(2, LuckyCardControl.remove, s.hasBets, () {
-              provider.deselectChip();
-              return const LuckyCardBoardResult();
-            }),
+            if (!hideRemove)
+              button(2, LuckyCardControl.remove, s.hasBets, () {
+                provider.deselectChip();
+                return const LuckyCardBoardResult();
+              }),
           ],
         );
       },

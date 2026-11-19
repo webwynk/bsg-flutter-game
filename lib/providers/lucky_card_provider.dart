@@ -415,6 +415,21 @@ class LuckyCardProvider extends ChangeNotifier {
             : _board.removeFromCards(cards),
       );
 
+  /// Desktop mouse right-click on a card: takes back its newest chip without
+  /// dropping the chip currently held in hand.
+  LuckyCardBoardResult rightClickCard(LuckyCard card) =>
+      _apply(_board.removeFromCard(card, requireEmptyHand: false));
+
+  /// Desktop mouse right-click on a suit bar: takes back the newest chip on
+  /// each occupied card of that suit without dropping the held chip.
+  LuckyCardBoardResult rightClickSuit(LuckyCardSuit suit) =>
+      _apply(_board.removeFromCards(LuckyCard.ofSuit(suit), requireEmptyHand: false));
+
+  /// Desktop mouse right-click on a rank selector: takes back the newest chip on
+  /// each occupied card of that rank without dropping the held chip.
+  LuckyCardBoardResult rightClickRank(LuckyCardRank rank) =>
+      _apply(_board.removeFromCards(LuckyCard.ofRank(rank), requireEmptyHand: false));
+
   /// The Remove button: one chip back, newest first.
   LuckyCardBoardResult removeLast() => _apply(_board.removeLast());
 

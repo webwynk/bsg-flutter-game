@@ -112,9 +112,12 @@ class Spin2WinFrameActions {
     this.onRecords,
     this.onSound,
     this.onNumber,
+    this.onRightNumber,
     this.onChip,
     this.onOdd,
+    this.onRightOdd,
     this.onEven,
+    this.onRightEven,
     this.onDoubleOrRebet,
     this.onRemove,
     this.onClear,
@@ -124,9 +127,12 @@ class Spin2WinFrameActions {
   final VoidCallback? onRecords;
   final VoidCallback? onSound;
   final ValueChanged<int>? onNumber;
+  final ValueChanged<int>? onRightNumber;
   final ValueChanged<Spin2WinChip>? onChip;
   final VoidCallback? onOdd;
+  final VoidCallback? onRightOdd;
   final VoidCallback? onEven;
+  final VoidCallback? onRightEven;
   final VoidCallback? onDoubleOrRebet;
   final VoidCallback? onRemove;
   final VoidCallback? onClear;
@@ -284,9 +290,12 @@ class Spin2WinFrame extends StatelessWidget {
             chipImage: chipImage,
             metrics: metrics,
             onNumber: actions.onNumber,
+            onRightNumber: actions.onRightNumber,
             onChip: actions.onChip,
             onOdd: actions.onOdd,
+            onRightOdd: actions.onRightOdd,
             onEven: actions.onEven,
+            onRightEven: actions.onRightEven,
             onDoubleOrRebet: actions.onDoubleOrRebet,
             onRemove: actions.onRemove,
             onClear: actions.onClear,

@@ -35,6 +35,7 @@ class LuckyCardTapTarget extends StatefulWidget {
     required this.isLocked,
     required this.onTap,
     required this.content,
+    this.onSecondaryTap,
     this.onRefused,
   });
 
@@ -46,6 +47,10 @@ class LuckyCardTapTarget extends StatefulWidget {
 
   /// Called on a tap; answers with what the board did.
   final LuckyCardBoardResult Function() onTap;
+
+  /// Optional mouse right-click handler (Windows desktop only); answers with
+  /// what the board did.
+  final LuckyCardBoardResult Function()? onSecondaryTap;
 
   /// Called when the tap was refused in whole or in part, with the reasons.
   final void Function(Set<LuckyCardBoardIssue> issues)? onRefused;
@@ -69,9 +74,9 @@ class _LuckyCardTapTargetState extends State<LuckyCardTapTarget> with TickerProv
     super.dispose();
   }
 
-  void _handleTap() {
+  void _runAction(LuckyCardBoardResult Function() action) {
     if (widget.isLocked) return;
-    final result = widget.onTap();
+    final result = action();
     final animate = !MediaQuery.disableAnimationsOf(context);
     if (result.changedAnything && animate) _pulse.forward(from: 0);
     if (!result.isClean) {
@@ -82,6 +87,13 @@ class _LuckyCardTapTargetState extends State<LuckyCardTapTarget> with TickerProv
       }
       widget.onRefused?.call(result.issues);
     }
+  }
+
+  void _handleTap() => _runAction(widget.onTap);
+
+  void _handleSecondaryTap() {
+    final handler = widget.onSecondaryTap;
+    if (handler != null) _runAction(handler);
   }
 
   Widget _tinted(Widget picture) => AnimatedBuilder(
@@ -119,6 +131,7 @@ class _LuckyCardTapTargetState extends State<LuckyCardTapTarget> with TickerProv
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _handleTap,
+        onSecondaryTap: widget.onSecondaryTap == null ? null : _handleSecondaryTap,
         child: RepaintBoundary(
           child: SizedBox(width: widget.size.width, height: widget.size.height, child: content),
         ),

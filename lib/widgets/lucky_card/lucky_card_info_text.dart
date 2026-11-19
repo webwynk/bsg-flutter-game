@@ -13,6 +13,7 @@
 import '../../models/lucky_card_board.dart';
 import '../../models/lucky_card_models.dart';
 import '../../services/lucky_card_round_clock.dart';
+import '../../utils/desktop_window.dart';
 import 'lucky_card_panel.dart';
 
 /// A winning card pays this many times the chips on it (before the bonus). Spec §4.
@@ -75,6 +76,15 @@ const List<({String label, String body})> kLuckyCardButtonLines = [
   (label: 'CLEAR', body: 'Gives every chip back'),
   (label: 'REMOVE', body: 'Then tap a card to take its chips back'),
 ];
+
+/// Control descriptions shown in the Info dialog: swaps REMOVE for RIGHT-CLICK on the Windows app.
+List<({String label, String body})> luckyCardButtonLines() {
+  if (!isWindowsApp) return kLuckyCardButtonLines;
+  return [
+    ...kLuckyCardButtonLines.take(3),
+    (label: 'RIGHT-CLICK', body: 'Right-click a card, suit or rank to take chips back'),
+  ];
+}
 
 /// The small heading over the formula.
 const String kLuckyCardPayoutKicker = 'HOW A WIN IS PAID';

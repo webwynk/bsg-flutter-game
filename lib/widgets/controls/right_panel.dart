@@ -8,6 +8,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../theme/app_decorations.dart';
 import '../../services/sound_service.dart';
+import '../../utils/desktop_window.dart';
 import '../overlays/info_dialog.dart';
 
 class RightControlPanel extends StatelessWidget {
@@ -550,10 +551,10 @@ class _ActionColumn extends StatelessWidget {
   }
 }
 
-/// The four action buttons of the desktop screen as a 2 x 2 block: DOUBLE UP
-/// and REPEAT on top, CLEAR and REMOVE below. (INFO is the icon in the desktop
-/// top bar.) They are the phone's buttons and follow the phone's rules, and
-/// make the same calls:
+/// The action buttons of the desktop screen: DOUBLE UP and REPEAT on top, and
+/// CLEAR + REMOVE below (or CLEAR spanning the full bottom row in the Windows
+/// app, where `isWindowsApp` is true and mouse right-click removes chips directly).
+/// (INFO is the icon in the desktop top bar.)
 ///  - DOUBLE UP (the phone's DOUBLE): usable when there are bets,
 ///    `game.doDouble(auth)`.
 ///  - REPEAT (the phone's REBET): usable when `game.canRebet` and the player
@@ -561,7 +562,8 @@ class _ActionColumn extends StatelessWidget {
 ///    here both are always visible, and since `canRebet` needs an empty board
 ///    while DOUBLE UP needs bets, only one of them is usable at a time.
 ///  - CLEAR: usable when there are bets, `game.clearBets(auth)`.
-///  - REMOVE: usable when there are bets, `game.deselectChip()`.
+///  - REMOVE (non-Windows desktop layout only): usable when there are bets,
+///    `game.deselectChip()`.
 /// All are locked in the last 5 seconds and while spinning.
 class _DesktopButtonBlock extends StatelessWidget {
   const _DesktopButtonBlock();
@@ -581,6 +583,7 @@ class _DesktopButtonBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hideRemove = isWindowsApp;
     return Consumer2<GameProvider, AuthProvider>(
       builder: (_, game, auth, __) {
         final hasBets = game.board.total > 0;
@@ -610,10 +613,12 @@ class _DesktopButtonBlock extends StatelessWidget {
                   _ActionBtn(_ActionColumn._btns[2],
                       isEnabled: hasBets && !isLocked,
                       onTap: () => game.clearBets(auth)),
-                  const SizedBox(width: 14),
-                  _ActionBtn(_ActionColumn._btns[3],
-                      isEnabled: hasBets && !isLocked,
-                      onTap: () => game.deselectChip()),
+                  if (!hideRemove) ...[
+                    const SizedBox(width: 14),
+                    _ActionBtn(_ActionColumn._btns[3],
+                        isEnabled: hasBets && !isLocked,
+                        onTap: () => game.deselectChip()),
+                  ],
                 ],
               ),
             ),

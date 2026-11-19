@@ -4,6 +4,7 @@ import '../../models/bet_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/game_provider.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/desktop_window.dart';
 import '../panels/grid_cells.dart';
 import 'desktop_board_header.dart';
 
@@ -22,8 +23,11 @@ import 'desktop_board_header.dart';
 /// (`int.parse(key) ~/ 100` for every key in `game.board.triple`). A cell tap
 /// makes the call the phone's Triples grid makes: with a chip selected
 /// `game.placeBet(BoardType.triple, number, auth)`, with none selected
-/// `game.removeChipFromCell(BoardType.triple, number, auth)`. Only the
-/// arrangement (random picks under the grid, not in a column beside it) is new.
+/// `game.removeChipFromCell(BoardType.triple, number, auth)`. In the Windows
+/// app (`isWindowsApp`), right-clicking a cell or row/column arrow removes the
+/// last chip directly (`requireEmptyHand: false`) while keeping the held chip
+/// selected. Only the arrangement (random picks under the grid, not in a
+/// column beside it) is new.
 class DesktopTriplesBoard extends StatelessWidget {
   const DesktopTriplesBoard({super.key});
 
@@ -139,6 +143,7 @@ class DesktopTriplesBoard extends StatelessWidget {
                             boardType: BoardType.triple,
                             game: game,
                             auth: auth,
+                            allowSecondaryTapRemove: isWindowsApp,
                           ),
                         ),
                       ),
@@ -173,6 +178,14 @@ class DesktopTriplesBoard extends StatelessWidget {
                         onTap: () => game.activeChip != null
                             ? game.placeBet(BoardType.triple, number, auth)
                             : game.removeChipFromCell(BoardType.triple, number, auth),
+                        onSecondaryTap: isWindowsApp
+                            ? () => game.removeChipFromCell(
+                                  BoardType.triple,
+                                  number,
+                                  auth,
+                                  requireEmptyHand: false,
+                                )
+                            : null,
                       );
                     },
                   ),
@@ -194,6 +207,7 @@ class DesktopTriplesBoard extends StatelessWidget {
                       boardType: BoardType.triple,
                       game: game,
                       auth: auth,
+                      allowSecondaryTapRemove: isWindowsApp,
                     ),
                   ),
                 ),

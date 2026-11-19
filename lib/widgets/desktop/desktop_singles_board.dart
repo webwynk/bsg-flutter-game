@@ -4,6 +4,7 @@ import '../../models/bet_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/game_provider.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/desktop_window.dart';
 import '../panels/grid_cells.dart';
 import 'desktop_board_header.dart';
 
@@ -11,11 +12,13 @@ import 'desktop_board_header.dart';
 /// a gold-framed panel with its own header (name, PLAY, WIN).
 ///
 /// The cells are the game's own `NumberCell` (same look, same gold stake
-/// dome) and a tap makes exactly the call the phone's Singles grid makes:
-/// with a chip selected `game.placeBet(BoardType.single, key, auth)`, with no
-/// chip selected (REMOVE mode) `game.removeChipFromCell(BoardType.single, key,
-/// auth)`. Even digits are green and odd digits pink, as on the phone. Only
-/// the arrangement (one row instead of a 2 x 5 block) is new.
+/// dome) and a tap makes the call the phone's Singles grid makes: with a chip
+/// selected `game.placeBet(BoardType.single, key, auth)`, with no chip selected
+/// (non-Windows tablet/desktop) `game.removeChipFromCell(BoardType.single,
+/// key, auth)`. In the Windows app (`isWindowsApp`), right-clicking a cell removes
+/// the last chip directly (`requireEmptyHand: false`) while keeping the held
+/// chip selected. Even digits are green and odd digits pink, as on the phone.
+/// Only the arrangement (one row instead of a 2 x 5 block) is new.
 class DesktopSinglesBoard extends StatelessWidget {
   const DesktopSinglesBoard({super.key});
 
@@ -63,6 +66,14 @@ class DesktopSinglesBoard extends StatelessWidget {
                         onTap: () => game.activeChip != null
                             ? game.placeBet(BoardType.single, key, auth)
                             : game.removeChipFromCell(BoardType.single, key, auth),
+                        onSecondaryTap: isWindowsApp
+                            ? () => game.removeChipFromCell(
+                                  BoardType.single,
+                                  key,
+                                  auth,
+                                  requireEmptyHand: false,
+                                )
+                            : null,
                       ),
                     ),
                   );

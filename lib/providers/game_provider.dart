@@ -653,17 +653,13 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Removes only the LAST chip placed on [cellKey] of [boardType].
-  /// Used when no chip is selected (tap-to-deselect mode).
-  void removeChipFromCell(BoardType boardType, String cellKey, AuthProvider auth) {
-    if (_countdown <= 5) return;
-    if (_activeChip != null) return; // only in deselect mode
-    // Find the most recent history entry for this exact cell
+  /// Removes the most recent history entry for [cellKey] on [boardType] and
+  /// refunds its amount, returning whether anything was removed.
+  bool _popLastChipForCell(BoardType boardType, String cellKey, AuthProvider auth) {
     final idx = _history.lastIndexWhere(
         (a) => a.board == boardType && a.cellKey == cellKey);
-    if (idx < 0) return; // nothing on this cell
-    final action = _history[idx];
-    _history.removeAt(idx);
+    if (idx < 0) return false;
+    final action = _history.removeAt(idx);
     final map = _board.boardFor(boardType);
     final remaining = (map[cellKey] ?? 0) - action.amount;
     if (remaining <= 0) {
@@ -672,6 +668,23 @@ class GameProvider extends ChangeNotifier {
       map[cellKey] = remaining;
     }
     auth.updateBalance(auth.coinBalance + action.amount);
+    return true;
+  }
+
+  /// Removes only the LAST chip placed on [cellKey] of [boardType].
+  ///
+  /// When [requireEmptyHand] is true (phone/tablet tap-after-REMOVE mode), this
+  /// runs only when no chip is held. Desktop right-click passes false so the
+  /// player can remove chips without putting down their selected chip.
+  void removeChipFromCell(
+    BoardType boardType,
+    String cellKey,
+    AuthProvider auth, {
+    bool requireEmptyHand = true,
+  }) {
+    if (_isSpinning || _countdown <= 5) return;
+    if (requireEmptyHand && _activeChip != null) return;
+    if (!_popLastChipForCell(boardType, cellKey, auth)) return;
     SoundService().playButtonClick();
     HapticFeedback.selectionClick();
     _checkAndRestoreActiveChip();
@@ -680,29 +693,23 @@ class GameProvider extends ChangeNotifier {
   }
 
   /// Removes the last chip from each occupied cell in [cellKeys] on [boardType].
-  /// Called when a row/col arrow is tapped in "remove mode" (no chip held).
-  void removeChipFromRow(BoardType boardType, List<String> cellKeys, AuthProvider auth) {
-    if (_countdown <= 5) return;
-    if (_activeChip != null) return; // only active in deselect mode
+  ///
+  /// Used for row/col arrows in phone/tablet remove mode ([requireEmptyHand]
+  /// true) or on desktop mouse right-click ([requireEmptyHand] false).
+  void removeChipFromRow(
+    BoardType boardType,
+    List<String> cellKeys,
+    AuthProvider auth, {
+    bool requireEmptyHand = true,
+  }) {
+    if (_isSpinning || _countdown <= 5) return;
+    if (requireEmptyHand && _activeChip != null) return;
 
     bool anyRemoved = false;
     for (final cellKey in cellKeys) {
-      // Find the most recent history entry for this cell
-      final idx = _history.lastIndexWhere(
-          (a) => a.board == boardType && a.cellKey == cellKey);
-      if (idx < 0) continue; // cell is empty — skip
-
-      final action = _history[idx];
-      _history.removeAt(idx);
-      final map = _board.boardFor(boardType);
-      final remaining = (map[cellKey] ?? 0) - action.amount;
-      if (remaining <= 0) {
-        map.remove(cellKey);
-      } else {
-        map[cellKey] = remaining;
+      if (_popLastChipForCell(boardType, cellKey, auth)) {
+        anyRemoved = true;
       }
-      auth.updateBalance(auth.coinBalance + action.amount);
-      anyRemoved = true;
     }
 
     if (anyRemoved) {

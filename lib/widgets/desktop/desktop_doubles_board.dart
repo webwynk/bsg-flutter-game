@@ -4,6 +4,7 @@ import '../../models/bet_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/game_provider.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/desktop_window.dart';
 import '../panels/grid_cells.dart';
 import 'desktop_board_header.dart';
 
@@ -15,12 +16,14 @@ import 'desktop_board_header.dart';
 /// Everything is the game's own: the cells are `NumberCell`, the arrows are
 /// `RowArrowButton` / `ColArrowButton` (they stake a whole row or column) and
 /// the random picks are `RandomShortcutButton` (5, 10, 15, 20, 25, 50 and 75,
-/// the same counts as the phone's Doubles grid). A cell tap makes exactly the
-/// call the phone's Doubles grid makes: with a chip selected
+/// the same counts as the phone's Doubles grid). A cell tap makes the call the
+/// phone's Doubles grid makes: with a chip selected
 /// `game.placeBet(BoardType.double_, number, auth)`, with none selected
-/// (REMOVE mode) `game.removeChipFromCell(BoardType.double_, number, auth)`.
-/// Only the arrangement (random picks under the grid, not in a column beside
-/// it) is new.
+/// `game.removeChipFromCell(BoardType.double_, number, auth)`. In the Windows
+/// app (`isWindowsApp`), right-clicking a cell or row/column arrow removes the
+/// last chip directly (`requireEmptyHand: false`) while keeping the held chip
+/// selected. Only the arrangement (random picks under the grid, not in a column
+/// beside it) is new.
 class DesktopDoublesBoard extends StatelessWidget {
   const DesktopDoublesBoard({super.key});
 
@@ -77,6 +80,7 @@ class DesktopDoublesBoard extends StatelessWidget {
                             boardType: BoardType.double_,
                             game: game,
                             auth: auth,
+                            allowSecondaryTapRemove: isWindowsApp,
                           ),
                         ),
                       ),
@@ -111,6 +115,14 @@ class DesktopDoublesBoard extends StatelessWidget {
                         onTap: () => game.activeChip != null
                             ? game.placeBet(BoardType.double_, number, auth)
                             : game.removeChipFromCell(BoardType.double_, number, auth),
+                        onSecondaryTap: isWindowsApp
+                            ? () => game.removeChipFromCell(
+                                  BoardType.double_,
+                                  number,
+                                  auth,
+                                  requireEmptyHand: false,
+                                )
+                            : null,
                       );
                     },
                   ),
@@ -132,6 +144,7 @@ class DesktopDoublesBoard extends StatelessWidget {
                       boardType: BoardType.double_,
                       game: game,
                       auth: auth,
+                      allowSecondaryTapRemove: isWindowsApp,
                     ),
                   ),
                 ),

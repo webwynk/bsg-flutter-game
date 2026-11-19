@@ -11,6 +11,7 @@ class NumberCell extends StatelessWidget {
   final String number;
   final bool isEven;          // true = green, false = pink
   final VoidCallback onTap;
+  final VoidCallback? onSecondaryTap;
   final double fontSize;
   final int? stakedAmount;
 
@@ -19,6 +20,7 @@ class NumberCell extends StatelessWidget {
     required this.number,
     required this.isEven,
     required this.onTap,
+    this.onSecondaryTap,
     this.fontSize = 11,
     this.stakedAmount,
   });
@@ -51,6 +53,7 @@ class NumberCell extends StatelessWidget {
 
         return GestureDetector(
           onTap: onTap,
+          onSecondaryTap: onSecondaryTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             clipBehavior: Clip.antiAlias, // Ensures the sliding gold dome doesn't overflow
@@ -156,6 +159,7 @@ class RowArrowButton extends StatelessWidget {
   final BoardType boardType;
   final GameProvider game;
   final AuthProvider auth;
+  final bool allowSecondaryTapRemove;
 
   const RowArrowButton({
     super.key,
@@ -163,6 +167,7 @@ class RowArrowButton extends StatelessWidget {
     required this.boardType,
     required this.game,
     required this.auth,
+    this.allowSecondaryTapRemove = false,
   });
 
   List<String> _keys() {
@@ -179,6 +184,9 @@ class RowArrowButton extends StatelessWidget {
       onTap: () => game.activeChip != null
           ? game.placeBetOnRow(boardType, _keys(), auth)
           : game.removeChipFromRow(boardType, _keys(), auth),
+      onSecondaryTap: allowSecondaryTapRemove
+          ? () => game.removeChipFromRow(boardType, _keys(), auth, requireEmptyHand: false)
+          : null,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 1.0, horizontal: 1.5),
         decoration: BoxDecoration(
@@ -206,6 +214,7 @@ class ColArrowButton extends StatelessWidget {
   final BoardType boardType;
   final GameProvider game;
   final AuthProvider auth;
+  final bool allowSecondaryTapRemove;
 
   const ColArrowButton({
     super.key,
@@ -213,6 +222,7 @@ class ColArrowButton extends StatelessWidget {
     required this.boardType,
     required this.game,
     required this.auth,
+    this.allowSecondaryTapRemove = false,
   });
 
   List<String> _keys() {
@@ -231,6 +241,9 @@ class ColArrowButton extends StatelessWidget {
       onTap: () => game.activeChip != null
           ? game.placeBetOnRow(boardType, _keys(), auth)
           : game.removeChipFromRow(boardType, _keys(), auth),
+      onSecondaryTap: allowSecondaryTapRemove
+          ? () => game.removeChipFromRow(boardType, _keys(), auth, requireEmptyHand: false)
+          : null,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 1.5, horizontal: 1.0),
         decoration: BoxDecoration(

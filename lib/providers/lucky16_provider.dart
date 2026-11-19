@@ -423,6 +423,21 @@ class Lucky16Provider extends ChangeNotifier {
             : _board.removeFromCards(cards),
       );
 
+  /// Desktop mouse right-click on a card: takes back its newest chip without
+  /// dropping the chip currently held in hand.
+  Lucky16BoardResult rightClickCard(Lucky16Card card) =>
+      _apply(_board.removeFromCard(card, requireEmptyHand: false));
+
+  /// Desktop mouse right-click on a suit bar: takes back the newest chip on
+  /// each occupied card of that suit without dropping the held chip.
+  Lucky16BoardResult rightClickSuit(Lucky16Suit suit) =>
+      _apply(_board.removeFromCards(Lucky16Card.ofSuit(suit), requireEmptyHand: false));
+
+  /// Desktop mouse right-click on a rank selector: takes back the newest chip on
+  /// each occupied card of that rank without dropping the held chip.
+  Lucky16BoardResult rightClickRank(Lucky16Rank rank) =>
+      _apply(_board.removeFromCards(Lucky16Card.ofRank(rank), requireEmptyHand: false));
+
   /// The Remove button: one chip back, newest first.
   Lucky16BoardResult removeLast() => _apply(_board.removeLast());
 

@@ -82,6 +82,9 @@ class LuckyCardBoardZones {
     required this.onTapCard,
     required this.onTapSuit,
     required this.onTapRank,
+    this.onSecondaryTapCard,
+    this.onSecondaryTapSuit,
+    this.onSecondaryTapRank,
     this.onRefused,
   });
 
@@ -90,6 +93,9 @@ class LuckyCardBoardZones {
   final LuckyCardCardTap onTapCard;
   final LuckyCardSuitTap onTapSuit;
   final LuckyCardRankTap onTapRank;
+  final LuckyCardCardTap? onSecondaryTapCard;
+  final LuckyCardSuitTap? onSecondaryTapSuit;
+  final LuckyCardRankTap? onSecondaryTapRank;
   final LuckyCardBoardRefused? onRefused;
 
   /// The grid zone: four suit headers over the 12 cards.
@@ -108,6 +114,7 @@ class LuckyCardBoardZones {
               total: snapshot.suitTotal(suit),
               isLocked: snapshot.isLocked,
               onTap: onTapSuit,
+              onSecondaryTap: onSecondaryTapSuit,
               onRefused: onRefused == null ? null : (s, issues) => onRefused!(LuckyCardSuitTarget(s), issues),
             ),
           ),
@@ -117,6 +124,7 @@ class LuckyCardBoardZones {
             art: art,
             snapshot: snapshot,
             onTapCard: onTapCard,
+            onSecondaryTapCard: onSecondaryTapCard,
             onRefused: onRefused == null ? null : (c, issues) => onRefused!(LuckyCardCardTarget(c), issues),
           ),
         ),
@@ -140,6 +148,7 @@ class LuckyCardBoardZones {
               total: snapshot.rankTotal(rank),
               isLocked: snapshot.isLocked,
               onTap: onTapRank,
+              onSecondaryTap: onSecondaryTapRank,
               onRefused: onRefused == null ? null : (r, issues) => onRefused!(LuckyCardRankTarget(r), issues),
             ),
           ),

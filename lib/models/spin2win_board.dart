@@ -275,16 +275,20 @@ class Spin2WinBoard {
 
   // ── Removing ───────────────────────────────────────────────────────────
 
-  /// Takes back the most recent chip on [number]. Only works when no chip is held
-  /// (the player taps a number with empty hands to remove).
-  Spin2WinBoardResult removeFromNumber(int number) =>
-      removeFromNumbers([number]);
+  /// Takes back the most recent chip on [number].
+  ///
+  /// When [requireEmptyHand] is true (phone/tablet tap-after-REMOVE mode), this
+  /// works only when no chip is held. Desktop mouse right-click passes false so
+  /// the held chip stays in hand.
+  Spin2WinBoardResult removeFromNumber(int number, {bool requireEmptyHand = true}) =>
+      removeFromNumbers([number], requireEmptyHand: requireEmptyHand);
 
-  /// Takes back the most recent chip from each of [numbers] that holds one. Only
-  /// works when no chip is held.
-  Spin2WinBoardResult removeFromNumbers(List<int> numbers) {
+  /// Takes back the most recent chip from each of [numbers] that holds one.
+  ///
+  /// See [removeFromNumber] for [requireEmptyHand].
+  Spin2WinBoardResult removeFromNumbers(List<int> numbers, {bool requireEmptyHand = true}) {
     if (_locked) return _refused(Spin2WinBoardIssue.locked);
-    if (_activeChip != null) return _refused(Spin2WinBoardIssue.chipIsSelected);
+    if (requireEmptyHand && _activeChip != null) return _refused(Spin2WinBoardIssue.chipIsSelected);
 
     final changed = <int>[];
     var refunded = 0;

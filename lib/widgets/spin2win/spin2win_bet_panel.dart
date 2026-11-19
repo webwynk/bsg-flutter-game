@@ -1,6 +1,7 @@
 // The Spin2Win betting panel, as the reference design draws it right of the wheel: the ten number
 // cards (0 to 4 over 5 to 9) with the coins on each, the row of five chips, the ODD and EVEN
-// buttons over DOUBLE (REBET after a round), REMOVE and CLEAR, and the green timer.
+// buttons over DOUBLE (REBET after a round), REMOVE and CLEAR (or DOUBLE/REBET and CLEAR on the
+// Windows desktop app, where right-click removes chips directly), and the green timer.
 //
 // Given what to show and what each tap does, nothing else: no provider (spin2win_frame_binding.dart
 // connects it). What the buttons allow, exactly as Triple Chance's:
@@ -15,6 +16,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../../models/spin2win_board.dart';
+import '../../utils/desktop_window.dart';
 import 'spin2win_palette.dart';
 
 /// Where each chip's picture is: 5 to 100 are Triple Chance's chips, 500 is Lucky Card's.
@@ -253,9 +255,12 @@ class Spin2WinBetPanel extends StatelessWidget {
     this.winningNumber,
     this.chipImage = spin2WinAssetChipImage,
     this.onNumber,
+    this.onRightNumber,
     this.onChip,
     this.onOdd,
+    this.onRightOdd,
     this.onEven,
+    this.onRightEven,
     this.onDoubleOrRebet,
     this.onRemove,
     this.onClear,
@@ -293,9 +298,12 @@ class Spin2WinBetPanel extends StatelessWidget {
   final ImageProvider Function(Spin2WinChip chip) chipImage;
 
   final ValueChanged<int>? onNumber;
+  final ValueChanged<int>? onRightNumber;
   final ValueChanged<Spin2WinChip>? onChip;
   final VoidCallback? onOdd;
+  final VoidCallback? onRightOdd;
   final VoidCallback? onEven;
+  final VoidCallback? onRightEven;
   final VoidCallback? onDoubleOrRebet;
   final VoidCallback? onRemove;
   final VoidCallback? onClear;
@@ -345,6 +353,7 @@ class Spin2WinBetPanel extends StatelessWidget {
                               lit: winningNumber == n,
                               metrics: m,
                               onTap: onNumber == null ? null : () => onNumber!(n),
+                              onSecondaryTap: onRightNumber == null ? null : () => onRightNumber!(n),
                             ),
                             // Over the card, so the dimming of the locked board does not fade it.
                             if (winningNumber == n)
@@ -373,9 +382,23 @@ class Spin2WinBetPanel extends StatelessWidget {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Expanded(child: _BigButton.odd(enabled: !isLocked, onTap: onOdd, metrics: m)),
+                              Expanded(
+                                child: _BigButton.odd(
+                                  enabled: !isLocked,
+                                  onTap: onOdd,
+                                  onSecondaryTap: onRightOdd,
+                                  metrics: m,
+                                ),
+                              ),
                               SizedBox(width: m.bigGap),
-                              Expanded(child: _BigButton.even(enabled: !isLocked, onTap: onEven, metrics: m)),
+                              Expanded(
+                                child: _BigButton.even(
+                                  enabled: !isLocked,
+                                  onTap: onEven,
+                                  onSecondaryTap: onRightEven,
+                                  metrics: m,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -392,10 +415,12 @@ class Spin2WinBetPanel extends StatelessWidget {
                                     : _SmallButton.double(
                                         enabled: !isLocked && hasBets, onTap: onDoubleOrRebet, metrics: m),
                               ),
-                              SizedBox(width: m.bigGap),
-                              Expanded(
-                                  child:
-                                      _SmallButton.remove(enabled: !isLocked && hasBets, onTap: onRemove, metrics: m)),
+                              if (!isWindowsApp) ...[
+                                SizedBox(width: m.bigGap),
+                                Expanded(
+                                    child:
+                                        _SmallButton.remove(enabled: !isLocked && hasBets, onTap: onRemove, metrics: m)),
+                              ],
                               SizedBox(width: m.bigGap),
                               Expanded(
                                   child: _SmallButton.clear(enabled: !isLocked && hasBets, onTap: onClear, metrics: m)),
@@ -434,12 +459,14 @@ class _Tap extends StatelessWidget {
     required this.label,
     required this.onTap,
     required this.child,
+    this.onSecondaryTap,
     this.enabled = true,
     this.dimmedOpacity = kSpin2WinDimmedOpacity,
   });
 
   final String label;
   final VoidCallback? onTap;
+  final VoidCallback? onSecondaryTap;
   final Widget child;
   final bool enabled;
   final double dimmedOpacity;
@@ -453,6 +480,7 @@ class _Tap extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: enabled ? onTap : null,
+          onSecondaryTap: enabled ? onSecondaryTap : null,
           child: AnimatedOpacity(
             opacity: enabled ? 1 : dimmedOpacity,
             duration: const Duration(milliseconds: 150),
@@ -471,6 +499,7 @@ class Spin2WinNumberCard extends StatelessWidget {
     this.enabled = true,
     this.lit = false,
     this.onTap,
+    this.onSecondaryTap,
     this.metrics = Spin2WinPanelMetrics.phone,
   });
 
@@ -482,6 +511,7 @@ class Spin2WinNumberCard extends StatelessWidget {
   /// The winning card while the result is shown: drawn at full strength although the board is locked.
   final bool lit;
   final VoidCallback? onTap;
+  final VoidCallback? onSecondaryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -492,6 +522,7 @@ class Spin2WinNumberCard extends StatelessWidget {
       enabled: enabled,
       dimmedOpacity: lit ? 1 : kSpin2WinLockedOpacity,
       onTap: onTap,
+      onSecondaryTap: onSecondaryTap,
       child: Container(
         key: ValueKey('spin2win-card-$number'),
         padding: const EdgeInsets.all(2),
@@ -672,10 +703,20 @@ class _ButtonLook {
 
 /// ODD and EVEN: 24 dp words on a tall red or blue button with a gold border.
 class _BigButton extends StatelessWidget {
-  const _BigButton(this.look, {required this.enabled, required this.onTap, required this.metrics});
+  const _BigButton(
+    this.look, {
+    required this.enabled,
+    required this.onTap,
+    this.onSecondaryTap,
+    required this.metrics,
+  });
 
-  const _BigButton.odd({required bool enabled, required VoidCallback? onTap, required Spin2WinPanelMetrics metrics})
-      : this(
+  const _BigButton.odd({
+    required bool enabled,
+    required VoidCallback? onTap,
+    VoidCallback? onSecondaryTap,
+    required Spin2WinPanelMetrics metrics,
+  }) : this(
           const _ButtonLook(
             label: 'ODD',
             semantics: 'Bet on odd',
@@ -686,11 +727,16 @@ class _BigButton extends StatelessWidget {
           ),
           enabled: enabled,
           onTap: onTap,
+          onSecondaryTap: onSecondaryTap,
           metrics: metrics,
         );
 
-  const _BigButton.even({required bool enabled, required VoidCallback? onTap, required Spin2WinPanelMetrics metrics})
-      : this(
+  const _BigButton.even({
+    required bool enabled,
+    required VoidCallback? onTap,
+    VoidCallback? onSecondaryTap,
+    required Spin2WinPanelMetrics metrics,
+  }) : this(
           const _ButtonLook(
             label: 'EVEN',
             semantics: 'Bet on even',
@@ -701,12 +747,14 @@ class _BigButton extends StatelessWidget {
           ),
           enabled: enabled,
           onTap: onTap,
+          onSecondaryTap: onSecondaryTap,
           metrics: metrics,
         );
 
   final _ButtonLook look;
   final bool enabled;
   final VoidCallback? onTap;
+  final VoidCallback? onSecondaryTap;
   final Spin2WinPanelMetrics metrics;
 
   @override
@@ -715,6 +763,7 @@ class _BigButton extends StatelessWidget {
         enabled: enabled,
         dimmedOpacity: kSpin2WinLockedOpacity,
         onTap: onTap,
+        onSecondaryTap: onSecondaryTap,
         child: Spin2WinGlossBox(
           key: ValueKey('spin2win-${look.label.toLowerCase()}'),
           radius: metrics.bigRadius,

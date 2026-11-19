@@ -34,6 +34,7 @@ class LuckyCardCardCell extends StatelessWidget {
     required this.stake,
     required this.isLocked,
     required this.onTap,
+    this.onSecondaryTap,
     this.onRefused,
   });
 
@@ -43,6 +44,7 @@ class LuckyCardCardCell extends StatelessWidget {
   final int stake;
   final bool isLocked;
   final LuckyCardCardTap onTap;
+  final LuckyCardCardTap? onSecondaryTap;
   final LuckyCardRefusedTap? onRefused;
 
   @override
@@ -71,6 +73,7 @@ class LuckyCardCardCell extends StatelessWidget {
       semanticsLabel: '${card.rank.label} of ${card.suit.label}, '
           '${empty ? 'no coins' : '$stake coins'}',
       onTap: () => onTap(card),
+      onSecondaryTap: onSecondaryTap == null ? null : () => onSecondaryTap!(card),
       onRefused: onRefused == null ? null : (issues) => onRefused!(card, issues),
       content: (context, tinted) => Stack(
         clipBehavior: Clip.none,
@@ -106,6 +109,7 @@ class LuckyCardCardLayer extends StatelessWidget {
     required this.art,
     required this.snapshot,
     required this.onTapCard,
+    this.onSecondaryTapCard,
     this.onRefused,
   });
 
@@ -113,6 +117,7 @@ class LuckyCardCardLayer extends StatelessWidget {
   final LuckyCardArt art;
   final LuckyCardBoardSnapshot snapshot;
   final LuckyCardCardTap onTapCard;
+  final LuckyCardCardTap? onSecondaryTapCard;
   final LuckyCardRefusedTap? onRefused;
 
   @override
@@ -131,6 +136,7 @@ class LuckyCardCardLayer extends StatelessWidget {
               stake: snapshot.stakeOn(card),
               isLocked: snapshot.isLocked,
               onTap: onTapCard,
+              onSecondaryTap: onSecondaryTapCard,
               onRefused: onRefused,
             ),
           ),

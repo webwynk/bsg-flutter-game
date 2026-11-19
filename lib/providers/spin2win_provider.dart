@@ -419,6 +419,21 @@ class Spin2WinProvider extends ChangeNotifier {
             : _board.removeFromNumbers(numbers),
       );
 
+  /// Desktop mouse right-click on [number]: takes back its newest chip without
+  /// dropping the chip currently held in hand.
+  Spin2WinBoardResult rightClickNumber(int number) =>
+      _apply(_board.removeFromNumber(number, requireEmptyHand: false));
+
+  /// Desktop mouse right-click on ODD: takes back the newest chip on each
+  /// occupied odd number without dropping the held chip.
+  Spin2WinBoardResult rightClickOdd() =>
+      _apply(_board.removeFromNumbers(kSpin2WinOddNumbers, requireEmptyHand: false));
+
+  /// Desktop mouse right-click on EVEN: takes back the newest chip on each
+  /// occupied even number without dropping the held chip.
+  Spin2WinBoardResult rightClickEven() =>
+      _apply(_board.removeFromNumbers(kSpin2WinEvenNumbers, requireEmptyHand: false));
+
   /// The Remove button: one chip back, newest first.
   Spin2WinBoardResult removeLast() => _apply(_board.removeLast());
 

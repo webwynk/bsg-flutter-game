@@ -706,14 +706,15 @@ class Lucky16Layout {
   double get buttonRadius => _roomy ? 16 : 14;
 
   /// Button [index], left to right: 0 Double (or Rebet), 1 Clear, 2 Remove.
-  Rect actionButton(int index) {
-    assert(index >= 0 && index < actionButtonCount);
+  /// Pass [count] = 2 when REMOVE is hidden on the Windows desktop app so the remaining buttons fill the bar.
+  Rect actionButton(int index, {int count = actionButtonCount}) {
+    assert(index >= 0 && index < count);
     if (isDesktop) {
       // In a row in [actionBar], right of the chips, equal; the height is 6.7% of the screen's (54 to 88
       // dp), the text 2.2% (17 to 30 dp).
       final left = chipRail.right - (_chipSlot - designChipSize) / 2 + actionBarGap;
       final right = actionBar.right - actionBarPad;
-      final width = (right - left - (actionButtonCount - 1) * buttonGapX) / actionButtonCount;
+      final width = (right - left - (count - 1) * buttonGapX) / count;
       return Rect.fromLTWH(
         left + index * (width + buttonGapX),
         actionBar.center.dy - designButtonHeight / 2,
@@ -722,11 +723,11 @@ class Lucky16Layout {
       );
     }
     if (isTablet) {
-      final top = panelInner.bottom - actionButtonCount * designButtonHeight - (actionButtonCount - 1) * buttonGapY;
+      final top = panelInner.bottom - count * designButtonHeight - (count - 1) * buttonGapY;
       return Rect.fromLTWH(
           panelInner.left, top + index * (designButtonHeight + buttonGapY), panelInner.width, designButtonHeight);
     }
-    final width = (panelInner.width - (actionButtonCount - 1) * cellGap) / actionButtonCount;
+    final width = (panelInner.width - (count - 1) * cellGap) / count;
     return Rect.fromLTWH(
         panelInner.left + index * (width + cellGap), panelInner.bottom - designButtonHeight, width, designButtonHeight);
   }

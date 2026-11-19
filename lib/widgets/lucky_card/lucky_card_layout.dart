@@ -809,12 +809,13 @@ class LuckyCardLayout {
   double get buttonGapY => _design(0.013, 8, 14);
 
   /// Button [index]: phone, left to right; tablet, top to bottom. 0 Double (Rebet), 1 Clear, 2 Remove.
-  Rect actionButton(int index) {
-    assert(index >= 0 && index < actionButtonCount);
+  /// Pass [count] = 2 when REMOVE is hidden on the Windows desktop app so the remaining buttons fill the bar.
+  Rect actionButton(int index, {int count = actionButtonCount}) {
+    assert(index >= 0 && index < count);
     if (isDesktop) {
       final left = chipRail.right - (_chipSlot - designChipSize) / 2 + actionBarGap;
       final right = actionBar.right - actionBarPad;
-      final width = (right - left - (actionButtonCount - 1) * buttonGapX) / actionButtonCount;
+      final width = (right - left - (count - 1) * buttonGapX) / count;
       return Rect.fromLTWH(
         left + index * (width + buttonGapX),
         actionBar.center.dy - designButtonHeight / 2,
@@ -823,10 +824,10 @@ class LuckyCardLayout {
       );
     }
     if (isTablet) {
-      final top = panelInner.bottom - actionButtonCount * designButtonHeight - (actionButtonCount - 1) * buttonGapY;
+      final top = panelInner.bottom - count * designButtonHeight - (count - 1) * buttonGapY;
       return Rect.fromLTWH(panelInner.left, top + index * (designButtonHeight + buttonGapY), panelInner.width, designButtonHeight);
     }
-    final width = (panelInner.width - (actionButtonCount - 1) * designCellGap) / actionButtonCount;
+    final width = (panelInner.width - (count - 1) * designCellGap) / count;
     return Rect.fromLTWH(
       panelInner.left + index * (width + designCellGap),
       panelInner.bottom - designButtonHeight,
