@@ -2,24 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../utils/desktop_window.dart';
 
-/// What the title bar's buttons do to the window. The default drives the real
-/// window; tests pass their own.
+/// What the title bar does to the window. Each method passes straight to the
+/// real window (window_manager); tests pass their own. The decisions (when to
+/// leave or return to full screen) live in the title bar, not here.
 class DesktopWindowControls {
   const DesktopWindowControls();
 
+  /// Minimises the window. window_manager ignores this while in full screen,
+  /// so the title bar leaves full screen first.
   Future<void> minimize() => windowManager.minimize();
 
-  Future<bool> isMaximized() => windowManager.isMaximized();
-
-  Future<void> toggleMaximize() async {
-    if (await isMaximized()) {
-      await windowManager.unmaximize();
-    } else {
-      await windowManager.maximize();
-    }
-  }
-
+  /// Asks the window to close. DesktopCloseGuard decides what happens.
   Future<void> close() => windowManager.close();
+
+  /// Whether window_manager has the window in full screen (its own flag; it
+  /// stays true if Windows minimises a full-screen window by itself).
+  Future<bool> isFullScreen() => windowManager.isFullScreen();
+
+  /// Turns window_manager's full screen on (covers the whole monitor,
+  /// taskbar included) or off (back to the window it had before).
+  Future<void> setFullScreen(bool fullScreen) => windowManager.setFullScreen(fullScreen);
+
+  /// Starts moving the window with the mouse, as when dragging a native title
+  /// bar.
+  Future<void> startDragging() => windowManager.startDragging();
 }
 
 /// Puts the gold title bar above the app in the Windows app and gives the app
@@ -51,9 +57,14 @@ class DesktopWindowFrame extends StatelessWidget {
   }
 }
 
-/// The app's own title bar: the BSG icon and name, a drag area to move the
-/// window (double-click maximises), and gold minimise, maximise and close
-/// buttons. Close turns red under the mouse, as on any Windows app.
+/// The app's own title bar: the BSG icon and name, a drag area, and gold
+/// minimise, maximise and close buttons. Close turns red under the mouse, as on
+/// any Windows app. Every window action goes through [controls].
+///
+/// Full screen (the app opens in it): the maximise button and a double-click
+/// on the bar switch between full screen and the small window; the icon shows
+/// which. Minimise leaves full screen first and the window returns to full
+/// screen when brought back. Dragging moves only the small window.
 class DesktopTitleBar extends StatefulWidget {
   final DesktopWindowControls controls;
 
@@ -64,13 +75,20 @@ class DesktopTitleBar extends StatefulWidget {
 }
 
 class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
-  bool _maximized = false;
+  /// Whether the window is in full screen, as this bar last set or read it.
+  /// Tracked here because window_manager's enter/leave full-screen events do
+  /// not fire for this window (checked in its 0.5.2 source).
+  bool _fullScreen = false;
+
+  /// Set when minimise took the window out of full screen, so that bringing
+  /// it back returns to full screen. Cleared once used.
+  bool _returnToFullScreen = false;
 
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
-    _readMaximized();
+    _readFullScreen();
   }
 
   @override
@@ -79,16 +97,39 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
     super.dispose();
   }
 
-  Future<void> _readMaximized() async {
-    final maximized = await widget.controls.isMaximized();
-    if (mounted) setState(() => _maximized = maximized);
+  Future<void> _readFullScreen() async {
+    final fullScreen = await widget.controls.isFullScreen();
+    if (mounted) setState(() => _fullScreen = fullScreen);
   }
 
-  @override
-  void onWindowMaximize() => setState(() => _maximized = true);
+  /// Turns full screen on or off and shows the matching icon. Used by the
+  /// maximise button and a double-click on the drag area.
+  Future<void> _setFullScreen(bool fullScreen) async {
+    await widget.controls.setFullScreen(fullScreen);
+    if (mounted) setState(() => _fullScreen = fullScreen);
+  }
 
+  Future<void> _toggleFullScreen() async => _setFullScreen(!await widget.controls.isFullScreen());
+
+  /// Minimises. window_manager refuses to minimise a full-screen window, so a
+  /// full-screen window leaves full screen first and is marked to return to it.
+  Future<void> _minimize() async {
+    if (await widget.controls.isFullScreen()) {
+      await _setFullScreen(false);
+      _returnToFullScreen = true;
+    }
+    await widget.controls.minimize();
+  }
+
+  /// The window came back from being minimised: back to full screen if
+  /// minimise took it out of full screen. A restore the bar did not cause
+  /// (Win+D, a taskbar click) changes nothing.
   @override
-  void onWindowUnmaximize() => setState(() => _maximized = false);
+  void onWindowRestore() {
+    if (!_returnToFullScreen) return;
+    _returnToFullScreen = false;
+    _setFullScreen(true);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -105,7 +146,17 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
       child: Row(
         children: [
           Expanded(
-            child: DragToMoveArea(
+            // Our own drag area (not window_manager's DragToMoveArea, which
+            // called the real window directly), so it goes through controls.
+            // A full-screen window must not be dragged: it would move off the
+            // monitor while window_manager still counts it as full screen.
+            child: GestureDetector(
+              key: const ValueKey('window-drag-area'),
+              behavior: HitTestBehavior.translucent,
+              onPanStart: (_) {
+                if (!_fullScreen) widget.controls.startDragging();
+              },
+              onDoubleTap: _toggleFullScreen,
               child: Row(
                 children: [
                   const SizedBox(width: 10),
@@ -129,16 +180,13 @@ class _DesktopTitleBarState extends State<DesktopTitleBar> with WindowListener {
           _WindowButton(
             key: const ValueKey('window-minimize'),
             icon: Icons.remove,
-            onTap: widget.controls.minimize,
+            onTap: _minimize,
           ),
           _WindowButton(
             key: const ValueKey('window-maximize'),
-            icon: _maximized ? Icons.filter_none : Icons.crop_square,
-            iconSize: _maximized ? 13 : 15,
-            onTap: () async {
-              await widget.controls.toggleMaximize();
-              await _readMaximized();
-            },
+            icon: _fullScreen ? Icons.filter_none : Icons.crop_square,
+            iconSize: _fullScreen ? 13 : 15,
+            onTap: _toggleFullScreen,
           ),
           _WindowButton(
             key: const ValueKey('window-close'),

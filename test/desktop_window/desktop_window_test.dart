@@ -6,8 +6,10 @@ import 'package:best_smart_game/utils/device_type.dart';
 import 'package:best_smart_game/widgets/desktop_window/desktop_fit_box.dart';
 import 'package:best_smart_game/widgets/desktop_window/desktop_title_bar.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:window_manager/window_manager.dart';
 
 /// Shows the screen size the app sees, under the fit box, in a window of [size].
 Future<Size> _seenSize(WidgetTester tester, Size size) async {
@@ -25,26 +27,159 @@ Future<Size> _seenSize(WidgetTester tester, Size size) async {
   return seen;
 }
 
-/// Records which window button was pressed.
+/// Records every window action, in order, and keeps a pretend full-screen
+/// state.
 class _FakeControls extends DesktopWindowControls {
+  _FakeControls({this.fullScreen = false});
+
   final calls = <String>[];
-  bool maximized = false;
+  bool fullScreen;
 
   @override
   Future<void> minimize() async => calls.add('minimize');
 
   @override
-  Future<bool> isMaximized() async => maximized;
+  Future<void> close() async => calls.add('close');
 
   @override
-  Future<void> toggleMaximize() async {
-    calls.add('maximize');
-    maximized = !maximized;
+  Future<bool> isFullScreen() async => fullScreen;
+
+  @override
+  Future<void> setFullScreen(bool value) async {
+    calls.add('fullscreen:$value');
+    fullScreen = value;
   }
 
   @override
-  Future<void> close() async => calls.add('close');
+  Future<void> startDragging() async => calls.add('drag');
 }
+
+/// Text for a size or position in the recorded setup calls.
+String _xy(double x, double y) => '${x.toStringAsFixed(1)}x${y.toStringAsFixed(1)}';
+
+/// Records every call setUpDesktopWindow makes, in order. [failOn] makes the
+/// call whose name starts with it throw, like a real window error.
+class _FakeSetup extends DesktopWindowSetup {
+  _FakeSetup(this.screen, {this.failOn, this.visibleAfterChecks = 1});
+
+  final Size screen;
+  final String? failOn;
+
+  /// How many visibility checks answer "not visible yet" before "visible";
+  /// a large number means the window never shows.
+  final int visibleAfterChecks;
+  int _visibilityChecks = 0;
+  final calls = <String>[];
+
+  void _record(String call) {
+    calls.add(call);
+    if (failOn != null && call.startsWith(failOn!)) throw Exception('fake window failure');
+  }
+
+  @override
+  Future<Size> primaryScreenSize() async {
+    _record('screen');
+    return screen;
+  }
+
+  @override
+  Future<void> ensureInitialized() async => _record('init');
+
+  @override
+  Future<void> setTitle(String title) async => _record('title:$title');
+
+  @override
+  Future<void> hideTitleBar() async => _record('hideTitleBar');
+
+  @override
+  Future<void> setPreventClose(bool prevent) async => _record('preventClose:$prevent');
+
+  @override
+  Future<void> setSize(Size size) async => _record('size:${_xy(size.width, size.height)}');
+
+  @override
+  Future<void> setMinimumSize(Size size) async => _record('minimum:${_xy(size.width, size.height)}');
+
+  @override
+  Future<void> setAspectRatio(double ratio) async => _record('aspect:${ratio.toStringAsFixed(4)}');
+
+  @override
+  Future<void> setPosition(Offset position) async => _record('position:${_xy(position.dx, position.dy)}');
+
+  @override
+  Future<void> show() async => _record('show');
+
+  @override
+  Future<bool> isVisible() async {
+    _visibilityChecks++;
+    final visible = _visibilityChecks >= visibleAfterChecks;
+    _record('visible:$visible');
+    return visible;
+  }
+
+  @override
+  Future<void> setFullScreen(bool fullScreen) async => _record('fullscreen:$fullScreen');
+}
+
+/// The calls setUpDesktopWindow should make on [screen], up to and including
+/// going full screen: everything for the small window first, so that leaving
+/// full screen returns to the centred minimum window; then the window shown
+/// and confirmed visible, so that leaving full screen does not hide it.
+List<String> _expectedSetup(Size screen) {
+  final minimum = desktopMinimumWindow(screen);
+  final position = desktopOpeningPosition(screen, minimum);
+  return [
+    'screen',
+    'init',
+    'title:BSG',
+    'hideTitleBar',
+    'preventClose:true',
+    'size:${_xy(minimum.width, minimum.height)}',
+    'minimum:${_xy(minimum.width, minimum.height)}',
+    'aspect:${(16 / 9).toStringAsFixed(4)}',
+    'position:${_xy(position.dx, position.dy)}',
+    'show',
+    'visible:true',
+    'fullscreen:true',
+  ];
+}
+
+/// Sends a window event (such as restore after a minimise) to the title bar,
+/// as window_manager would.
+Future<void> _windowEvent(WidgetTester tester, void Function(WindowListener listener) event) async {
+  event(tester.state(find.byType(DesktopTitleBar)) as WindowListener);
+  await tester.pump();
+  await tester.pump();
+}
+
+/// Two quick clicks on the title bar's drag area.
+Future<void> _doubleClickBar(WidgetTester tester) async {
+  final area = find.byKey(const ValueKey('window-drag-area'));
+  await tester.tap(area);
+  await tester.pump(const Duration(milliseconds: 50));
+  await tester.tap(area);
+  // Let the double-click detector's waiting time run out, so the next click
+  // starts fresh and no timer is left at the end of the test.
+  await tester.pump(kDoubleTapTimeout);
+  await tester.pump();
+}
+
+/// Presses the gold maximise button and lets the bar update.
+Future<void> _pressMaximize(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('window-maximize')));
+  await tester.pump();
+  await tester.pump();
+}
+
+/// Presses the gold minimise button and lets the bar update.
+Future<void> _pressMinimize(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('window-minimize')));
+  await tester.pump();
+  await tester.pump();
+}
+
+/// Only the Windows app has the title bar.
+final _windows = TargetPlatformVariant.only(TargetPlatform.windows);
 
 /// The app under the title bar in a window of [size].
 Future<Size> _frame(WidgetTester tester, Size size, DesktopWindowControls controls) async {
@@ -100,7 +235,8 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('window-close')));
       await tester.pump();
       debugDefaultTargetPlatformOverride = null;
-      expect(controls.calls, ['minimize', 'maximize', 'close']);
+      // Option A: from the small window, maximise means full screen.
+      expect(controls.calls, ['minimize', 'fullscreen:true', 'close']);
     });
 
     testWidgets('a phone and a tablet get no bar', (tester) async {
@@ -108,6 +244,144 @@ void main() {
       expect(find.byType(DesktopTitleBar), findsNothing);
       expect(await _frame(tester, const Size(1180, 820), _FakeControls()), const Size(1180, 820));
       expect(find.byType(DesktopTitleBar), findsNothing);
+    });
+  });
+
+  // Option A (plan 2026-11-19). Written before the code in phase 1; the ones
+  // marked "phase 2" cover the behaviour built in phase 2.
+  group('full screen title bar (option A)', () {
+    testWidgets('opening in full screen shows the restore icon (phase 2)', (tester) async {
+      final controls = _FakeControls(fullScreen: true);
+      await _frame(tester, const Size(1920, 1080), controls);
+      expect(find.byIcon(Icons.filter_none), findsOneWidget);
+      expect(controls.calls, isEmpty);
+    }, variant: _windows);
+
+    testWidgets('maximise toggles full screen off and on, the icon follows, nothing else is called (phase 2)',
+        (tester) async {
+      final controls = _FakeControls(fullScreen: true);
+      await _frame(tester, const Size(1920, 1080), controls);
+      await _pressMaximize(tester);
+      expect(find.byIcon(Icons.crop_square), findsOneWidget, reason: 'small window shows maximise');
+      await _pressMaximize(tester);
+      expect(find.byIcon(Icons.filter_none), findsOneWidget, reason: 'full screen shows restore');
+      // No size, minimum, 16:9 or resizable call: the small window keeps the
+      // 1336 x 752 minimum and 16:9 lock set at start-up.
+      expect(controls.calls, ['fullscreen:false', 'fullscreen:true']);
+    }, variant: _windows);
+
+    testWidgets('minimise in full screen leaves full screen first, then minimises (phase 2)', (tester) async {
+      final controls = _FakeControls(fullScreen: true);
+      await _frame(tester, const Size(1920, 1080), controls);
+      await _pressMinimize(tester);
+      expect(controls.calls, ['fullscreen:false', 'minimize']);
+    }, variant: _windows);
+
+    testWidgets('coming back after a full-screen minimise returns to full screen, once (phase 2)', (tester) async {
+      final controls = _FakeControls(fullScreen: true);
+      await _frame(tester, const Size(1920, 1080), controls);
+      await _pressMinimize(tester);
+      await _windowEvent(tester, (l) => l.onWindowRestore());
+      expect(controls.calls, ['fullscreen:false', 'minimize', 'fullscreen:true']);
+      expect(find.byIcon(Icons.filter_none), findsOneWidget);
+      await _windowEvent(tester, (l) => l.onWindowRestore());
+      expect(controls.calls, ['fullscreen:false', 'minimize', 'fullscreen:true'], reason: 'a later restore does nothing');
+    }, variant: _windows);
+
+    testWidgets('minimise in the small window just minimises, and coming back stays small', (tester) async {
+      final controls = _FakeControls();
+      await _frame(tester, const Size(1336, 752), controls);
+      await _pressMinimize(tester);
+      await _windowEvent(tester, (l) => l.onWindowRestore());
+      expect(controls.calls, ['minimize']);
+    }, variant: _windows);
+
+    testWidgets('a restore the bar did not cause (Win+D, taskbar) changes nothing', (tester) async {
+      final controls = _FakeControls(fullScreen: true);
+      await _frame(tester, const Size(1920, 1080), controls);
+      await _windowEvent(tester, (l) => l.onWindowRestore());
+      expect(controls.calls, isEmpty);
+    }, variant: _windows);
+
+    testWidgets('double-click on the bar toggles full screen off and on (phase 2)', (tester) async {
+      final controls = _FakeControls(fullScreen: true);
+      await _frame(tester, const Size(1920, 1080), controls);
+      await _doubleClickBar(tester);
+      await _doubleClickBar(tester);
+      expect(controls.calls, ['fullscreen:false', 'fullscreen:true']);
+    }, variant: _windows);
+
+    testWidgets('dragging the bar moves the small window', (tester) async {
+      final controls = _FakeControls();
+      await _frame(tester, const Size(1336, 752), controls);
+      await tester.drag(find.byKey(const ValueKey('window-drag-area')), const Offset(80, 0));
+      // Let the double-click detector's waiting time run out.
+      await tester.pump(kDoubleTapTimeout);
+      expect(controls.calls, ['drag']);
+    }, variant: _windows);
+
+    testWidgets('dragging the bar does nothing in full screen (phase 2)', (tester) async {
+      final controls = _FakeControls(fullScreen: true);
+      await _frame(tester, const Size(1920, 1080), controls);
+      await tester.drag(find.byKey(const ValueKey('window-drag-area')), const Offset(80, 0));
+      // Let the double-click detector's waiting time run out.
+      await tester.pump(kDoubleTapTimeout);
+      expect(controls.calls, isEmpty);
+    }, variant: _windows);
+
+    testWidgets('close in full screen only asks to close, as today', (tester) async {
+      final controls = _FakeControls(fullScreen: true);
+      await _frame(tester, const Size(1920, 1080), controls);
+      await tester.tap(find.byKey(const ValueKey('window-close')));
+      await tester.pump();
+      expect(controls.calls, ['close']);
+    }, variant: _windows);
+  });
+
+  group('window setup (option A)', () {
+    test('opens full screen, after the minimum size, 16:9 and centring are set (phase 2)', () async {
+      final window = _FakeSetup(const Size(1920, 1080));
+      await setUpDesktopWindow(window: window);
+      expect(window.calls, _expectedSetup(const Size(1920, 1080)));
+    });
+
+    test('a small or scaled laptop screen gets its own minimum, then full screen (phase 2)', () async {
+      final window = _FakeSetup(const Size(1280, 720));
+      await setUpDesktopWindow(window: window);
+      expect(window.calls, _expectedSetup(const Size(1280, 720)));
+    });
+
+    test('a window error before full screen is caught and full screen is not tried', () async {
+      final window = _FakeSetup(const Size(1920, 1080), failOn: 'size:');
+      await setUpDesktopWindow(window: window);
+      expect(window.calls, _expectedSetup(const Size(1920, 1080)).sublist(0, 6));
+      expect(window.calls, isNot(contains('fullscreen:true')));
+    });
+
+    test('full screen waits until the window is really visible (phase 4 fix)', () async {
+      final window = _FakeSetup(const Size(1920, 1080), visibleAfterChecks: 3);
+      await setUpDesktopWindow(window: window);
+      final expected = _expectedSetup(const Size(1920, 1080));
+      expect(window.calls, [
+        ...expected.sublist(0, expected.length - 2),
+        'visible:false',
+        'visible:false',
+        'visible:true',
+        'fullscreen:true',
+      ]);
+    });
+
+    test('a window that never shows stays out of full screen (phase 4 fix)', () async {
+      final window = _FakeSetup(const Size(1920, 1080), visibleAfterChecks: 1000);
+      await setUpDesktopWindow(window: window);
+      expect(window.calls, isNot(contains('fullscreen:true')));
+      expect(window.calls.where((c) => c == 'visible:false').length, 20, reason: 'about one second of checks');
+    });
+
+    test('a full-screen error is caught and leaves the centred small window set up (phase 2)', () async {
+      final window = _FakeSetup(const Size(1920, 1080), failOn: 'fullscreen:');
+      await setUpDesktopWindow(window: window);
+      expect(window.calls, _expectedSetup(const Size(1920, 1080)));
     });
   });
 
